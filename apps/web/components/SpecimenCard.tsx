@@ -1,5 +1,4 @@
 import type { CrossResponse } from "../lib/api";
-import type { Family } from "../lib/appearance";
 import { Creature } from "./Creature";
 import { AuraStars } from "./AuraStars";
 import { GenotypeChips, QtlBars } from "./Genome";
@@ -27,7 +26,6 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: s
 /** Card do filhote: CRIATURA em destaque + fenótipo + genótipo + métricas (DS §5.2). */
 export function SpecimenCard({ result }: { result: CrossResponse }) {
   const { engine, specimen } = result;
-  const family: Family = specimen.pack === "feline" ? "feline" : "canine";
   const critical = engine.fPedigree > 0.2;
 
   return (
@@ -39,7 +37,7 @@ export function SpecimenCard({ result }: { result: CrossResponse }) {
       {/* Retrato */}
       <div className="relative border-b border-white/5 bg-bg-studio">
         <div className="mx-auto grid aspect-video max-w-md place-items-center py-2">
-          <Creature genotype={engine.genotype} family={family} viable={engine.phenotype.viable} seed={result.cacheKey} size={240} />
+          <Creature genotype={engine.genotype} family={specimen.pack} viable={engine.phenotype.viable} seed={result.cacheKey} size={240} />
         </div>
         <div className="absolute right-3 top-3">
           <AuraStars value={engine.aura} />

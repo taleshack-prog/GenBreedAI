@@ -8,7 +8,7 @@
 
 import type { Genotype } from "@genbreedai/shared";
 
-export type PackId = "canine" | "feline";
+export type PackId = "feline" | "canine" | "saurian";
 
 export interface ApiSpecimen {
   id: string;
@@ -24,6 +24,7 @@ export interface ApiSpecimen {
   fixationIndex: number;
   aura: number;
   cacheKey: string | null;
+  imageUrl?: string | null;
 }
 
 export interface CrossResponse {
@@ -72,5 +73,17 @@ export async function postCross(input: {
     const body = await res.json().catch(() => ({}));
     throw new Error(body?.message ?? `Cruzamento falhou (${res.status}).`);
   }
+  return res.json();
+}
+
+export interface ImageResult { cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string; }
+export async function getImage(id: string): Promise<ImageResult | null> {
+  const res = await fetch(`/api/v1/specimens/${id}/image`, { headers: DEMO_HEADERS, cache: "no-store" });
+  if (!res.ok) return null;
+  return res.json();
+}
+export async function generateImage(id: string): Promise<ImageResult> {
+  const res = await fetch(`/api/v1/specimens/${id}/image`, { method: "POST", headers: DEMO_HEADERS });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? `Falha ao gerar (${res.status}).`);
   return res.json();
 }

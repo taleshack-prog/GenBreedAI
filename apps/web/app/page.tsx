@@ -1,44 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listSpecimens, postCross, type ApiSpecimen, type CrossResponse } from "../lib/api";
-import { previewCross } from "../lib/preview";
-import { Capsule } from "../components/Capsule";
-import { DnaHelix } from "../components/DnaHelix";
-import { PunnettPreview } from "../components/PunnettPreview";
-import { SpecimenCard } from "../components/SpecimenCard";
+import { useRouter } from "next/navigation";
+import { listSpecimens, postCross, type ApiSpecimen } from "../lib/api";
+import { compatibility } from "../lib/lab";
+import { CapsuleCard } from "../components/CapsuleCard";
+import { FertilizationCore } from "../components/FertilizationCore";
+import { PunnettGridView, InbreedingGauge, HybridPreview, CurrencyBar } from "../components/LabSections";
+import { wrightF } from "@genbreedai/engine";
 
 const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as const;
 
-function ParentSelect({
-  slot, specimens, value, onChange,
-}: {
-  slot: "cyan" | "purple";
-  specimens: ApiSpecimen[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const focus = slot === "cyan" ? "focus:border-cyan" : "focus:border-purple";
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-lg border border-white/10 bg-bg-900 px-3 py-2.5 text-ink ${focus}`}
-    >
-      <option value="">selecionar…</option>
-      {specimens.map((s) => (
-        <option key={s.id} value={s.id}>{s.id} · {s.species} ({s.pack})</option>
-      ))}
-    </select>
-  );
-}
-
 export default function LabPage() {
+  const router = useRouter();
   const [specimens, setSpecimens] = useState<ApiSpecimen[]>([]);
   const [sireId, setSireId] = useState("");
   const [damId, setDamId] = useState("");
   const [method, setMethod] = useState<(typeof METHODS)[number]>("F1");
-  const [result, setResult] = useState<CrossResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -49,17 +27,25 @@ export default function LabPage() {
 
   const sire = specimens.find((s) => s.id === sireId) ?? null;
   const dam = specimens.find((s) => s.id === damId) ?? null;
-  const preview = useMemo(
-    () => (sire && dam ? previewCross(sire, dam, specimens) : null),
-    [sire, dam, specimens],
-  );
+  const compatible = sire && dam && sire.pack === dam.pack;
+
+  const fPed = useMemo(() => {
+    if (!sire || !dam) return null;
+    const ped: Record<string, { id: string; sire: string | null; dam: string | null }> = {};
+    for (const s of specimens) ped[s.id] = { id: s.id, sire: s.sireId, dam: s.damId };
+    return wrightF(ped, sire.id, dam.id);
+  }, [sire, dam, specimens]);
+
+  const compat = compatible ? compatibility(sire!, dam!) : null;
 
   async function onCross() {
     if (!sire || !dam) return;
     setLoading(true);
     setError(null);
     try {
-      setResult(await postCross({ sireId: sire.id, damId: dam.id, method }));
+      const res = await postCross({ sireId: sire.id, damId: dam.id, method });
+      router.push(`/reveal/${res.specimen.id}`);
+      return;
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -68,74 +54,80 @@ export default function LabPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
-      <header className="mb-8 flex items-baseline justify-between">
-        <h1 className="font-display text-2xl font-black uppercase text-ink sm:text-3xl">Cruzar Espécies</h1>
-        <span className="font-display text-xs uppercase tracking-widest text-ink-muted">GenBreedAI</span>
+    <main className="mx-auto max-w-4xl px-4 pb-28 pt-5">
+      {/* Cabeçalho + moedas */}
+      <header className="mb-5 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl font-black uppercase text-ink">Genetic Lab</h1>
+          <p className="text-[0.7rem] uppercase tracking-widest text-ink-muted">Laboratório de síntese genética</p>
+        </div>
+        <CurrencyBar />
       </header>
 
       {listError && (
-        <div className="mb-6 rounded-lg border border-crit/40 bg-crit/10 p-4 text-sm text-crit">
+        <div className="mb-5 rounded-lg border border-crit/40 bg-crit/10 p-4 text-sm text-crit">
           {listError} — a API está no ar em :3001? Rode <code className="font-mono">pnpm dev</code>.
         </div>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Bancada */}
-        <section>
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <Capsule specimen={sire} slot="cyan" label="Progenitor A · Sire" />
-            <div className="flex flex-col items-center gap-2">
-              <DnaHelix height={140} />
-              <span className="font-display text-xl text-ink-muted" aria-hidden>+</span>
-            </div>
-            <Capsule specimen={dam} slot="purple" label="Progenitor B · Dam" />
-          </div>
+      {/* Progenitores + fertilização */}
+      <section className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1fr_auto_1fr]">
+        <div>
+          <CapsuleCard specimen={sire} slot="A" />
+          <select value={sireId} onChange={(e) => setSireId(e.target.value)} className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-ink focus:border-cyan">
+            <option value="">selecionar progenitor A…</option>
+            {specimens.map((s) => <option key={s.id} value={s.id}>{s.id} · {s.species}</option>)}
+          </select>
+        </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <ParentSelect slot="cyan" specimens={specimens} value={sireId} onChange={setSireId} />
-            <ParentSelect slot="purple" specimens={specimens} value={damId} onChange={setDamId} />
-          </div>
+        <div className="flex flex-col items-center gap-3 py-2">
+          <FertilizationCore compatibility={compat} />
+          <select value={method} onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])} className="w-40 rounded-lg border border-white/10 bg-bg-900 px-2 py-1.5 text-center text-sm text-ink focus:border-cyan">
+            {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
 
-          <label className="mt-3 block">
-            <span className="mb-1.5 block font-display text-xs uppercase tracking-wide text-ink-muted">Estratégia</span>
-            <select
-              value={method}
-              onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])}
-              className="w-full rounded-lg border border-white/10 bg-bg-900 px-3 py-2.5 text-ink focus:border-cyan"
-            >
-              {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </label>
+        <div>
+          <CapsuleCard specimen={dam} slot="B" />
+          <select value={damId} onChange={(e) => setDamId(e.target.value)} className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-ink focus:border-purple">
+            <option value="">selecionar progenitor B…</option>
+            {specimens.map((s) => <option key={s.id} value={s.id}>{s.id} · {s.species}</option>)}
+          </select>
+        </div>
+      </section>
 
-          {preview && (
-            <div className="mt-6 rounded-card border border-white/10 bg-bg-800 p-4">
-              <h3 className="mb-3 font-display text-xs font-bold uppercase text-cyan">Prévia da prole</h3>
-              <PunnettPreview preview={preview} />
-            </div>
-          )}
-
-          <button
-            onClick={onCross}
-            disabled={!preview?.compatible || loading}
-            className="mt-6 w-full rounded-xl bg-cyan px-4 py-3 font-display font-bold uppercase tracking-wide text-bg-900 shadow-neon-cyan transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
-          >
-            {loading ? "Processando…" : "Cruzar espécies"}
-          </button>
-          {error && <p className="mt-3 text-sm text-crit">{error}</p>}
+      {/* Punnett + endogamia */}
+      {compatible && (
+        <section className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <PunnettGridView sire={sire!} dam={dam!} />
+          {fPed !== null && <InbreedingGauge f={fPed} />}
         </section>
+      )}
+      {sire && dam && !compatible && (
+        <div className="mt-5 rounded-card border border-crit/40 bg-crit/10 p-4 text-sm text-crit">
+          Espécies de packs distintos ({sire.pack} × {dam.pack}) — cruzamento incompatível.
+        </div>
+      )}
 
-        {/* Resultado */}
-        <section>
-          {result ? (
-            <SpecimenCard result={result} />
-          ) : (
-            <div className="flex h-full min-h-80 items-center justify-center rounded-card border border-dashed border-white/10 p-6 text-center text-ink-muted">
-              Preencha as duas cápsulas, confira a prévia e cruze para revelar o filhote.
-            </div>
-          )}
+      {/* Prévia dos 3 híbridos */}
+      {compatible && (
+        <section className="mt-5">
+          <HybridPreview sire={sire!} dam={dam!} />
         </section>
-      </div>
+      )}
+
+      {/* Botão sintetizar */}
+      <button
+        onClick={onCross}
+        disabled={!compatible || loading}
+        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl bg-ok px-4 py-4 font-display text-lg font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
+      >
+        {loading ? "Sintetizando…" : "Sintetizar genoma"}
+        {compatible && <span className="font-mono text-sm opacity-80">🌿 25.000 · ⬢ 750</span>}
+      </button>
+      {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
+
+
     </main>
   );
 }

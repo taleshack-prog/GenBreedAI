@@ -12,7 +12,8 @@
     "lint": "echo 'skip'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --import=@swc-node/register/esm-register src/db/migrate.ts",
-    "db:seed": "node --import=@swc-node/register/esm-register src/db/seed.ts"
+    "db:seed": "node --import=@swc-node/register/esm-register src/db/seed.ts",
+    "db:reset": "node --import=@swc-node/register/esm-register src/db/reset.ts"
   },
   "dependencies": {
     "@genbreedai/engine": "workspace:*",

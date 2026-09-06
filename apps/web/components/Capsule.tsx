@@ -1,13 +1,8 @@
 "use client";
 
 import type { ApiSpecimen } from "../lib/api";
-import type { Family } from "../lib/appearance";
 import { Creature } from "./Creature";
 import { AuraStars } from "./AuraStars";
-
-function familyOf(pack: string): Family {
-  return pack === "feline" ? "feline" : "canine";
-}
 
 /** Cor de borda: status por F (DS §5.2) sobrepõe a cor do slot. */
 function statusRing(f: number, slot: "cyan" | "purple") {
@@ -54,7 +49,7 @@ export function Capsule({
           {specimen ? (
             <Creature
               genotype={specimen.genotype}
-              family={familyOf(specimen.pack)}
+              species={specimen.species}
               seed={specimen.cacheKey ?? specimen.id}
               size={200}
             />

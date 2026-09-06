@@ -44,3 +44,19 @@ body {
 }
 
 *:focus-visible { outline: 2px solid #00f0ff; outline-offset: 2px; }
+
+/* ---- Design System §2.3 (valores exatos) ---- */
+.neon-ciano { box-shadow: 0 0 12px rgba(0,240,255,0.6), inset 0 0 8px rgba(0,240,255,0.2); }
+.neon-purpura { box-shadow: 0 0 12px rgba(191,0,255,0.6), inset 0 0 8px rgba(191,0,255,0.2); }
+.neon-alerta { box-shadow: 0 0 12px rgba(255,193,7,0.6), inset 0 0 8px rgba(255,193,7,0.2); }
+.neon-critico { box-shadow: 0 0 12px rgba(255,59,92,0.6), inset 0 0 8px rgba(255,59,92,0.2); }
+
+/* Líquido criogênico: gradiente #00F0FF → #0A84FF, opacidade 0.35, pulso (§2.1/§2.3) */
+.cryo-fluid {
+  background: linear-gradient(180deg, rgba(0,240,255,0.35), rgba(10,132,255,0.35));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cryo-fluid { animation: cryo-pulse 3.5s ease-in-out infinite; }
+}

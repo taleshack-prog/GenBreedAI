@@ -4,9 +4,8 @@ Game de **genética aplicada** a animais (PWA mobile + web PC) — Hack Tech Far
 O jogador cruza espécies, estuda herança mendeliana e quantitativa **real** e
 tenta fixar fenótipos ao longo de gerações. Monorepo Turborepo + pnpm.
 
-> **Status: FASE 0 · 1a · 1b · 3 (web) prontas.**
-> Motor **44/44** · API **16/16** (unit + e2e + Drizzle/Postgres) · Web: typecheck + build OK.
-> Total **60 testes verdes**, typecheck estrito 0 erros.
+> **Status: modelo v2 (STR/SPD/DEF/RES/COL/PAT) migrado e re-auditado.**
+> Engine **27** + API **15** = **42 testes verdes**; web (Lab + Gene Bank) compila.
 > Parecer da Fase 0: [`docs/audit/fase0-audit.md`](docs/audit/fase0-audit.md) ·
 > Errata: [`docs/errata/fase0-errata.md`](docs/errata/fase0-errata.md).
 

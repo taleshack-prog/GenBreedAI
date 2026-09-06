@@ -9,3 +9,4 @@ coverage/
 .DS_Store
 package.json.real
 *.tsbuildinfo
+apps/web/public/assets/generated/

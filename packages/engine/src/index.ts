@@ -39,6 +39,6 @@ export {
   type CrossContext,
 } from "./cross";
 
-// Data packs documentados (derivados do Gene-Bank).
+// Data packs do TDD (Gene-Bank): loci B/K/M/H/S/A + QTL.
 export { CANINE_PACK } from "./data/canine";
 export { FELINE_PACK } from "./data/feline";

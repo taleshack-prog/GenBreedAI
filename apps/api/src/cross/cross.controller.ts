@@ -17,6 +17,6 @@ export class CrossController {
   @Post()
   @UseGuards(AuthGuard, QuotaGuard)
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
-    return this.service.execute(user.id, dto);
+    return this.service.execute(user.id, user.tier, dto);
   }
 }
