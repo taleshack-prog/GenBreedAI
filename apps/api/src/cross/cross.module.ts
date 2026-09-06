@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { CrossController } from "./cross.controller";
+import { SpecimensController } from "../specimens/specimens.controller";
 import { CrossService } from "./cross.service";
 import { QuotaService } from "../quota/quota.service";
 import {
@@ -28,7 +29,7 @@ const specimenRepositoryProvider = {
 };
 
 @Module({
-  controllers: [CrossController],
+  controllers: [CrossController, SpecimensController],
   providers: [CrossService, QuotaService, specimenRepositoryProvider],
   exports: [SpecimenRepository, QuotaService],
 })

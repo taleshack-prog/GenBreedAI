@@ -1,6 +1,7 @@
 /**
  * Bootstrap NestJS sobre o adapter Fastify (TDD §2). REST /api/v1.
  */
+import "dotenv/config";
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";

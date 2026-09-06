@@ -19,6 +19,7 @@ const BC1 = { sireId: "delta", damId: "negra", method: "BC1" };
 
 beforeAll(async () => {
   process.env.NODE_ENV = "test";
+  delete process.env.DATABASE_URL; // e2e sempre in-memory
   app = await buildApp();
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
@@ -53,6 +54,17 @@ describe("POST /api/v1/cross", () => {
     expect(first.statusCode).toBe(201);
     const second = await post(BC1, AUTH_FREE);
     expect(second.statusCode).toBe(429);
+  });
+
+  it("GET /api/v1/specimens: lista fundadores do dono", async () => {
+    const res = await app.inject({
+      method: "GET", url: "/api/v1/specimens",
+      headers: { "x-user-id": "demo", "x-user-tier": "PHD" },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const ids = body.map((s: { id: string }) => s.id);
+    expect(ids).toEqual(expect.arrayContaining(["puma", "negra", "delta", "golden", "poodle"]));
   });
 
   it("ANTI-P2W: FREE e PHD obtêm o MESMO resultado genético (só a cota difere)", async () => {
