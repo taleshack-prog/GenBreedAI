@@ -1,0 +1,11 @@
+import { defineConfig } from "drizzle-kit";
+
+// Lê DATABASE_URL do ambiente (Neon/local). Nunca comitar a URL real.
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
+  dbCredentials: { url: process.env.DATABASE_URL ?? "postgresql://localhost:5432/placeholder" },
+  strict: true,
+  verbose: true,
+});

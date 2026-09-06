@@ -4,17 +4,19 @@ Game de **genética aplicada** a animais (PWA mobile + web PC) — Hack Tech Far
 O jogador cruza espécies, estuda herança mendeliana e quantitativa **real** e
 tenta fixar fenótipos ao longo de gerações. Monorepo Turborepo + pnpm.
 
-> **Status atual: FASE 0 concluída — motor genético APROVADO no gate científico.**
-> Golden tests **22/22** verdes · suíte completa **44/44** · typecheck estrito 0 erros.
-> Parecer: [`docs/audit/fase0-audit.md`](docs/audit/fase0-audit.md).
+> **Status: FASE 0 APROVADA · FASE 1a (API) + 1b (persistência) prontas.**
+> Motor: golden **22/22** · engine **44/44**. API: **15/15** (unit + e2e + Drizzle/Postgres).
+> Total workspace: **59 testes verdes**, typecheck estrito 0 erros.
+> Parecer da Fase 0: [`docs/audit/fase0-audit.md`](docs/audit/fase0-audit.md) ·
+> Errata: [`docs/errata/fase0-errata.md`](docs/errata/fase0-errata.md).
 
 ## Estrutura
 
 ```
 genbreedai/
 ├── apps/
-│   ├── web/       # Next.js 15 PWA — FASE 1 (scaffold; gated)
-│   └── api/       # NestJS + Fastify — FASE 1 (scaffold; gated)
+│   ├── web/       # Next.js 15 PWA — FASE 1 (scaffold; próximo)
+│   └── api/       # ✅ NestJS + Fastify — POST /api/v1/cross + Drizzle/Postgres (Fase 1a/1b)
 ├── packages/
 │   ├── engine/    # ✅ Motor genético determinístico (TypeScript puro, sem I/O)
 │   └── shared/    # ✅ Tipos, DTOs e constantes

@@ -1,3 +1,7 @@
+> **⚠️ ERRATA DA FASE 0:** alguns valores deste documento foram corrigidos após a
+> auditoria científica. Ver `docs/errata/fase0-errata.md` (E1–E5) e os ADRs
+> 0001–0004. O motor (`packages/engine`) já implementa o comportamento correto.
+
 Hack Tech Farm
 
 **TDD — GENBREEDAI: SIMULADOR DE GENÉTICA APLICADA**
