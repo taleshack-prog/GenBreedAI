@@ -1,107 +1,91 @@
-import type { CrossResponse } from "@/lib/api";
+import type { CrossResponse } from "../lib/api";
+import type { Family } from "../lib/appearance";
+import { Creature } from "./Creature";
 import { AuraStars } from "./AuraStars";
 import { GenotypeChips, QtlBars } from "./Genome";
 
 const METHOD_LABEL: Record<string, string> = {
-  F1: "F1 · primeira geração",
-  F2: "F2 · intercruzamento",
-  F3: "F3 · terceira geração",
-  BC1: "BC1 · retrocruzamento",
-  LINE: "Line-breeding",
-  INBREED: "Endocruzamento",
-  OUTCROSS: "Outcross de resgate",
+  F1: "F1 · primeira geração", F2: "F2 · intercruzamento", F3: "F3 · terceira geração",
+  BC1: "BC1 · retrocruzamento", LINE: "Line-breeding", INBREED: "Endocruzamento", OUTCROSS: "Outcross de resgate",
 };
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
+function fTone(f: number) {
+  if (f > 0.2) return "text-crit";
+  if (f > 0.15) return "text-warn";
+  return "text-ink";
+}
+
+function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-base-500 bg-base-800/60 px-3 py-2">
-      <div className="text-[0.7rem] text-ink-500">{label}</div>
-      <div className={`font-mono text-lg ${tone === "danger" ? "text-danger-400" : "text-ink-100"}`}>
-        {value}
-      </div>
+    <div className="rounded-lg border border-white/10 bg-bg-900/60 px-3 py-2">
+      <div className="text-[0.7rem] text-ink-muted">{label}</div>
+      <div className={`font-mono text-lg ${tone ?? "text-ink"}`}>{value}</div>
     </div>
   );
 }
 
-/**
- * Card do espécime resultante. Prioriza FENÓTIPO e GENÓTIPO (escolha do brief),
- * com auras, métricas biológicas (F, fertilidade) e de jogo (IF) logo abaixo.
- */
+/** Card do filhote: CRIATURA em destaque + fenótipo + genótipo + métricas (DS §5.2). */
 export function SpecimenCard({ result }: { result: CrossResponse }) {
   const { engine, specimen } = result;
-  const phenLoci = Object.entries(engine.phenotype.loci);
+  const family: Family = specimen.pack === "feline" ? "feline" : "canine";
+  const critical = engine.fPedigree > 0.2;
 
   return (
-    <article className="reveal rounded-2xl border border-base-500 bg-base-700 p-6 shadow-panel">
-      <header className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <div className="text-xs text-ink-500">
-            {METHOD_LABEL[engine.method] ?? engine.method} · geração {engine.generation}
-          </div>
-          <h3 className="font-display text-2xl font-semibold text-ink-100">
-            {specimen.species}
-          </h3>
+    <article
+      className={`reveal overflow-hidden rounded-card border bg-bg-800 ${
+        critical ? "border-crit shadow-neon-red" : "border-purple/50 shadow-neon-purple"
+      }`}
+    >
+      {/* Retrato */}
+      <div className="relative border-b border-white/5 bg-bg-studio">
+        <div className="mx-auto grid aspect-video max-w-md place-items-center py-2">
+          <Creature genotype={engine.genotype} family={family} viable={engine.phenotype.viable} seed={result.cacheKey} size={240} />
         </div>
-        <div className="text-right">
+        <div className="absolute right-3 top-3">
           <AuraStars value={engine.aura} />
-          {!engine.phenotype.viable && (
-            <div className="mt-1 text-sm font-medium text-danger-400">embrião inviável</div>
+        </div>
+      </div>
+
+      <div className="p-6">
+        <div className="text-xs text-ink-muted">
+          {METHOD_LABEL[engine.method] ?? engine.method} · geração {engine.generation}
+        </div>
+        <h3 className="font-display text-2xl font-bold uppercase text-ink">{specimen.species}</h3>
+        {!engine.phenotype.viable && (
+          <div className="mt-1 font-display text-sm uppercase text-crit">embrião inviável</div>
+        )}
+
+        <section className="mt-5">
+          <h4 className="mb-2 font-display text-xs font-bold uppercase text-cyan">Fenótipo</h4>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(engine.phenotype.loci).map(([locus, desc]) => (
+              <span key={locus} className="rounded-md bg-bg-900 px-2.5 py-1 text-sm text-ink">{desc}</span>
+            ))}
+          </div>
+          {engine.phenotype.epistasis.length > 0 && (
+            <p className="mt-2 text-xs text-ink-muted">Epistasia: {engine.phenotype.epistasis.join(", ")}</p>
           )}
-        </div>
-      </header>
+          {engine.phenotype.hasMutation && <p className="mt-2 text-xs text-warn">Mutação espontânea detectada.</p>}
+        </section>
 
-      {/* FENÓTIPO */}
-      <section className="mb-5">
-        <h4 className="mb-2 font-display text-sm font-medium text-gene-400">Fenótipo</h4>
-        <div className="flex flex-wrap gap-2">
-          {phenLoci.map(([locus, desc]) => (
-            <span
-              key={locus}
-              className="rounded-md bg-base-600 px-2.5 py-1 text-sm text-ink-100"
-            >
-              {desc}
-            </span>
-          ))}
-        </div>
-        {engine.phenotype.epistasis.length > 0 && (
-          <p className="mt-2 text-xs text-ink-500">
-            Epistasia: {engine.phenotype.epistasis.join(", ")}
-          </p>
-        )}
-        {engine.phenotype.hasMutation && (
-          <p className="mt-2 text-xs text-aura-400">Mutação espontânea detectada.</p>
-        )}
-      </section>
+        <section className="mt-5">
+          <h4 className="mb-2 font-display text-xs font-bold uppercase text-cyan">Genótipo</h4>
+          <GenotypeChips genotype={engine.genotype} />
+          <div className="mt-4"><QtlBars qtl={engine.genotype.qtl} /></div>
+        </section>
 
-      {/* GENÓTIPO */}
-      <section className="mb-5">
-        <h4 className="mb-2 font-display text-sm font-medium text-gene-400">Genótipo</h4>
-        <GenotypeChips genotype={engine.genotype} />
-        <div className="mt-4">
-          <QtlBars qtl={engine.genotype.qtl} />
-        </div>
-      </section>
+        <section className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric label="F de Wright" value={engine.fPedigree.toFixed(2)} tone={fTone(engine.fPedigree)} />
+          <Metric label="Índice de Fixação" value={engine.fixationIndex.toFixed(2)} />
+          <Metric label="Fertilidade" value={`${Math.round(engine.fertility.score)}`} />
+          <Metric label="Risco embrião" value={`${Math.round(engine.fertility.inviabilityRisk * 100)}%`} tone={engine.fertility.inviabilityRisk > 0 ? "text-crit" : undefined} />
+        </section>
 
-      {/* MÉTRICAS */}
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Metric label="F de Wright" value={engine.fPedigree.toFixed(2)} />
-        <Metric label="Índice de Fixação" value={engine.fixationIndex.toFixed(2)} />
-        <Metric label="Fertilidade" value={`${Math.round(engine.fertility.score)}`} />
-        <Metric
-          label="Risco embrião"
-          value={`${Math.round(engine.fertility.inviabilityRisk * 100)}%`}
-          tone={engine.fertility.inviabilityRisk > 0 ? "danger" : undefined}
-        />
-      </section>
-
-      <footer className="mt-4 flex items-center justify-between text-[0.7rem] text-ink-500">
-        <span>
-          proveniência {specimen.sireId} × {specimen.damId}
-        </span>
-        <span className="font-mono" title="chave de cache determinística">
-          {result.cacheKey.slice(0, 12)}…
-        </span>
-      </footer>
+        <footer className="mt-4 flex items-center justify-between text-[0.7rem] text-ink-muted">
+          <span>proveniência {specimen.sireId} × {specimen.damId}</span>
+          <span className="font-mono">{result.cacheKey.slice(0, 12)}…</span>
+        </footer>
+      </div>
     </article>
   );
 }

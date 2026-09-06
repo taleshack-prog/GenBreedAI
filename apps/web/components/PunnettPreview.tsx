@@ -1,66 +1,42 @@
-import type { CrossPreview } from "@/lib/preview";
+import type { CrossPreview } from "../lib/preview";
 
-/** Barra empilhada de probabilidades fenotípicas de um loco. */
 function LocusBar({ phenotypes }: { phenotypes: Array<{ label: string; p: number }> }) {
-  const palette = ["bg-gene-400", "bg-qtl-400", "bg-gene-600", "bg-ink-500"];
+  const palette = ["bg-cyan", "bg-purple", "bg-cyan/60", "bg-ink-muted"];
   return (
-    <div className="flex h-2 overflow-hidden rounded-full bg-base-600">
+    <div className="flex h-2 overflow-hidden rounded-full bg-bg-900">
       {phenotypes.map((ph, i) => (
-        <div
-          key={ph.label}
-          className={palette[i % palette.length]}
-          style={{ width: `${ph.p * 100}%` }}
-          title={`${ph.label}: ${(ph.p * 100).toFixed(0)}%`}
-        />
+        <div key={ph.label} className={palette[i % palette.length]} style={{ width: `${ph.p * 100}%` }} title={`${ph.label}: ${(ph.p * 100).toFixed(0)}%`} />
       ))}
     </div>
   );
 }
 
-/**
- * Prévia do cruzamento ANTES de confirmar: distribuição fenotípica possível por
- * loco (Punnett), F de Wright estimado e alertas de letalidade. Calculada no
- * cliente pelo motor — determinística, sem custo de API.
- */
+/** Prévia (Punnett + F de Wright + letalidade) calculada no cliente pelo motor. */
 export function PunnettPreview({ preview }: { preview: CrossPreview }) {
   if (!preview.compatible) {
-    return (
-      <div className="rounded-lg border border-danger-400/40 bg-danger-400/10 p-4 text-sm text-danger-400">
-        {preview.reason}
-      </div>
-    );
+    return <div className="rounded-lg border border-crit/40 bg-crit/10 p-4 text-sm text-crit">{preview.reason}</div>;
   }
-
+  const fTone = preview.fPedigree > 0.2 ? "text-crit" : preview.fPedigree > 0.15 ? "text-warn" : "text-ink";
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-        <span className="text-ink-300">
-          F de Wright previsto:{" "}
-          <span className="font-mono text-ink-100">{preview.fPedigree.toFixed(2)}</span>
+        <span className="text-ink-muted">
+          F de Wright previsto: <span className={`font-mono ${fTone}`}>{preview.fPedigree.toFixed(2)}</span>
         </span>
-        {preview.interspecific && (
-          <span className="text-ink-500">cruzamento interespecífico</span>
-        )}
+        {preview.interspecific && <span className="text-purple">interespecífico</span>}
       </div>
-
       {preview.lethals.map((l) => (
-        <div
-          key={l.locus}
-          className="rounded-lg border border-danger-400/40 bg-danger-400/10 px-3 py-2 text-sm text-danger-400"
-        >
+        <div key={l.locus} className="rounded-lg border border-crit/40 bg-crit/10 px-3 py-2 text-sm text-crit">
           Risco letal ({l.label}): {(l.p * 100).toFixed(0)}% da prole no loco {l.locus}.
         </div>
       ))}
-
       <div className="space-y-3">
         {preview.loci.map((lp) => (
           <div key={lp.locus}>
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="font-mono text-xs text-ink-500">loco {lp.locus}</span>
-              <span className="text-xs text-ink-300">
-                {lp.phenotypes
-                  .map((ph) => `${ph.label} ${(ph.p * 100).toFixed(0)}%`)
-                  .join("  ·  ")}
+              <span className="font-mono text-xs text-ink-muted">loco {lp.locus}</span>
+              <span className="text-xs text-ink-muted">
+                {lp.phenotypes.map((ph) => `${ph.label} ${(ph.p * 100).toFixed(0)}%`).join("  ·  ")}
               </span>
             </div>
             <LocusBar phenotypes={lp.phenotypes} />

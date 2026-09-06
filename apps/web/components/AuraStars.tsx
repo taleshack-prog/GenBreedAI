@@ -9,7 +9,7 @@ export function AuraStars({ value, size = 18 }: { value: number; size?: number }
           width={size}
           height={size}
           viewBox="0 0 24 24"
-          className={i <= value ? "text-aura-400" : "text-base-500"}
+          className={i <= value ? "text-star" : "text-ink-muted/25"}
           fill="currentColor"
           aria-hidden="true"
         >

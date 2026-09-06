@@ -4,8 +4,8 @@
   "description": "Laboratório de genética aplicada: cruze, preveja e fixe fenótipos.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b111c",
-  "theme_color": "#0b111c",
+  "background_color": "#050A0F",
+  "theme_color": "#050A0F",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

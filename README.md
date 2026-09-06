@@ -15,7 +15,7 @@ tenta fixar fenótipos ao longo de gerações. Monorepo Turborepo + pnpm.
 ```
 genbreedai/
 ├── apps/
-│   ├── web/       # ✅ Next.js 15 — Laboratório (prévia Punnett + card) (Fase 3)
+│   ├── web/       # ✅ Next.js 15 — Laboratório Cyber-Genetics + criaturas procedurais (Fase 3)
 │   └── api/       # ✅ NestJS + Fastify — POST /api/v1/cross + Drizzle/Postgres (Fase 1a/1b)
 ├── packages/
 │   ├── engine/    # ✅ Motor genético determinístico (TypeScript puro, sem I/O)

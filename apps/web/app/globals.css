@@ -2,54 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Tipografia carregada em runtime pelo browser (sem fetch em build). */
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap");
+/* Orbitron (display) · Inter (corpo) · JetBrains Mono (dados) — DS §2.2 */
+@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap");
 
 :root {
-  --font-display: "Space Grotesk";
+  --font-display: "Orbitron";
   --font-sans: "Inter";
   --font-mono: "JetBrains Mono";
 }
 
 html,
 body {
-  background: radial-gradient(1200px 600px at 70% -10%, #16233b 0%, #0b111c 60%) fixed;
-  color: theme(colors.ink.100);
+  background:
+    radial-gradient(900px 500px at 80% -10%, rgba(191, 0, 255, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 10% 0%, rgba(0, 240, 255, 0.1), transparent 55%),
+    #050a0f;
+  background-attachment: fixed;
+  color: #ffffff;
   font-family: var(--font-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Faixa fina de "gel" no topo — evoca eletroforese, ancora a identidade do lab. */
-.gel-rule {
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    theme(colors.gene.400) 20%,
-    theme(colors.qtl.400) 55%,
-    theme(colors.aura.400) 80%,
-    transparent
-  );
-  opacity: 0.7;
-}
+.font-display { letter-spacing: 0.08em; }
+
+/* Líquido criogênico: pulso lento de opacidade (DS §2.3). */
+@keyframes cryo-pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 0.55; } }
+.cryo-liquid { background: linear-gradient(180deg, rgba(0,240,255,0.35), rgba(10,132,255,0.45)); }
+@media (prefers-reduced-motion: no-preference) { .cryo-liquid { animation: cryo-pulse 4s ease-in-out infinite; } }
+
+/* Hélice de DNA girando (DS §2.3). */
+@keyframes dna-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) { .dna-spin { animation: dna-spin 12s linear infinite; } }
+
+/* Partículas de DNA flutuantes. */
+@keyframes float-up { 0% { transform: translateY(8px); opacity: 0; } 30% { opacity: 0.8; } 100% { transform: translateY(-14px); opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) { .particle { animation: float-up 5s ease-in-out infinite; } }
 
 @media (prefers-reduced-motion: no-preference) {
-  .reveal {
-    animation: reveal 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  }
-  @keyframes reveal {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
+  .reveal { animation: reveal 320ms cubic-bezier(0.2,0.7,0.2,1) both; }
+  @keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }
 
-*:focus-visible {
-  outline: 2px solid theme(colors.gene.400);
-  outline-offset: 2px;
-}
+*:focus-visible { outline: 2px solid #00f0ff; outline-offset: 2px; }

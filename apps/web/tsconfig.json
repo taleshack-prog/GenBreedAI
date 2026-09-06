@@ -11,7 +11,6 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "incremental": true,
-    "baseUrl": ".",
     "plugins": [
       {
         "name": "next"
@@ -23,9 +22,6 @@
       ],
       "@genbreedai/engine": [
         "../../packages/engine/src/index.ts"
-      ],
-      "@/*": [
-        "./*"
       ]
     },
     "allowJs": true,
