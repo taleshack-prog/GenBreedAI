@@ -32,6 +32,25 @@ export const FELINE_PACK: SpeciesPack = {
     // Manchas brancas (KIT): bicolor.
     S: { name: "S", alleles: ["S", "s"], dominance: "COMPLETE", dominanceRank: ["S", "s"],
       phenotypeByAllele: { S: "bicolor", s: "sólido" }, mutationRate: µ },
+    // Juba (poligênico simplificado, dominância INCOMPLETA): Ma/Ma completa, Ma/ma parcial (lígre), ma/ma sem juba.
+    Ma: { name: "Ma", alleles: ["Ma", "ma"], dominance: "INCOMPLETE", dominanceRank: ["Ma", "ma"],
+      phenotypeByAllele: { Ma: "juba completa", ma: "sem juba" }, heteroPhenotype: { "Ma|ma": "juba parcial" }, mutationRate: µ },
+    // Comprimento do pelo (FGF5): longo dominante sobre curto.
+    Fl: { name: "Fl", alleles: ["Fl^l", "Fl^s"], dominance: "COMPLETE", dominanceRank: ["Fl^l", "Fl^s"],
+      phenotypeByAllele: { "Fl^l": "pelo longo", "Fl^s": "pelo curto" }, mutationRate: µ },
+    // Ausência de pelo (Sphynx, KRT71): Hr normal dominante > hr pelado (recessivo).
+    Hr: { name: "Hr", alleles: ["Hr", "hr"], dominance: "COMPLETE", dominanceRank: ["Hr", "hr"],
+      phenotypeByAllele: { Hr: "com pelo", hr: "pelado (sphynx)" }, mutationRate: µ },
+    // Cor de fundo da pelagem.
+    Bd: { name: "Bd", alleles: ["Bd^a", "Bd^d", "Bd^s", "Bd^g"], dominance: "COMPLETE", dominanceRank: ["Bd^a", "Bd^d", "Bd^s", "Bd^g"],
+      phenotypeByAllele: { "Bd^a": "fundo âmbar", "Bd^d": "fundo dourado", "Bd^s": "fundo areia", "Bd^g": "fundo cinza" }, mutationRate: µ },
+    // Formato da cabeça (dominância incompleta → intermediário em híbridos).
+    He: { name: "He", alleles: ["He^b", "He^a", "He^r"], dominance: "INCOMPLETE", dominanceRank: ["He^b", "He^a", "He^r"],
+      phenotypeByAllele: { "He^b": "cabeça larga", "He^a": "cabeça angular", "He^r": "cabeça arredondada" },
+      heteroPhenotype: { "He^b|He^r": "cabeça média", "He^b|He^a": "cabeça larga-angular", "He^a|He^r": "cabeça angular-suave" }, mutationRate: µ },
+    // Orelhas.
+    Ec: { name: "Ec", alleles: ["Ec^t", "Ec^l", "Ec^n"], dominance: "COMPLETE", dominanceRank: ["Ec^t", "Ec^l", "Ec^n"],
+      phenotypeByAllele: { "Ec^t": "orelhas tufadas (lince)", "Ec^l": "orelhas grandes (serval)", "Ec^n": "orelhas normais" }, mutationRate: µ },
   },
   epistasis: [
     // Branco dominante mascara cor e padrão.

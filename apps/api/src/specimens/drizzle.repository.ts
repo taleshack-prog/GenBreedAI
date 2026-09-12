@@ -39,6 +39,7 @@ function toStored(r: Row): StoredSpecimen {
     aura: r.aura,
     cacheKey: r.cacheKey,
     provenanceHash: r.provenanceHash,
+    status: (r.status as "ALIVE" | "FROZEN") ?? "ALIVE",
   };
 }
 
@@ -79,11 +80,12 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
       aura: specimen.aura,
       cacheKey: specimen.cacheKey,
       provenanceHash: specimen.provenanceHash ?? null,
+      status: specimen.status ?? "ALIVE",
     };
     await this.db
       .insert(specimens)
       .values(row)
-      .onConflictDoNothing({ target: specimens.id });
+      .onConflictDoUpdate({ target: specimens.id, set: { status: row.status, cacheKey: row.cacheKey, phenotype: row.phenotype } });
     return { ...specimen, id };
   }
 

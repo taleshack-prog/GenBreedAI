@@ -19,4 +19,16 @@ export class CrossController {
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
     return this.service.execute(user.id, user.tier, dto);
   }
+
+  @Post("options")
+  @UseGuards(AuthGuard)
+  options(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
+    return this.service.options(user.tier, dto);
+  }
+
+  @Post("classify")
+  @UseGuards(AuthGuard)
+  classify(@Body() dto: { sireId: string; damId: string }) {
+    return this.service.classify(dto);
+  }
 }

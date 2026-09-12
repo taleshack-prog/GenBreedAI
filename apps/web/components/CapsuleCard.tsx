@@ -1,7 +1,9 @@
 "use client";
 
-import type { ApiSpecimen } from "../lib/api";
-import { Creature } from "./Creature";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getImage, generateImage, type ApiSpecimen } from "../lib/api";
+import { displayName, displaySci } from "../lib/display";
 
 /** BarraRaridade (Design System §6): 5 estrelas preenchidas conforme raridade. */
 function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
@@ -27,8 +29,28 @@ function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
  *   ativa (ciano) · selecionada (púrpura) · alerta F>0.15 (amarelo) · crítica F>0.20 (vermelho).
  */
 export function CapsuleCard({
-  specimen, selected = false, onClick, slot,
-}: { specimen: ApiSpecimen | null; selected?: boolean; onClick?: () => void; slot?: "A" | "B" }) {
+  specimen, selected = false, onClick, slot, showGenome = true,
+}: { specimen: ApiSpecimen | null; selected?: boolean; onClick?: () => void; slot?: "A" | "B"; showGenome?: boolean }) {
+
+  const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
+  const [genLoading, setGenLoading] = useState(false);
+  const router = useRouter();
+
+  async function genImage(e: React.MouseEvent, force: boolean) {
+    e.stopPropagation();
+    if (!specimen) return;
+    setGenLoading(true);
+    try { const r = await generateImage(specimen.id, force); if (r.imageUrl) setFetchedUrl(r.imageUrl + "?t=" + Date.now()); }
+    catch { /* modo procedural / sem chave */ } finally { setGenLoading(false); }
+  }
+  useEffect(() => {
+    let alive = true;
+    if (specimen && !specimen.imageUrl) {
+      getImage(specimen.id).then((r) => { if (alive && r?.imageUrl) setFetchedUrl(r.imageUrl); }).catch(() => {});
+    }
+    return () => { alive = false; };
+  }, [specimen?.id, specimen?.imageUrl]);
+  const aiUrl = specimen?.imageUrl ?? fetchedUrl;
 
   const critico = !!specimen && specimen.fPedigree > 0.2;
   const alerta = !!specimen && !critico && specimen.fPedigree > 0.15;
@@ -41,9 +63,22 @@ export function CapsuleCard({
   return (
     <button
       onClick={onClick}
-      className={`block w-full rounded-2xl p-3 text-left transition ${neon}`}
+      className={`relative block w-full rounded-2xl p-3 text-left transition ${neon}`}
       style={{ background: "#0B1420", border: `1px solid ${cor}4D` }}
     >
+      {specimen && showGenome && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); router.push(`/genome/${specimen.id}`); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); router.push(`/genome/${specimen.id}`); } }}
+          title="Genoma detalhado"
+          className="absolute right-2 top-2 z-20 grid h-7 w-7 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-sm transition hover:scale-110"
+          style={{ borderColor: `${cor}66`, color: cor }}
+        >
+          🧬
+        </span>
+      )}
       {/* CÁPSULA */}
       <div className="relative mx-auto aspect-[3/4] w-full">
         {/* base holográfica */}
@@ -70,11 +105,29 @@ export function CapsuleCard({
               style={{ left: `${x}%`, bottom: "8%", background: cor, animationDelay: `${i * 0.8}s` }} />
           ))}
           {/* PNG IA (se gerado) → foto; senão retrato PROCEDURAL (tier grátis, TDD §5.2) */}
-          {specimen && specimen.imageUrl ? (
-            <img src={specimen.imageUrl} alt={specimen.species} className="absolute inset-0 h-full w-full object-contain p-1" />
+          {specimen && aiUrl ? (
+            <>
+              <img src={aiUrl} alt={specimen.species} className="absolute inset-0 h-full w-full object-contain p-1" />
+              <span role="button" tabIndex={0} title="Regenerar retrato" onClick={(e) => genImage(e, true)}
+                className="absolute bottom-1 right-1 z-20 grid h-6 w-6 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-[0.7rem] transition hover:scale-110"
+                style={{ borderColor: `${cor}66`, color: cor }}>
+                {genLoading ? "…" : "↻"}
+              </span>
+            </>
           ) : specimen ? (
             <div className="absolute inset-0 grid place-items-center">
-              <div className="w-[86%]"><Creature genotype={specimen.genotype} family={specimen.pack} seed={specimen.cacheKey ?? specimen.id} size={180} /></div>
+              <span role="button" tabIndex={0} onClick={(e) => genImage(e, false)}
+                className="cursor-pointer rounded-lg border px-3 py-2 text-center transition hover:bg-white/5"
+                style={{ borderColor: `${cor}55`, color: cor }}>
+                {genLoading ? (
+                  <span className="animate-pulse font-mono text-[0.6rem] uppercase tracking-widest">gerando…</span>
+                ) : (
+                  <>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.3" className="mx-auto"><path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 6h10M7 18h10" /></svg>
+                    <span className="mt-1 block font-mono text-[0.55rem] uppercase tracking-widest">gerar retrato IA</span>
+                  </>
+                )}
+              </span>
             </div>
           ) : (
             <div className="absolute inset-0 grid place-items-center">
@@ -90,8 +143,9 @@ export function CapsuleCard({
       {specimen ? (<>
       <div className="mt-2 text-center font-display text-base font-bold uppercase tracking-wider"
         style={{ color: cor, textShadow: `0 0 8px ${cor}66` }}>
-        {specimen.species}
+        {displayName(specimen)}
       </div>
+      <div className="text-center text-[0.65rem] italic text-ink-muted">{displaySci(specimen)}</div>
       <div className="mx-auto mt-1.5 flex max-w-[220px] overflow-hidden rounded-md border"
         style={{ borderColor: `${cor}40` }}>
         <div className="flex-1 py-1 text-center font-mono text-xs text-ink-muted">GEN {specimen.generation}</div>

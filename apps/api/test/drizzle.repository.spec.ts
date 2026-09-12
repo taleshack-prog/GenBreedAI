@@ -1,3 +1,5 @@
+import { WalletService } from "../src/economy/wallet.service";
+import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 /** Adapter Drizzle contra Postgres real (PGlite), modelo v2. */
 import { describe, it, expect, beforeAll } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -25,7 +27,7 @@ async function makeDb() {
 describe("DrizzleSpecimenRepository (Postgres real via PGlite)", () => {
   let repo: DrizzleSpecimenRepository;
   let service: CrossService;
-  beforeAll(async () => { const db = await makeDb(); repo = new DrizzleSpecimenRepository(db); service = new CrossService(repo); });
+  beforeAll(async () => { const db = await makeDb(); repo = new DrizzleSpecimenRepository(db); service = new CrossService(repo, new WalletService(new InMemoryWalletRepository())); });
 
   it("carrega fundadores (get)", async () => {
     const p = await repo.get("onca-pintada");

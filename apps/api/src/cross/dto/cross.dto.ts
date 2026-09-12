@@ -33,4 +33,9 @@ export class CrossDto {
   /** Gerações sob seleção direcionada (opcional). */
   @IsOptional()
   generationsUnderSelection?: number;
+
+  /** Chave do genótipo escolhido (Senior/PhD) — materializa a seleção fenotípica. */
+  @IsOptional()
+  @IsString()
+  choiceKey?: string;
 }

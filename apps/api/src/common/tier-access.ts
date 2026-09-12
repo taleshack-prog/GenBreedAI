@@ -29,3 +29,9 @@ export function assertTierAllows(
     throw new ForbiddenException("Cruzamento interespecífico exige tier JUNIOR ou superior (FREE é intraespécie apenas).");
   }
 }
+
+/** O tier pode VER espécimes desta família? (Free: só felinos; Senior: +caninos; PhD: +grandes) */
+export function familyVisibleAtTier(tier: Tier, pack: string): boolean {
+  const min = FAMILY_MIN_TIER[(pack as Family)] ?? 3;
+  return RANK[tier] >= min;
+}

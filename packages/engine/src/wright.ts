@@ -90,3 +90,65 @@ export function fStatistic(hObs: number, hExp: number): number {
   if (hExp === 0) return 0;
   return 1 - hObs / hExp;
 }
+
+/** Contribuição de um caminho de endogamia por ancestral comum. */
+export interface WrightPath {
+  ancestor: string; n1: number; n2: number; fAncestor: number; contribution: number;
+}
+export interface WrightExplanation {
+  total: number;
+  paths: WrightPath[];
+  note: string;
+}
+
+/** Todos os caminhos simples de `start` até cada ancestral (sequências de ids). */
+function ancestorPaths(ped: Pedigree, start: string | null): Map<string, string[][]> {
+  const out = new Map<string, string[][]>();
+  function walk(node: string | null, path: string[]) {
+    if (!node) return;
+    const acc = [...path, node];
+    if (!out.has(node)) out.set(node, []);
+    out.get(node)!.push(acc);
+    const n = ped[node];
+    if (n?.sire) walk(n.sire, acc);
+    if (n?.dam) walk(n.dam, acc);
+  }
+  walk(start, []);
+  return out;
+}
+
+/**
+ * Decompõe F_X = Σ_A (1/2)^(n1+n2+1) × (1+F_A) pelo MÉTODO DOS CAMINHOS (TDD §4.2),
+ * listando cada ancestral comum e sua contribuição. Só conta pares de caminhos
+ * (pai→A, mãe→A) que não compartilham indivíduos além de A (caminhos válidos).
+ */
+export function explainWrightF(ped: Pedigree, sireId: string, damId: string): WrightExplanation {
+  const fromSire = ancestorPaths(ped, sireId);
+  const fromDam = ancestorPaths(ped, damId);
+  const paths: WrightPath[] = [];
+  let total = 0;
+
+  const common = [...fromSire.keys()].filter((a) => fromDam.has(a));
+  for (const A of common) {
+    const fA = (() => { const n = ped[A]; return n?.sire && n?.dam ? kinship(ped, n.sire, n.dam) : 0; })();
+    for (const ps of fromSire.get(A)!) {
+      for (const pd of fromDam.get(A)!) {
+        // caminhos válidos: só compartilham o ancestral A (nenhum outro indivíduo).
+        const setS = new Set(ps.slice(0, -1));
+        if (pd.slice(0, -1).some((x) => setS.has(x))) continue;
+        const n1 = ps.length - 1, n2 = pd.length - 1;
+        const contribution = Math.pow(0.5, n1 + n2 + 1) * (1 + fA);
+        total += contribution;
+        paths.push({ ancestor: A, n1, n2, fAncestor: fA, contribution });
+      }
+    }
+  }
+  paths.sort((a, b) => b.contribution - a.contribution);
+  return {
+    total: Number(total.toFixed(6)),
+    paths,
+    note: common.length === 0
+      ? "Sem ancestral comum entre os pais → F = 0 (não endogâmico)."
+      : `F = Σ (½)^(n1+n2+1)·(1+F_ancestral) sobre ${paths.length} caminho(s) por ${new Set(paths.map((p) => p.ancestor)).size} ancestral(is) comum(ns).`,
+  };
+}

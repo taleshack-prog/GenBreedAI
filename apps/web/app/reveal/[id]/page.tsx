@@ -7,6 +7,7 @@ import { listSpecimens, generateImage, type ApiSpecimen } from "../../../lib/api
 import { CapsuleCard } from "../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../components/Genome";
 import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../lib/reveal";
+import { speciesInfo } from "@genbreedai/shared";
 
 const QTL_LABEL: Record<string,string> = { porte:"Porte", vigor:"Vigor", beleza:"Beleza", temperamento:"Temperamento", rosetas:"Rosetas" };
 
@@ -16,7 +17,7 @@ function LineageMini({ s, cor }: { s: ApiSpecimen | null; cor: string }) {
       <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border" style={{ borderColor: cor }}>
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.4"><path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 6h10M7 18h10" /></svg>
       </div>
-      <div className="mt-1 truncate font-display text-xs font-bold uppercase" style={{ color: cor }}>{s ? s.species : "—"}</div>
+      <div className="mt-1 truncate font-display text-xs font-bold uppercase" style={{ color: cor }}>{s ? speciesInfo(s.species).common : "—"}</div>
     </div>
   );
 }
@@ -108,8 +109,11 @@ export default function RevealPage() {
         </button>
         <button onClick={() => setShowGenome((v) => !v)}
           className="flex w-full items-center justify-between rounded-xl border border-cyan/30 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan">
-          <span>⌗ Ver Genoma</span><span>{showGenome ? "▲" : "▼"}</span>
+          <span>⌗ Ver Genoma (resumo)</span><span>{showGenome ? "▲" : "▼"}</span>
         </button>
+        <a href={`/genome/${specimen.id}`} className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-purple transition hover:bg-purple/10">
+          🧬 Genoma detalhado (árvore · F · alelos)
+        </a>
       </div>
 
       {/* Genoma */}

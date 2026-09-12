@@ -10,7 +10,7 @@ const AUTH_FREE = { "x-user-id": "user-free", "x-user-tier": "FREE" };
 const AUTH_PHD = { "x-user-id": "user-phd", "x-user-tier": "PHD" };
 const CROSS = { sireId: "onca-pintada", damId: "onca-negra", method: "F1" };
 
-beforeAll(async () => { process.env.NODE_ENV = "test"; delete process.env.DATABASE_URL; app = await buildApp(); await app.init(); await app.getHttpAdapter().getInstance().ready(); });
+beforeAll(async () => { process.env.NODE_ENV = "test"; process.env.AUTH_DEV_HEADERS = "true"; delete process.env.DATABASE_URL; app = await buildApp(); await app.init(); await app.getHttpAdapter().getInstance().ready(); });
 afterAll(async () => { await app.close(); });
 
 describe("POST /api/v1/cross", () => {

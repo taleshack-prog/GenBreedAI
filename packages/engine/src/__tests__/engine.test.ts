@@ -3,7 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   createPrng, wrightF, kinship, fStatistic, sha256, fixationIndex,
   mapFixationToAura, fertilityScore, gameteFrequencies, expressPhenotype,
-  CANINE_PACK
+  CANINE_PACK,
+  FELINE_PACK
 } from "../index";
 
 describe("PRNG determinístico", () => {
@@ -67,4 +68,11 @@ describe("Expressão canina (merle/harlequin)", () => {
     expect(expressPhenotype({ loci: { M: ["M","m"] }, qtl: {} }, CANINE_PACK).loci.M).toBe("merle");
     expect(expressPhenotype({ loci: { M: ["m","m"] }, qtl: {} }, CANINE_PACK).loci.M).toBe("não-merle");
   });
+});
+
+describe("Juba (Ma) — herança com dominância incompleta (lígre)", () => {
+  const ph = (ma: [string, string]) => expressPhenotype({ loci: { Ma: ma }, qtl: {} }, FELINE_PACK).loci.Ma;
+  it("Ma/Ma → juba completa (leão)", () => { expect(ph(["Ma","Ma"])).toBe("juba completa"); });
+  it("Ma/ma → juba parcial (híbrido tipo lígre)", () => { expect(ph(["Ma","ma"])).toBe("juba parcial"); });
+  it("ma/ma → sem juba", () => { expect(ph(["ma","ma"])).toBe("sem juba"); });
 });

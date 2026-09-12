@@ -2,7 +2,6 @@
 
 import type { ApiSpecimen } from "../lib/api";
 import { buildGrid, topHybrids, familyOf, type Hybrid } from "../lib/lab";
-import { Creature } from "./Creature";
 
 /** Quadro de Punnett por gametas com miniaturas + % reais (mockup Image 2). */
 export function PunnettGridView({ sire, dam }: { sire: ApiSpecimen; dam: ApiSpecimen }) {
@@ -35,8 +34,10 @@ function FragmentRow({
       <div className="flex items-center justify-center font-mono text-[0.7rem] text-purple">{label}</div>
       {cells.map((cell, i) => (
         <div key={i} className="rounded-md border border-white/10 bg-bg-900/60 p-1 text-center">
-          <div className="mx-auto grid aspect-square w-full place-items-center overflow-hidden rounded">
-            <Creature genotype={cell.genotype} family={family} seed={`cell-${label}-${i}`} size={44} />
+          <div className="mx-auto grid aspect-square w-full place-items-center overflow-hidden rounded bg-bg-900/60 p-1">
+            <span className="font-mono text-[0.55rem] leading-tight text-cyan/80">
+              {Object.entries(cell.genotype.loci).slice(0,3).map(([k,v]) => `${k}:${v[0]}${v[1]}`).join(" ")}
+            </span>
           </div>
           <div className="mt-0.5 font-mono text-[0.65rem] text-ink">{(cell.prob * 100).toFixed(0)}%</div>
         </div>
@@ -95,8 +96,10 @@ function HybridCard({ h, idx, family, mid }: { h: Hybrid; idx: number; family: i
         <span className="grid h-5 w-5 place-items-center rounded-full border border-cyan/50 font-mono text-[0.65rem] text-cyan">{idx}</span>
         <span className="rounded bg-purple/20 px-1.5 py-0.5 font-mono text-[0.65rem] text-purple">{(h.prob * 100).toFixed(0)}%</span>
       </div>
-      <div className="grid aspect-video place-items-center overflow-hidden rounded bg-bg-studio">
-        <Creature genotype={h.genotype} family={family} seed={`hyb-${idx}`} size={110} />
+      <div className="grid min-h-[60px] place-items-center rounded bg-bg-900/60 p-2 text-center">
+        <span className="font-mono text-[0.6rem] text-cyan/80">
+          {Object.entries(h.genotype.loci).slice(0, 4).map(([k, v]) => `${k}:${v[0]}${v[1]}`).join("  ")}
+        </span>
       </div>
       <div className="mt-2 grid grid-cols-4 gap-1">
         {Object.entries(qtl).slice(0,4).map(([k, vv]) => {

@@ -4,6 +4,7 @@
  */
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
+import { familyVisibleAtTier } from "../common/tier-access";
 import { SpecimenRepository } from "./in-memory.repository";
 
 @Controller("api/v1/specimens")
@@ -13,6 +14,7 @@ export class SpecimensController {
   @Get()
   @UseGuards(AuthGuard)
   async list(@CurrentUser() user: AuthenticatedUser) {
-    return this.repo.listByOwner(user.id);
+    const all = await this.repo.listByOwner(user.id);
+    return all.filter((sp) => familyVisibleAtTier(user.tier, sp.pack));
   }
 }

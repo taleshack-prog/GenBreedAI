@@ -22,7 +22,7 @@ export {
   genotypeKey,
   type Distribution,
 } from "./punnett";
-export { kinship, wrightF, fStatistic } from "./wright";
+export { kinship, wrightF, explainWrightF, fStatistic, type WrightExplanation, type WrightPath } from "./wright";
 export { fertilityScore, type FertilityOptions } from "./fertility";
 export {
   fixationIndex,
@@ -33,8 +33,11 @@ export {
 export { sha256 } from "./sha256";
 export {
   cross,
+  enumerateOffspring,
+  materializeCross,
   validateBreedingConstraints,
   hashGenotype,
+  type OffspringOption,
   type ParentInput,
   type CrossContext,
 } from "./cross";
@@ -42,3 +45,4 @@ export {
 // Data packs do TDD (Gene-Bank): loci B/K/M/H/S/A + QTL.
 export { CANINE_PACK } from "./data/canine";
 export { FELINE_PACK } from "./data/feline";
+export { classifyCross, type CrossClassification, type ClassifyInput } from "./classify";

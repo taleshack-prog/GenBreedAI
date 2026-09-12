@@ -21,6 +21,9 @@ export async function buildApp(): Promise<NestFastifyApplication> {
   return app;
 }
 
+process.on("unhandledRejection", (reason) => { console.error("[unhandledRejection] tratado:", reason); });
+process.on("uncaughtException", (err: any) => { console.error("[uncaughtException] tratado:", err?.message ?? err); });
+
 async function bootstrap() {
   const app = await buildApp();
   const port = Number(process.env.PORT ?? 3001);

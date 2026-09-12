@@ -18,10 +18,18 @@ biologia felina. Compatível com o arco Pumajaguar existente (o loco A é mantid
 | **C** | TYR (série albino) | `C` > `c^b` (sépia) > `c^s` (pontos/siamês) > `c^a` (albino olhos-azuis) > `c` (albino olhos-vermelhos) | `cc`/`c^a` = albino; `c^s` = extremidades pigmentadas (pointed) |
 | **D** | MLPH (diluição) | `D` (denso) > `d` (diluído) | `dd` = azul/creme (diluído) |
 | **W** | KIT (branco dominante) | `W` (branco dominante) > `w` | `W_` = animal totalmente branco (mascara todos os demais) — ex.: tigre-branco/leão-branco/gato-branco |
+| **Hr** | Ausência de pelo (KRT71 — Sphynx) | `Hr`(com pelo) > `hr`(pelado, recessivo) | `hr/hr` = sem pelo (Sphynx) |
+| **Fl** | Comprimento do pelo (FGF5) | `Fl^l`(longo) > `Fl^s`(curto) (dom. completa) | `Fl^l/_` = pelo longo (persa, maine-coon, leopardo-das-neves); `Fl^s/Fl^s` = pelo curto |
+| **Bd** | Cor de fundo da pelagem (feomelanina/eumelanina base) | `Bd^a`(âmbar) > `Bd^d`(dourado) > `Bd^s`(areia) > `Bd^g`(cinza) (dom. completa) | Tom de fundo sobre o qual o padrão aparece |
+| **He** | Formato da cabeça/crânio | `He^b`(larga) > `He^a`(angular) > `He^r`(arredondada) (dom. incompleta → intermediários em híbridos) | Estrutura craniana |
+| **Ec** | Orelhas | `Ec^t`(tufadas, tipo lince) > `Ec^l`(grandes, tipo serval) > `Ec^n`(normais) (dom. completa) | Forma/tamanho das orelhas |
+| **Ma** | Juba (poligênico, dependente de andrógenos — simplificado) | `Ma` > `ma` (dominância INCOMPLETA) | `Ma/Ma` = juba completa (leão); `Ma/ma` = juba parcial/menor (híbrido tipo lígre); `ma/ma` = sem juba |
 | **S** | KIT (manchas brancas) | `S` (bicolor/malhas) > `s` | `S_` = manchas brancas (bicolor/piebald) |
 
-**QTL felinos (contínuos):** `porte`, `vigor`, `beleza`, `rosetas` (intensidade
+**QTL felinos (contínuos, HERDÁVEIS como média parental — TDD §4.1):** `porte` (tamanho/robustez do animal no retrato: 0=pequeno … 1=muito grande), `vigor` (musculatura), `beleza` (acabamento/simetria da pelagem), `rosetas` (intensidade
 do padrão — "marcas fantasma"). Herdabilidade conforme TDD §4.1.
+
+**Nota biológica:** a juba é herdável (poligênica/andrógeno-dependente). Modelada aqui como um loco de dominância incompleta para reproduzir a juba INTERMEDIÁRIA de híbridos (ex.: o lígre macho tem juba menor que a do leão). Leão = Ma/Ma; demais felinos = ma/ma.
 
 ## Ordem de expressão (epistasia)
 1. **W_** (branco dominante) → animal **branco**, mascara cor e padrão.

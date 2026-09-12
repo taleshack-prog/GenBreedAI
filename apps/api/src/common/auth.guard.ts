@@ -1,48 +1,51 @@
 /**
- * Guard de autenticação (modo dev). Resolve a identidade do usuário a partir dos
- * cabeçalhos `x-user-id` e `x-user-tier`.
- *
- * SEAM: na Fase 1b este guard é substituído pela integração Auth.js/NextAuth v5
- * (JWT EdDSA/RS256, TDD §2). A forma do `AuthenticatedUser` permanece a mesma,
- * então controllers/serviços não mudam.
+ * Guard de autenticação. Produção: valida JWT Bearer (emitido pelo AuthService).
+ * Dev: se AUTH_DEV_HEADERS=true, aceita x-user-id/x-user-tier (para o seletor de
+ * tier de teste e ferramentas locais). Sem token válido → 401.
  */
-
 import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-  createParamDecorator,
+  CanActivate, ExecutionContext, Injectable, UnauthorizedException, createParamDecorator, Optional,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import type { Tier } from "@genbreedai/shared";
+import { AuthService } from "../auth/auth.service";
 
-export interface AuthenticatedUser {
-  id: string;
-  tier: Tier;
-}
-
+export interface AuthenticatedUser { id: string; tier: Tier; }
 const VALID_TIERS: Tier[] = ["FREE", "JUNIOR", "SENIOR", "PHD"];
 
 @Injectable()
 export class AuthGuard implements CanActivate {
+  constructor(@Optional() private readonly auth?: AuthService) {}
+
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthenticatedUser }>();
-    const id = req.headers["x-user-id"];
-    const tier = req.headers["x-user-tier"];
 
-    if (typeof id !== "string" || id.length === 0) {
-      throw new UnauthorizedException("Cabeçalho x-user-id ausente.");
+    // 1) JWT Bearer (produção).
+    const authz = req.headers["authorization"];
+    if (typeof authz === "string" && authz.startsWith("Bearer ") && this.auth) {
+      try {
+        const payload = this.auth.verify(authz.slice(7));
+        req.user = { id: payload.sub, tier: (payload.tier as Tier) ?? "FREE" };
+        return true;
+      } catch {
+        throw new UnauthorizedException("Sessão inválida ou expirada.");
+      }
     }
-    if (typeof tier !== "string" || !VALID_TIERS.includes(tier as Tier)) {
-      throw new UnauthorizedException("Cabeçalho x-user-tier inválido (FREE|JUNIOR|SENIOR|PHD).");
+
+    // 2) Dev headers (apenas se habilitado).
+    if (process.env.AUTH_DEV_HEADERS === "true") {
+      const id = req.headers["x-user-id"];
+      const tier = req.headers["x-user-tier"];
+      if (typeof id === "string" && id.length > 0 && typeof tier === "string" && VALID_TIERS.includes(tier as Tier)) {
+        req.user = { id, tier: tier as Tier };
+        return true;
+      }
     }
-    req.user = { id, tier: tier as Tier };
-    return true;
+
+    throw new UnauthorizedException("Autenticação necessária.");
   }
 }
 
-/** Extrai o usuário autenticado injetado pelo AuthGuard. */
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): AuthenticatedUser => {
     const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();

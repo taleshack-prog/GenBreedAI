@@ -34,6 +34,7 @@ export class QuotaService {
 
   /** Cruzamentos restantes hoje para o usuário, dado seu limite diário. */
   remaining(userId: string, dailyLimit: number): number {
+    if (process.env.CROSS_QUOTA_UNLIMITED === "true") return 9999;
     return Math.max(0, dailyLimit - this.get(userId).count);
   }
 
@@ -42,6 +43,7 @@ export class QuotaService {
    * NÃO é chamado pelo motor — é um gate de acesso, não um parâmetro genético.
    */
   tryConsume(userId: string, dailyLimit: number): boolean {
+    if (process.env.CROSS_QUOTA_UNLIMITED === "true") return true; // modo DEV
     const c = this.get(userId);
     if (c.count >= dailyLimit) return false;
     c.count += 1;

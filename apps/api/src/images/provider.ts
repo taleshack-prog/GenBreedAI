@@ -41,7 +41,7 @@ export class FalImageProvider implements ImageProvider {
 }
 
 /** Escolhe o provedor por ambiente (FAL_KEY → fal.ai; senão procedural). */
-export function resolveProvider(): ImageProvider {
+export function resolveProvider(model?: string): ImageProvider {
   const key = process.env.FAL_KEY;
-  return key ? new FalImageProvider(key) : new ProceduralImageProvider();
+  return key ? new FalImageProvider(key, model) : new ProceduralImageProvider();
 }

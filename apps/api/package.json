@@ -13,7 +13,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --import=@swc-node/register/esm-register src/db/migrate.ts",
     "db:seed": "node --import=@swc-node/register/esm-register src/db/seed.ts",
-    "db:reset": "node --import=@swc-node/register/esm-register src/db/reset.ts"
+    "db:reset": "node --import=@swc-node/register/esm-register src/db/reset.ts",
+    "images:seed": "node --import=@swc-node/register/esm-register src/images/seed-portraits.ts",
+    "start:prod": "node --import=@swc-node/register/esm-register src/main.ts"
   },
   "dependencies": {
     "@genbreedai/engine": "workspace:*",
@@ -27,7 +29,11 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "drizzle-orm": "^0.36.4",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "google-auth-library": "^9.14.1",
+    "@aws-sdk/client-s3": "^3.658.1"
   },
   "devDependencies": {
     "@swc/core": "^1.7.35",
@@ -39,6 +45,8 @@
     "drizzle-kit": "^0.28.1",
     "@electric-sql/pglite": "^0.2.14",
     "@types/pg": "^8.11.10",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7"
   }
 }

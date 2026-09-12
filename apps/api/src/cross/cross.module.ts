@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { EconomyModule } from "../economy/economy.module";
 import { CrossController } from "./cross.controller";
 import { SpecimensController } from "../specimens/specimens.controller";
 import { CrossService } from "./cross.service";
@@ -29,8 +30,9 @@ const specimenRepositoryProvider = {
 };
 
 @Module({
+  imports: [EconomyModule],
   controllers: [CrossController, SpecimensController],
   providers: [CrossService, QuotaService, specimenRepositoryProvider],
-  exports: [SpecimenRepository, QuotaService],
+  exports: [SpecimenRepository, QuotaService, CrossService],
 })
 export class CrossModule {}

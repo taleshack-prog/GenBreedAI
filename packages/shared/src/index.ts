@@ -112,4 +112,7 @@ export const DEFAULT_MUTATION_RATE = 1e-4 as const;
 export const MUTATION_TAG = "mutação" as const;
 
 /** Versão do pipeline de arte usada na chave de cache (TDD §5.1). */
-export const CURRENT_ART_VERSION = "art-v1" as const;
+export const CURRENT_ART_VERSION = "art-v2" as const;
+
+export { SPECIES_INFO, speciesInfo, biologicalSpecies, type SpeciesInfo } from "./species";
+export { BREEDS, breedInfo, DOG_BREEDS, dogBreedInfo, type BreedInfo } from "./breeds";
