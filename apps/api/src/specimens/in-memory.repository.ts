@@ -176,7 +176,9 @@ export class InMemorySpecimenRepository extends SpecimenRepository {
   }
 
   async listByOwner(ownerId: string): Promise<StoredSpecimen[]> {
-    return [...this.store.values()].filter((s) => s.ownerId === ownerId);
+    // Fundadores (dono "demo") visíveis p/ todos + espécimes próprios.
+    const owners = ownerId === "demo" ? ["demo"] : [ownerId, "demo"];
+    return [...this.store.values()].filter((s) => owners.includes(s.ownerId));
   }
 
   async save(specimen: StoredSpecimen): Promise<StoredSpecimen> {

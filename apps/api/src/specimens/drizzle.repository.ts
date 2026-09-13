@@ -55,10 +55,13 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
   }
 
   async listByOwner(ownerId: string): Promise<StoredSpecimen[]> {
+    // Os fundadores (catálogo base, dono "demo") são visíveis para TODOS os usuários;
+    // além deles, o usuário vê os próprios espécimes.
+    const owners = ownerId === "demo" ? ["demo"] : [ownerId, "demo"];
     const rows: Row[] = await this.db
       .select()
       .from(specimens)
-      .where(inArray(specimens.ownerId, [ownerId]));
+      .where(inArray(specimens.ownerId, owners));
     return rows.map(toStored);
   }
 
