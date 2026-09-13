@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
-const API = process.env.API_URL ?? "http://localhost:3001";
+// Produção aponta para a API pública do Railway por PADRÃO (não depende de env no Vercel).
+// Dev usa localhost. Pode sobrescrever com API_URL se precisar.
+const API =
+  process.env.API_URL ??
+  (process.env.NODE_ENV === "production"
+    ? "https://genbreedaiapi-production.up.railway.app"
+    : "http://localhost:3001");
 
 const nextConfig = {
   reactStrictMode: true,
