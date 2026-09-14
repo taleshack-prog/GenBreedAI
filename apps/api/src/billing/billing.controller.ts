@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { BillingService } from "./billing.service";
 
@@ -18,6 +18,9 @@ export class BillingController {
   @Post("confirm")
   @UseGuards(AuthGuard)
   confirm(@CurrentUser() user: AuthenticatedUser, @Body() body: { intentId: string }) {
+    if (process.env.BILLING_STUB_ENABLED !== "true") {
+      throw new ForbiddenException("Confirmação manual desabilitada.");
+    }
     return this.billing.confirm(user.id, body.intentId);
   }
 }
