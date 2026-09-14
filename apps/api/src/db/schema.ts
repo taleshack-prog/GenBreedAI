@@ -8,8 +8,10 @@
 
 import {
   doublePrecision,
+  index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp, primaryKey, boolean } from "drizzle-orm/pg-core";
@@ -107,3 +109,58 @@ export const referralReferred = pgTable("referral_referred", {
   convertCredited: boolean("convert_credited").notNull().default(false),
   firstSeen: text("first_seen"),
 }, (t) => ({ pk: primaryKey({ columns: [t.code, t.referredId] }) }));
+
+/**
+ * Intents de pagamento (Stripe — integração ainda inexistente). PK = id do
+ * gateway (pi_... ou cs_...): permite `INSERT ... ON CONFLICT DO NOTHING`
+ * como idempotência de crédito robusta a restart de container e a retries
+ * de webhook (Stripe reenvia por até 3 dias). Ver billing.service.ts.
+ */
+export const paymentIntents = pgTable("payment_intents", {
+  id: text("id").primaryKey(), // id do gateway: pi_... ou cs_...
+  userId: text("user_id").notNull().references(() => users.id),
+  kind: text("kind").notNull(), // "PACK" | "SUBSCRIPTION"
+  packId: text("pack_id"), // preenchido quando kind = PACK
+  amountBrl: numeric("amount_brl").notNull(),
+  status: text("status").notNull().default("PENDING"), // PENDING | PAID | FAILED | REFUNDED
+  creditedAt: timestamp("credited_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index("payment_intents_user_id_idx").on(t.userId),
+}));
+
+/** Assinaturas Stripe (tier recorrente — PACK avulso fica em paymentIntents). */
+export const subscriptions = pgTable("subscriptions", {
+  id: text("id").primaryKey(), // stripe_subscription_id
+  userId: text("user_id").notNull().references(() => users.id),
+  tier: text("tier").notNull(), // JUNIOR | SENIOR | PHD
+  interval: text("interval").notNull(), // MONTH | YEAR
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  status: text("status").notNull(), // ACTIVE | PAST_DUE | CANCELED | INCOMPLETE
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index("subscriptions_user_id_idx").on(t.userId),
+  statusIdx: index("subscriptions_status_idx").on(t.status),
+}));
+
+/**
+ * Tiers concedidos fora do Stripe (ex.: prêmio de indicação eleva o tier por
+ * 30 dias sem criar assinatura). Tabela separada de `subscriptions` para que
+ * a expiração (`expiresAt`) seja distinguível de uma assinatura paga na
+ * resolução de tier.
+ */
+export const grantedTiers = pgTable("granted_tiers", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  tier: text("tier").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  reason: text("reason").notNull(), // ex.: "REFERRAL_PHD"
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index("granted_tiers_user_id_idx").on(t.userId),
+  expiresAtIdx: index("granted_tiers_expires_at_idx").on(t.expiresAt),
+}));

@@ -43,6 +43,13 @@
       "when": 1789245920605,
       "tag": "0005_flashy_spacker_dave",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789418877992,
+      "tag": "0006_last_kingpin",
+      "breakpoints": true
     }
   ]
 }
