@@ -1,0 +1,13 @@
+import "dotenv/config";
+import bcrypt from "bcryptjs";
+import readline from "node:readline";
+import { createDb } from "./src/db/client.ts";
+import { users } from "./src/db/schema.ts";
+import { eq } from "drizzle-orm";
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const senha = await new Promise((r) => rl.question("Senha para testar: ", (a) => { rl.close(); r(a); }));
+const { db, pool } = createDb(process.env.DATABASE_URL);
+const u = (await db.select().from(users).where(eq(users.email, "talhack@yahoo.com")))[0];
+console.log("hash existe:", !!u?.passwordHash);
+console.log("senha confere:", u?.passwordHash ? await bcrypt.compare(senha, u.passwordHash) : "sem hash");
+await pool.end();
