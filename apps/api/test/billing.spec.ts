@@ -2,10 +2,16 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { BillingService } from "../src/billing/billing.service";
 import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
+import { InMemoryPaymentIntentsRepository } from "../src/billing/payment-intents.repository";
 
 describe("Compra de créditos (billing)", () => {
   let billing: BillingService; let wallet: WalletService;
-  beforeEach(() => { delete process.env.DATABASE_URL; wallet = new WalletService(new InMemoryWalletRepository()); billing = new BillingService(wallet); });
+  beforeEach(() => {
+    delete process.env.DATABASE_URL;
+    delete process.env.STRIPE_SECRET_KEY; // garante StubPaymentProvider no teste
+    wallet = new WalletService(new InMemoryWalletRepository());
+    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository());
+  });
 
   it("pacotes: 10/50/100 com preços corretos", () => {
     const p = billing.packs();
