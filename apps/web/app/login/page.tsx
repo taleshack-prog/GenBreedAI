@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { register, login, loginWithGoogle } from "../../lib/auth";
-import { recordReferralEvent } from "../../lib/api";
 
 declare global { interface Window { google?: any; } }
 
@@ -39,9 +38,7 @@ export default function LoginPage() {
     setErr(null); setBusy(true);
     try {
       if (mode === "register") {
-        const r = await register(email, password, name || undefined);
-        const ref = localStorage.getItem("gb:ref");
-        if (ref) { await recordReferralEvent(ref, r.user.id, "install"); localStorage.removeItem("gb:ref"); }
+        await register(email, password, name || undefined);
       } else {
         await login(email, password);
       }

@@ -218,7 +218,3 @@ export async function classifyCross(input: { sireId: string; damId: string }): P
   if (!res.ok) throw new Error("Falha ao classificar cruzamento.");
   return res.json();
 }
-
-export async function recordReferralEvent(code: string, referredId: string, kind: "install" | "d1" | "d7" | "convert"): Promise<void> {
-  try { await fetch("/api/v1/referral/event", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, referredId, kind }) }); } catch { /* silencioso */ }
-}

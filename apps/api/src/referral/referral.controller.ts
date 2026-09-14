@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
-import { ReferralService, type RefEvent } from "./referral.service";
+import { ReferralService } from "./referral.service";
 
 @Controller("api/v1/referral")
 export class ReferralController {
@@ -20,10 +20,8 @@ export class ReferralController {
     return { ok: true };
   }
 
-  /** Registra marco (install/d1/d7/convert) do indicado. */
-  @Post("event")
-  async event(@Body() body: { code: string; referredId: string; kind: RefEvent }) {
-    if (!body?.code || !body?.referredId || !body?.kind) return { credited: 0 };
-    return this.ref.recordEvent(body.code, body.referredId, body.kind);
-  }
+  // Marcos (install/d1/d7/convert) NÃO são afirmáveis pelo cliente — sem rota
+  // pública. ReferralService.recordEvent() é chamado apenas internamente por
+  // outros módulos do backend (install no cadastro, convert no webhook de
+  // pagamento).
 }
