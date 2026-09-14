@@ -25,8 +25,11 @@ export default function ProfilePage() {
   useEffect(() => { setTierState(getTier()); getWallet().then(setWallet).catch(() => {}); getImageQuota().then(setImgQuota).catch(() => {}); getReferral().then(setRef).catch(() => {}); getCreditPacks().then(setPacks).catch(() => {}); }, []);
   async function comprar(packId: string) {
     setBuying(packId); setBuyMsg(null);
-    try { const r = await buyCredits(packId); setWallet(r.wallet); setBuyMsg(`+${r.creditsAdded} créditos de imagem!`); }
-    catch (e) { setBuyMsg((e as Error).message); } finally { setBuying(null); }
+    try {
+      const r = await buyCredits(packId);
+      if (r.redirected) return; // navegando para o checkout do Stripe
+      setWallet(r.wallet); setBuyMsg(`+${r.creditsAdded} créditos de imagem!`);
+    } catch (e) { setBuyMsg((e as Error).message); } finally { setBuying(null); }
   }
   async function coletarSemanal() {
     try { const r = await claimWeekly(); setWallet(r.wallet); setDailyMsg(r.claimed ? "+1 crédito de imagem (bônus semanal)!" : "Bônus semanal já coletado. Volte na próxima semana."); }
@@ -129,7 +132,6 @@ export default function ProfilePage() {
             ))}
           </div>
           {buyMsg && <p className="mt-2 text-center text-xs text-ok">{buyMsg}</p>}
-          <p className="mt-2 text-[0.6rem] text-ink-muted">Pagamento em modo de teste (aprova na hora). Integração Pix/Stripe é o próximo passo.</p>
         </div>
       )}
 

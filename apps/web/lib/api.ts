@@ -202,14 +202,29 @@ export async function getCreditPacks(): Promise<CreditPack[]> {
   if (!res.ok) throw new Error("Falha ao carregar pacotes.");
   return res.json();
 }
-export async function buyCredits(packId: string): Promise<{ status: string; creditsAdded: number; wallet: Wallet }> {
-  // 1) cria a cobrança; 2) confirma (stub aprova na hora; gateway real virá por webhook)
+export interface CheckoutIntent { id: string; status: string; amountBRL: number; packId: string; checkoutUrl?: string; }
+export type BuyCreditsResult =
+  | { redirected: true }
+  | { redirected: false; status: string; creditsAdded: number; wallet: Wallet };
+
+/**
+ * Cria a cobrança. Com gateway real (Stripe), o checkout traz `checkoutUrl` —
+ * o pagamento só acontece lá, então redireciona e NÃO chama /confirm aqui
+ * (quem confirma é o retorno do Stripe / webhook). Sem `checkoutUrl`
+ * (StubPaymentProvider em dev), confirma na hora como antes.
+ */
+export async function buyCredits(packId: string): Promise<BuyCreditsResult> {
   const co = await fetch("/api/v1/billing/checkout", { method: "POST", headers: demoHeaders(), body: JSON.stringify({ packId }) });
   if (!co.ok) throw new Error("Falha no checkout.");
-  const intent = await co.json();
+  const intent: CheckoutIntent = await co.json();
+  if (intent.checkoutUrl) {
+    window.location.href = intent.checkoutUrl;
+    return { redirected: true };
+  }
   const cf = await fetch("/api/v1/billing/confirm", { method: "POST", headers: demoHeaders(), body: JSON.stringify({ intentId: intent.id }) });
   if (!cf.ok) throw new Error("Falha ao confirmar pagamento.");
-  return cf.json();
+  const r = await cf.json();
+  return { redirected: false, ...r };
 }
 
 export interface CrossClassification { method: string; kinship: number; reason: string; inbreedingRisk: boolean; }

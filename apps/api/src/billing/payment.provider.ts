@@ -56,8 +56,10 @@ export class StripePaymentProvider extends PaymentProvider {
     if (!price) throw new Error(`Preço Stripe não encontrado para lookup_key=${pack.stripeLookupKey}`);
     if (price.currency !== "brl") throw new Error(`Price ${price.id} (lookup_key=${pack.stripeLookupKey}) não está em BRL.`);
 
-    const successUrl = process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/billing/success?session_id={CHECKOUT_SESSION_ID}";
-    const cancelUrl = process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/billing/cancel";
+    // /profile é onde a UI de compra de créditos vive — não há página dedicada
+    // de retorno ainda, então volta pra lá com um marcador de resultado.
+    const successUrl = process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/profile?billing=success&session_id={CHECKOUT_SESSION_ID}";
+    const cancelUrl = process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/profile?billing=cancel";
 
     const session = await this.stripe.checkout.sessions.create({
       mode: "payment",
