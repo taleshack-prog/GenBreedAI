@@ -15,7 +15,15 @@ export async function buildApp(): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
-    { logger: ["error", "warn", "log"] },
+    {
+      logger: ["error", "warn", "log"],
+      // POST /billing/webhook precisa do corpo BRUTO (Buffer) pra verificar a
+      // assinatura Stripe (stripe.webhooks.constructEvent) — com o body já
+      // parseado em JSON, a verificação falha sempre. `rawBody: true` faz o
+      // Fastify guardar o Buffer original em req.rawBody em TODA requisição
+      // JSON, sem afetar o parsing normal do req.body nas outras rotas.
+      rawBody: true,
+    },
   );
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   return app;

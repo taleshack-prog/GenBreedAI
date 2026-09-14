@@ -1,4 +1,5 @@
-import { Body, Controller, ForbiddenException, Get, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, Req, UseGuards, type RawBodyRequest } from "@nestjs/common";
+import type { FastifyRequest } from "fastify";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { BillingService } from "./billing.service";
 
@@ -22,5 +23,18 @@ export class BillingController {
       throw new ForbiddenException("Confirmação manual desabilitada.");
     }
     return this.billing.confirm(user.id, body.intentId);
+  }
+
+  /**
+   * SEM AuthGuard: a autenticidade vem da assinatura Stripe
+   * (stripe-signature + STRIPE_WEBHOOK_SECRET), não de JWT — o Stripe não
+   * carrega sessão de usuário. Precisa do corpo BRUTO (rawBody: true em
+   * main.ts) pra stripe.webhooks.constructEvent funcionar.
+   */
+  @Post("webhook")
+  @HttpCode(200)
+  webhook(@Req() req: RawBodyRequest<FastifyRequest>, @Headers("stripe-signature") signature?: string) {
+    if (!req.rawBody) throw new BadRequestException("Corpo bruto ausente.");
+    return this.billing.handleWebhook(req.rawBody, signature);
   }
 }

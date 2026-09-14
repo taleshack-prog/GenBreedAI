@@ -35,8 +35,10 @@ export class StubPaymentProvider extends PaymentProvider {
 
 /**
  * Gateway real (Checkout Session). Só o fluxo de pack avulso (mode=payment)
- * está implementado aqui — assinaturas e o webhook ficam para depois; por
- * ora `confirm()` é chamado sob demanda (poll) pelo cliente.
+ * está implementado aqui — assinaturas ficam para depois. `confirm()` segue
+ * disponível para poll sob demanda; o crédito confiável vem do webhook
+ * (POST /billing/webhook → BillingService.handleWebhook), que usa
+ * `constructWebhookEvent` abaixo pra verificar a assinatura.
  */
 export class StripePaymentProvider extends PaymentProvider {
   private readonly stripe: Stripe;
@@ -87,6 +89,15 @@ export class StripePaymentProvider extends PaymentProvider {
       : session.status === "expired" ? "FAILED"
       : "PENDING";
     return { id: session.id, status, amountBRL, packId, checkoutUrl: session.url ?? undefined };
+  }
+
+  /**
+   * Verifica a assinatura Stripe do corpo BRUTO do webhook e retorna o
+   * evento já validado. Lança se a assinatura não bater — quem chama decide
+   * o 400 (nunca confia no payload sem essa verificação).
+   */
+  constructWebhookEvent(rawBody: Buffer, signature: string, webhookSecret: string): Stripe.Event {
+    return this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   }
 }
 
