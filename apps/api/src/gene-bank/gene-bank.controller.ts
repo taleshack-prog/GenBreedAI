@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
+import { TierService } from "../billing/tier.service";
 import { GeneBankService } from "./gene-bank.service";
 import { WalletService } from "../economy/wallet.service";
 import type { CrossDto } from "../cross/dto/cross.dto";
@@ -8,7 +9,7 @@ interface SynthesizeDto extends CrossDto { freezeKeys?: string[]; }
 
 @Controller("api/v1")
 export class GeneBankController {
-  constructor(private readonly gb: GeneBankService, private readonly wallet: WalletService) {}
+  constructor(private readonly gb: GeneBankService, private readonly wallet: WalletService, private readonly tier: TierService) {}
 
   @Get("wallet")
   @UseGuards(AuthGuard)
@@ -24,8 +25,9 @@ export class GeneBankController {
 
   @Post("gene-bank/freeze-option")
   @UseGuards(AuthGuard)
-  freezeOption(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
-    return this.gb.freezeOption(user.id, user.tier, dto);
+  async freezeOption(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.gb.freezeOption(user.id, tier, dto);
   }
 
   @Post("gene-bank/freeze/:id")
@@ -43,7 +45,8 @@ export class GeneBankController {
   /** Sintetiza o escolhido e congela os demais (fluxo pedido). */
   @Post("gene-bank/synthesize")
   @UseGuards(AuthGuard)
-  synthesize(@CurrentUser() user: AuthenticatedUser, @Body() dto: SynthesizeDto) {
-    return this.gb.synthesizeAndFreeze(user.id, user.tier, dto, dto.freezeKeys ?? []);
+  async synthesize(@CurrentUser() user: AuthenticatedUser, @Body() dto: SynthesizeDto) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.gb.synthesizeAndFreeze(user.id, tier, dto, dto.freezeKeys ?? []);
   }
 }

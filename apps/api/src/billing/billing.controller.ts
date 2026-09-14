@@ -1,7 +1,9 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, Req, UseGuards, type RawBodyRequest } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
+import type { Tier } from "@genbreedai/shared";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { BillingService } from "./billing.service";
+import type { SubscriptionInterval } from "./subscription-plans";
 
 @Controller("api/v1/billing")
 export class BillingController {
@@ -23,6 +25,18 @@ export class BillingController {
       throw new ForbiddenException("Confirmação manual desabilitada.");
     }
     return this.billing.confirm(user.id, body.intentId);
+  }
+
+  @Post("subscribe")
+  @UseGuards(AuthGuard)
+  subscribe(@CurrentUser() user: AuthenticatedUser, @Body() body: { tier: Tier; interval: SubscriptionInterval }) {
+    return this.billing.subscribe(user.id, body.tier, body.interval);
+  }
+
+  @Get("subscription")
+  @UseGuards(AuthGuard)
+  subscription(@CurrentUser() user: AuthenticatedUser) {
+    return this.billing.getSubscription(user.id);
   }
 
   /**

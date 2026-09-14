@@ -5,22 +5,24 @@
  */
 import { Body, Controller, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
+import { TierService } from "../billing/tier.service";
 import { CrossService } from "../cross/cross.service";
 import { ImageService } from "./image.service";
 import type { CrossDto } from "../cross/dto/cross.dto";
 
 @Controller("api/v1/cross/preview")
 export class PreviewController {
-  constructor(private readonly cross: CrossService, private readonly images: ImageService) {}
+  constructor(private readonly cross: CrossService, private readonly images: ImageService, private readonly tierService: TierService) {}
 
   @Post()
   @UseGuards(AuthGuard)
   async preview(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto & { force?: boolean }) {
-    const { pack, species, genotype } = await this.cross.resolveChoice(user.tier, dto);
+    const tier = await this.tierService.resolve(user.id, user.tier);
+    const { pack, species, genotype } = await this.cross.resolveChoice(tier, dto);
     return this.images.generateForSpecimen(
       { id: "preview", ownerId: user.id, pack: pack as "feline" | "canine", species, genotype,
         generation: 0, sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura: 0, cacheKey: null },
-      user.tier, dto.force === true,
+      tier, dto.force === true,
     );
   }
 }

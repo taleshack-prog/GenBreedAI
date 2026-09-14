@@ -4,8 +4,10 @@
  * a mesma interface — trocados em resolvePaymentProvider() sem mexer no resto.
  */
 import Stripe from "stripe";
+import type { Tier } from "@genbreedai/shared";
 import { findPack } from "./credit-packs";
 import type { PaymentIntentsRepository } from "./payment-intents.repository";
+import { subscriptionLookupKey, type SubscriptionInterval } from "./subscription-plans";
 
 export interface PaymentIntent { id: string; status: "PENDING" | "PAID" | "FAILED"; amountBRL: number; packId: string; checkoutUrl?: string; }
 
@@ -34,9 +36,9 @@ export class StubPaymentProvider extends PaymentProvider {
 }
 
 /**
- * Gateway real (Checkout Session). Só o fluxo de pack avulso (mode=payment)
- * está implementado aqui — assinaturas ficam para depois. `confirm()` segue
- * disponível para poll sob demanda; o crédito confiável vem do webhook
+ * Gateway real (Checkout Session). Cobre pack avulso (mode=payment) e
+ * assinatura (mode=subscription). `confirm()` segue disponível para poll
+ * sob demanda do pack; o crédito/ciclo de vida confiável vem do webhook
  * (POST /billing/webhook → BillingService.handleWebhook), que usa
  * `constructWebhookEvent` abaixo pra verificar a assinatura.
  */
@@ -58,18 +60,13 @@ export class StripePaymentProvider extends PaymentProvider {
     if (!price) throw new Error(`Preço Stripe não encontrado para lookup_key=${pack.stripeLookupKey}`);
     if (price.currency !== "brl") throw new Error(`Price ${price.id} (lookup_key=${pack.stripeLookupKey}) não está em BRL.`);
 
-    // /profile é onde a UI de compra de créditos vive — não há página dedicada
-    // de retorno ainda, então volta pra lá com um marcador de resultado.
-    const successUrl = process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/profile?billing=success&session_id={CHECKOUT_SESSION_ID}";
-    const cancelUrl = process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/profile?billing=cancel";
-
     const session = await this.stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: price.id, quantity: 1 }],
       client_reference_id: userId,
       metadata: { userId, packId },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      success_url: this.successUrl(),
+      cancel_url: this.cancelUrl(),
     });
 
     // Persiste PENDING antes de retornar: se o processo cair logo em
@@ -98,6 +95,44 @@ export class StripePaymentProvider extends PaymentProvider {
    */
   constructWebhookEvent(rawBody: Buffer, signature: string, webhookSecret: string): Stripe.Event {
     return this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  }
+
+  // /profile é onde a UI de billing vive — não há página dedicada de
+  // retorno ainda, então volta pra lá com um marcador de resultado.
+  private successUrl(): string { return process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/profile?billing=success&session_id={CHECKOUT_SESSION_ID}"; }
+  private cancelUrl(): string { return process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/profile?billing=cancel"; }
+
+  /**
+   * Cria a Checkout Session de assinatura (mode=subscription). Reusa o
+   * Customer existente do usuário quando houver — Customers duplicados
+   * quebram o portal de gerenciamento do cliente (fora do escopo aqui, mas
+   * é dele que essa duplicação atrapalharia).
+   */
+  async createSubscriptionCheckout(userId: string, tier: Tier, interval: SubscriptionInterval, existingCustomerId: string | null): Promise<string> {
+    const lookupKey = subscriptionLookupKey(tier, interval);
+    if (!lookupKey) throw new Error(`Tier/intervalo inválido para assinatura: ${tier}/${interval}.`);
+
+    const prices = await this.stripe.prices.list({ lookup_keys: [lookupKey], active: true });
+    const price = prices.data[0];
+    if (!price) throw new Error(`Preço Stripe não encontrado para lookup_key=${lookupKey}`);
+    if (price.currency !== "brl") throw new Error(`Price ${price.id} (lookup_key=${lookupKey}) não está em BRL.`);
+
+    const session = await this.stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: price.id, quantity: 1 }],
+      client_reference_id: userId,
+      metadata: { userId, tier, interval },
+      ...(existingCustomerId ? { customer: existingCustomerId } : {}),
+      success_url: this.successUrl(),
+      cancel_url: this.cancelUrl(),
+    });
+    if (!session.url) throw new Error("Stripe não retornou checkoutUrl para a assinatura.");
+    return session.url;
+  }
+
+  /** Busca a Subscription completa (status, período) — checkout.session.completed só traz o id. */
+  async retrieveSubscription(id: string): Promise<Stripe.Subscription> {
+    return this.stripe.subscriptions.retrieve(id);
   }
 }
 

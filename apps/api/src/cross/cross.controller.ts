@@ -7,23 +7,26 @@
 import { Body, Controller, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { QuotaGuard } from "../quota/quota.guard";
+import { TierService } from "../billing/tier.service";
 import { CrossService } from "./cross.service";
 import { CrossDto } from "./dto/cross.dto";
 
 @Controller("api/v1/cross")
 export class CrossController {
-  constructor(private readonly service: CrossService) {}
+  constructor(private readonly service: CrossService, private readonly tier: TierService) {}
 
   @Post()
   @UseGuards(AuthGuard, QuotaGuard)
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
-    return this.service.execute(user.id, user.tier, dto);
+  async create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.service.execute(user.id, tier, dto);
   }
 
   @Post("options")
   @UseGuards(AuthGuard)
-  options(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
-    return this.service.options(user.tier, dto);
+  async options(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.service.options(tier, dto);
   }
 
   @Post("classify")

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { EconomyModule } from "../economy/economy.module";
+import { TierModule } from "../billing/tier.module";
 import { CrossController } from "./cross.controller";
 import { SpecimensController } from "../specimens/specimens.controller";
 import { CrossService } from "./cross.service";
@@ -30,9 +31,11 @@ const specimenRepositoryProvider = {
 };
 
 @Module({
-  imports: [EconomyModule],
+  imports: [EconomyModule, TierModule],
   controllers: [CrossController, SpecimensController],
   providers: [CrossService, QuotaService, specimenRepositoryProvider],
-  exports: [SpecimenRepository, QuotaService, CrossService],
+  // Reexporta TierService: ImageModule/GeneBankModule/GenomeModule já importam
+  // CrossModule (por causa de SpecimenRepository) e ganham TierService de graça.
+  exports: [SpecimenRepository, QuotaService, CrossService, TierModule],
 })
 export class CrossModule {}
