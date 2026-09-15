@@ -268,6 +268,14 @@ export function enumerateOffspring(
   // Base para amostrar o QTL de cada opção (determinístico por par de pais + opção).
   const qtlBase = `${parentA.id}x${parentB.id}`;
 
+  // Efeito materno no preview (ADR-0014, correção item 2): mesma fórmula pura
+  // de finalizeSpecimen, reusando o BV JÁ sorteado por opção — nenhum sorteio
+  // novo. Sem `parentB.adultPorte` conhecido, `applyMaternalEffect` já trata o
+  // desvio como 0 (ver função), então o preview cai de volta no BV puro.
+  const maternalCfg = ctx.pack.maternalEffect?.porte;
+  const sireBV = parentA.genotype.qtl.porte;
+  const damBV = parentB.genotype.qtl.porte;
+
   const fPedigree = wrightF(ctx.pedigree, parentA.id, parentB.id);
   const generation = Math.max(parentA.generation, parentB.generation) + 1;
   const gens = ctx.generationsUnderSelection ?? generation;
@@ -289,8 +297,15 @@ export function enumerateOffspring(
     const genotype: Genotype = { loci: g.rep.loci, qtl };
     const targetLoci = ctx.targetLoci ?? Object.keys(genotype.loci);
     const fixation = fixationIndex({ genotype, targetLoci, fPedigree, generationsUnderSelection: gens });
+
+    let phenotype = g.phenotype;
+    if (maternalCfg && qtl.porte !== undefined && sireBV !== undefined && damBV !== undefined) {
+      const { porteAdulto, porteNascimento } = applyMaternalEffect(qtl.porte, sireBV, damBV, parentB.adultPorte, maternalCfg);
+      phenotype = { ...phenotype, porteAdulto, porteNascimento };
+    }
+
     return {
-      genotype, prob: g.prob, phenotype: g.phenotype,
+      genotype, prob: g.prob, phenotype,
       fixationIndex: fixation.index, aura: mapFixationToAura(fixation.index),
       key: hashGenotype(genotype), variants: g.variants,
     };

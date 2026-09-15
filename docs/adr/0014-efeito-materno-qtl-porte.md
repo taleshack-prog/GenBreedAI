@@ -24,6 +24,27 @@ genético.
 "Shetland" são os valores médios de porte adulto de cada raça parental nas
 tabelas de Walton & Hammond.
 
+**Δ declarado explicitamente (correção Etapa 2b, item 1):** generalizando pro
+jogo — dois indivíduos GENETICAMENTE equivalentes (mesmo BV, mesma seed),
+trocando de orientação recíproca (quem é o pai e quem é a mãe), têm
+
+```
+Δ = porteMãe₁ − porteMãe₂
+diferença entre recíprocos (porteAdulto₁ − porteAdulto₂) = mAdult × Δ
+diferença entre recíprocos (porteNascimento₁ − porteNascimento₂) = mBirth × Δ
+```
+
+onde `porteMãe₁`/`porteMãe₂` são o `adultPorte` de quem ocupa o papel de mãe
+em cada orientação (a MESMA fêmea física, papéis trocados) — não uma "mãe"
+nova por orientação. Essa é a MESMA fórmula da implementação
+(`applyMaternalEffect`, `packages/engine/src/cross.ts`): lá o desvio é
+`damAdultPorte − médiaParentalBV`; como `médiaParentalBV` é idêntica nas duas
+orientações (mesmo par de BVs, só trocando quem é pai/mãe), a diferença entre
+orientações colapsa exatamente nesse Δ — ver
+`packages/engine/src/__tests__/maternal-effect.test.ts` (teste "recíproco",
+que verifica isso EXATO por indivíduo, com `|Δporte − m×Δ| < 1e-9`, excluindo
+só os pares em que `clamp01()` atuou — contados e reportados no teste).
+
 > **VALORES DAS TABELAS W&H USADOS:** _[Tales preenche — não inventado aqui.
 > Precisa dos números de porte adulto Shire/Shetland e da F1 recíproca nas
 > tabelas originais do artigo pra derivar o m empírico correspondente.]_
