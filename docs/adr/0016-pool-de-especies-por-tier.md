@@ -128,3 +128,38 @@ em `apps/api/test/cross.service.spec.ts`) passam.
   conceito de família/pool ali); exigir cadastro completo antes de liberar
   o pool atrasaria a entrega sem necessidade, já que o fallback pro mínimo
   de família é seguro e correto pra esses casos.
+
+## Híbridos e fail-closed
+
+Correção pós-commit `7c89ca0` (achado crítico, verificado em produção):
+
+- **Espécime híbrido** (`species` composto por "×", via `combineSpecies` em
+  `cross.service.ts` — ex.: `"panthera-uncia×panthera-tigris-albino"`): o
+  tier exigido é o **máximo** entre os mínimos de cada componente separado
+  por "×", nunca o mínimo de um lookup do slug composto inteiro (que nunca
+  bate com nenhuma chave de `SPECIES_INFO`).
+- **Componente desconhecido** (não cadastrado em `SPECIES_INFO`) **nunca**
+  resolve para FREE — fail-closed: resolve para `max(mínimo de família,
+  JUNIOR)`. Inverte o comportamento anterior ("sem inventar restrição extra"
+  citado na seção 2 acima), que era fail-*open* pra esse caso específico e
+  se mostrou inseguro.
+- **Defesa em profundidade mantida**: o gate interespecífico em
+  `assertTierAllows` (parâmetro `interspecific: boolean`) não foi removido
+  — continua como barreira independente do pool de espécie, pro caso de
+  algum caminho de código futuro chamar o gate sem passar pelo pool.
+- `isInterspecific` (`cross.service.ts`) compara **espécie biológica por
+  componente** (`biologicalSpecies()` aplicada a cada pedaço de um slug
+  eventualmente composto por "×"), nunca o slug cru. Bug corrigido: raças
+  caninas entre si (ex.: `"boerboel"` × `"braco-alemao"`, ambas
+  `canis-familiaris`) eram incorretamente marcadas como interespecíficas
+  por comparação direta de string.
+- `species` da prole é sempre o **nome da linhagem** (slugs crus,
+  concatenados por `combineSpecies` — ex.: `"collie×dogo-argentino"`), não
+  gated por `interspecific`. Biologia (gate de tier, Haldane, fertilidade)
+  nunca é derivada desse valor — só de `isInterspecific`/`biologicalSpecies`.
+- **Achado registrado**: a versão original do commit `7c89ca0` (a de
+  `speciesMinRank` fazendo lookup direto do slug composto) deixaria
+  visíveis e cruzáveis ao tier FREE os 8 espécimes
+  `"panthera-uncia×panthera-tigris-albino"` existentes em produção (pool
+  não reconhecido → caía no mínimo de família felina, FREE). Essa versão
+  nunca chegou a `main`.

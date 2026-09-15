@@ -36,8 +36,17 @@ describe("Pumajaguar BC1 (TDD §4.5; sexo/fertilidade — ADR-0015 item 5)", () 
     expect(d.get("A/A")).toBe(0.25); expect(d.get("A/a")).toBe(0.5); expect(d.get("a/a")).toBe(0.25);
     expect(genotypeProbability(D.A!,N.A!,"A/A") + genotypeProbability(D.A!,N.A!,"A/a")).toBe(0.75);
   });
-  it("IF corrigido ≥ 0.30 (o 'IF≈0.03' do TDD é impossível — ADR-0004) — valor INALTERADO pela inversão sire/dam", () => {
-    expect(cross(negra, delta, "BC1", "pj-01", ctx).specimen.fixationIndex).toBeGreaterThanOrEqual(0.3);
+  it("IF = 0.857143, prole A/A na seed pj-01 (TDD §4.3; 'IF≈0.03' do TDD é impossível — ADR-0004)", () => {
+    const r = cross(negra, delta, "BC1", "pj-01", ctx);
+    // Errata do ADR-0004 (2026-09-15): o locus A da prole, sob a seed
+    // "pj-01", sai HOMOZIGOTO A/A (H_alvo = 1 — fixado), não heterozigoto
+    // como o ADR registrou originalmente. Confirmado de forma independente
+    // no motor da main (481efb7) e nesta branch, nas duas orientações
+    // sire/dam.
+    expect(r.specimen.genotype.loci.A).toEqual(["A", "A"]);
+    const expectedIF = 0.5 * 1 + 0.3 * Math.min(1, 0.25 / 0.25) + 0.2 * Math.min(1, 2 / 7);
+    expect(r.specimen.fixationIndex).toBeCloseTo(expectedIF, 6); // motor arredonda a 6 casas
+    expect(r.specimen.fixationIndex).toBe(0.857143);
   });
   it("BC1 sob depressão (F=0.25); sem Haldane (não é F1); determinístico", () => {
     const r = cross(negra, delta, "BC1", "pj-01", ctx);
