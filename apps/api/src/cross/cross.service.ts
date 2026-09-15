@@ -9,14 +9,49 @@ import {
   CANINE_PACK, FELINE_PACK, type OffspringOption,
 } from "@genbreedai/engine";
 import { biologicalSpecies } from "@genbreedai/shared";
-/** Une espécies de híbrido sem repetir ancestrais. */
-function combineSpecies(a: string, b: string) { if (a === b) return a; return [...new Set([...a.split("×"), ...b.split("×")])].join("×"); }
 import type { BreedingMethod, Genotype, CrossResult, Tier } from "@genbreedai/shared";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { assertTierAllows, specimenVisibleAtTier } from "../common/tier-access";
 import { classifyCross, type CrossClassification } from "@genbreedai/engine";
 import { WalletService } from "../economy/wallet.service";
 import type { CrossDto } from "./dto/cross.dto";
+
+/** Nome da linhagem (slugs crus). Biologia NUNCA por este valor — usar isInterspecific/biologicalComponents. */
+/** Une espécies de híbrido sem repetir ancestrais. */
+function combineSpecies(a: string, b: string) { if (a === b) return a; return [...new Set([...a.split("×"), ...b.split("×")])].join("×"); }
+
+/**
+ * Componentes biológicos de um `species` (possivelmente híbrido, unido por
+ * "×" via `combineSpecies`) — cada componente já normalizado via
+ * `biologicalSpecies()`. Usado por `isInterspecific` pra nunca comparar slug
+ * cru (achado crítico pós-commit 7c89ca0: comparar `sire.species !==
+ * dam.species` cru marcava incorretamente raças caninas entre si, e morfos
+ * de cor felinos como tigre-de-bengala×tigre-branco, como interespecíficos).
+ */
+function biologicalComponents(pack: string, species: string): Set<string> {
+  return new Set(species.split("×").map((c) => biologicalSpecies(pack, c)));
+}
+
+/**
+ * Cruzamento genuinamente interespecífico (ADR-0015/ADR-0016) — NUNCA por
+ * slug cru:
+ *   - se QUALQUER um dos dois parentais já é ele mesmo um híbrido de mais de
+ *     uma espécie biológica (`biologicalComponents(...).size > 1`), o
+ *     cruzamento conta como interespecífico, seja lá qual for o outro lado;
+ *   - senão (os dois "puros", 1 componente cada), compara as
+ *     `biologicalSpecies` dos dois.
+ * Corrige: raça canina × raça canina (ambas "canis-familiaris") deixa de
+ * marcar interespecífico; tigre-de-bengala × tigre-branco (mesma
+ * biologicalSpecies "panthera-tigris") também deixa de marcar.
+ */
+function isInterspecific(sire: StoredSpecimen, dam: StoredSpecimen): boolean {
+  const sireComponents = biologicalComponents(sire.pack, sire.species);
+  const damComponents = biologicalComponents(dam.pack, dam.species);
+  if (sireComponents.size > 1 || damComponents.size > 1) return true;
+  const [sireSpecies] = sireComponents;
+  const [damSpecies] = damComponents;
+  return sireSpecies !== damSpecies;
+}
 
 const PACK_BY_FAMILY: Record<string, typeof CANINE_PACK> = { feline: FELINE_PACK, canine: CANINE_PACK };
 
@@ -52,7 +87,7 @@ export class CrossService {
     if (sire.pack !== dam.pack) throw new BadRequestException(`Famílias distintas (${sire.pack} × ${dam.pack}).`);
     const pack = PACK_BY_FAMILY[sire.pack];
     if (!pack) throw new BadRequestException(`Família sem pack: ${sire.pack}.`);
-    const interspecific = biologicalSpecies(sire.pack, sire.species) !== biologicalSpecies(dam.pack, dam.species);
+    const interspecific = isInterspecific(sire, dam);
     const pedigree = await this.repo.buildPedigree([sire.id, dam.id]);
     const a = { id: sire.id, genotype: sire.genotype, generation: sire.generation };
     const b = { id: dam.id, genotype: dam.genotype, generation: dam.generation };
@@ -62,8 +97,8 @@ export class CrossService {
 
   /** Opções de prole para o tier (Senior/PhD podem escolher). */
   async options(tier: Tier, dto: CrossDto): Promise<OptionsResponse> {
-    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
-    assertTierAllows(tier, sire.pack, dam.pack);
+    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
     const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
     return {
       canChoose: canChoose(tier), maxOptions: optionCount(tier),
@@ -73,8 +108,8 @@ export class CrossService {
 
   /** Resolve a opção escolhida em um "espécime de preview" (não persistido). */
   async resolveChoice(tier: Tier, dto: CrossDto): Promise<{ pack: string; species: string; genotype: Genotype }> {
-    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
-    assertTierAllows(tier, sire.pack, dam.pack);
+    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
     const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
     const chosen = dto.choiceKey ? opts.find((o) => o.key === dto.choiceKey) : opts[0];
     if (!chosen) throw new BadRequestException("Opção de fenótipo inválida.");
@@ -98,9 +133,8 @@ export class CrossService {
 
   /** Calcula o resultado do cruzamento (resolve+gate+motor) SEM persistir. */
   async computeResult(tier: Tier, dto: CrossDto): Promise<{ result: CrossResult; sire: StoredSpecimen; dam: StoredSpecimen; species: string; pack: string }> {
-    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
-    const interspecific = sire.species !== dam.species;
-    assertTierAllows(tier, sire.pack, dam.pack);
+    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
     const seed = dto.seed ?? `${dto.method}:${[sire.id, dam.id].sort().join("x")}`;
     let result: CrossResult;
     try {
@@ -116,7 +150,7 @@ export class CrossService {
       if (e instanceof BadRequestException) throw e;
       throw new BadRequestException("GENÓTIPO INCOMPATÍVEL: rode `pnpm --filter @genbreedai/api db:reset`. Detalhe: " + (e as Error).message);
     }
-    return { result, sire, dam, species: interspecific ? combineSpecies(sire.species, dam.species) : sire.species, pack: sire.pack };
+    return { result, sire, dam, species: combineSpecies(sire.species, dam.species), pack: sire.pack };
   }
 
   async execute(ownerId: string, tier: Tier, dto: CrossDto): Promise<CrossResponse> {
