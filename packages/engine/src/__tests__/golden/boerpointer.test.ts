@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { cross, punnettPhenotypeLocus, genotypeProbability, jointGenotypeProbability, wrightF, CANINE_PACK } from "../../index";
 import { BOERPOINTER_F1, BOERPOINTER_PEDIGREE } from "../fixtures";
 const L = BOERPOINTER_F1.loci;
-const alpha = { id: "alpha", genotype: BOERPOINTER_F1, generation: 1, sex: "M" as const };
-const beta = { id: "beta", genotype: BOERPOINTER_F1, generation: 1, sex: "F" as const };
+const alpha = { id: "alpha", genotype: BOERPOINTER_F1, generation: 1, sex: "M" as const, species: "canis-familiaris" };
+const beta = { id: "beta", genotype: BOERPOINTER_F1, generation: 1, sex: "F" as const, species: "canis-familiaris" };
 const ctx = { pack: CANINE_PACK, pedigree: BOERPOINTER_PEDIGREE, interspecific: false, targetLoci: ["B","K","A"], generationsUnderSelection: 2 };
 describe("Boerpointer F2 (TDD §4.5)", () => {
   it("F_pedigree = 0.25 (irmãos completos)", () => { expect(wrightF(BOERPOINTER_PEDIGREE, "alpha", "beta")).toBe(0.25); });

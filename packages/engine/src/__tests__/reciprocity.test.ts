@@ -34,8 +34,8 @@ describe("Reciprocidade — sexo não pode enviesar loci autossômicos", () => {
   it(`"collie" M × "dogo" F vs "dogo" M × "collie" F: distribuições idênticas em N=${N} (erro amostral)`, () => {
     // "collie"/"dogo" são só rótulos pro teste — genótipos reais dos fixtures
     // caninos (BOERBOEL × BRACO_ALEMAO), que já diferem em B/K/A/E/R/S.
-    const collie: Omit<ParentInput, "sex"> = { id: "collie", genotype: BOERBOEL, generation: 0 };
-    const dogo: Omit<ParentInput, "sex"> = { id: "dogo", genotype: BRACO_ALEMAO, generation: 0 };
+    const collie: Omit<ParentInput, "sex"> = { id: "collie", genotype: BOERBOEL, generation: 0, species: "canis-familiaris" };
+    const dogo: Omit<ParentInput, "sex"> = { id: "dogo", genotype: BRACO_ALEMAO, generation: 0, species: "canis-familiaris" };
 
     const orientation1 = sampleLocusDistributions({ ...collie, sex: "M" }, { ...dogo, sex: "F" }, "rec-1");
     const orientation2 = sampleLocusDistributions({ ...dogo, sex: "M" }, { ...collie, sex: "F" }, "rec-2");

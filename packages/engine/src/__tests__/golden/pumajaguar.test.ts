@@ -11,13 +11,19 @@ const D = DELTA_F1.loci, N = ONCA_NEGRA.loci;
  * era biologicamente impossível — corrigido aqui: Delta vira FÊMEA e passa a
  * ser DAM (sexo homogamético, pode ter fertilidade reduzida mas não-zero,
  * exatamente o que a Regra de Haldane prevê); Onça Negra vira MACHO e passa
- * a ser SIRE. `species` deliberadamente NÃO setado em `delta` — ela é um
- * híbrido F1, não tem uma `biologicalSpecies` única no catálogo (setar
- * qualquer uma seria inventar taxonomia); `negra` é onça pura, species
- * setado. O método continua BC1 (retrocruzamento ao parental onça) — só a
- * ORIENTAÇÃO sire/dam mudou, não o método nem os genótipos/QTL.
+ * a ser SIRE. `species` de `delta` (agora OBRIGATÓRIO — ADR-0015, correção
+ * pós-Etapa-2c) usa `"puma×panthera-onca"` — a MESMA convenção de
+ * composição por "×" que `combineSpecies()` (apps/api) já usa pra nomear
+ * híbridos; não é uma `biologicalSpecies` real inventada, é o registro
+ * literal de que Delta É o F1 desses dois parentais (reflete o pedigree,
+ * não uma nova espécie fabricada). Esse valor nunca colide com nenhuma
+ * chave de `speciesGenus`/whitelist, então `hybridClass()` nunca a trata
+ * como SAME_SPECIES nem como par documentado por acidente. `negra` é onça
+ * pura, species setado normalmente. O método continua BC1 (retrocruzamento
+ * ao parental onça) — só a ORIENTAÇÃO sire/dam mudou, não o método nem os
+ * genótipos/QTL.
  */
-const delta: ParentInput = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "F", fertility: 10 }; // fêmea F1 UNDOCUMENTED (Puma×Panthera, subfamílias distintas) — fixo em [5,15], ver ADR-0015
+const delta: ParentInput = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "F", fertility: 10, species: "puma×panthera-onca" }; // fêmea F1 UNDOCUMENTED (Puma×Panthera, subfamílias distintas) — fixo em [5,15], ver ADR-0015
 const negra: ParentInput = { id: "negra", genotype: ONCA_NEGRA, generation: 0, sex: "M", species: "panthera-onca" };
 const ctx = { pack: FELINE_PACK, pedigree: PUMAJAGUAR_PEDIGREE, interspecific: true, targetLoci: ["A"], generationsUnderSelection: 2 };
 describe("Pumajaguar BC1 (TDD §4.5; sexo/fertilidade — ADR-0015 item 5)", () => {
@@ -41,8 +47,8 @@ describe("Pumajaguar BC1 (TDD §4.5; sexo/fertilidade — ADR-0015 item 5)", () 
     expect(cross(negra, delta, "BC1", "pj-01", ctx)).toEqual(r);
   });
   it("gate de fertilidade (item 4): fixture ANTIGO (Delta macho F1, fertility=0) como sire → cross() rejeita", () => {
-    const deltaMaleSterile: ParentInput = { id: "delta-macho-antigo", genotype: DELTA_F1, generation: 1, sex: "M", fertility: 0 };
-    const negraDam: ParentInput = { id: "negra-dam", genotype: ONCA_NEGRA, generation: 0, sex: "F" };
+    const deltaMaleSterile: ParentInput = { id: "delta-macho-antigo", genotype: DELTA_F1, generation: 1, sex: "M", fertility: 0, species: "puma×panthera-onca" };
+    const negraDam: ParentInput = { id: "negra-dam", genotype: ONCA_NEGRA, generation: 0, sex: "F", species: "panthera-onca" };
     expect(() => cross(deltaMaleSterile, negraDam, "BC1", "pj-neg-01", ctx)).toThrow(SterileParentError);
   });
 });

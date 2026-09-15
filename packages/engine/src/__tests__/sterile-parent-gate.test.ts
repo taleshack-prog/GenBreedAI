@@ -11,10 +11,10 @@ import { cross, enumerateOffspring, materializeCross, SterileParentError, CANINE
 const ctx = { pack: CANINE_PACK, pedigree: {} };
 
 function sire(fertility?: number): ParentInput {
-  return { id: "sire", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "M", fertility };
+  return { id: "sire", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "M", fertility, species: "canis-familiaris" };
 }
 function dam(fertility?: number): ParentInput {
-  return { id: "dam", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "F", fertility };
+  return { id: "dam", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "F", fertility, species: "canis-familiaris" };
 }
 
 describe("Gate de fertilidade do parental (ADR-0015, item 4)", () => {

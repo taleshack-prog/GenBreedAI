@@ -171,11 +171,10 @@ export interface MaternalEffectConfig {
  * Classificação de um par de progenitores pra fins de fertilidade/Haldane
  * (ADR-0015) — SEMPRE derivada da identidade biológica dos PAIS
  * (`ParentInput.species`), NUNCA do rótulo `method` da cruza (ver cross.ts).
- *   SAME_SPECIES               — mesma `biologicalSpecies`, OU `species`
- *                                 ausente de um dos lados (default
- *                                 conservador: nunca presume
- *                                 interespecificidade sem dado — ver
- *                                 `hybridClass()` em cross.ts). Nunca é Haldane.
+ *   SAME_SPECIES               — mesma `biologicalSpecies` (`species` é
+ *                                 OBRIGATÓRIO em `ParentInput` — ADR-0015,
+ *                                 correção pós-Etapa-2c; sem fallback pra
+ *                                 ausência). Nunca é Haldane.
  *   DOCUMENTED_FERTILE_FEMALE  — par interespecífico CONHECIDO com hibridação
  *                                 REAL documentada (ver `hybridGenusWhitelist`/
  *                                 `hybridSpeciesWhitelist` do pack).

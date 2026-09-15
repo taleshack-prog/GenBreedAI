@@ -15,7 +15,7 @@ const cfg = CANINE_PACK.maternalEffect!.porte!;
 const FIXED_SIRE_BV = 0.5;
 
 function sireInput(id: string): ParentInput {
-  return { id, genotype: { loci: {}, qtl: { porte: FIXED_SIRE_BV } }, generation: 0, sex: "M" };
+  return { id, genotype: { loci: {}, qtl: { porte: FIXED_SIRE_BV } }, generation: 0, sex: "M", species: "canis-familiaris" };
 }
 
 describe("Efeito materno (ADR-0014) — anti-herança", () => {
@@ -24,7 +24,7 @@ describe("Efeito materno (ADR-0014) — anti-herança", () => {
     let damAdultPorte: number | undefined = 0.95; // fundadora "grande" fenotipicamente
     const bvSeries: number[] = [FIXED_SIRE_BV];
     for (let gen = 0; gen < 10; gen++) {
-      const dam: ParentInput = { id: `dam-${gen}`, genotype: damGenotype, generation: gen, sex: "F", adultPorte: damAdultPorte };
+      const dam: ParentInput = { id: `dam-${gen}`, genotype: damGenotype, generation: gen, sex: "F", adultPorte: damAdultPorte, species: "canis-familiaris" };
       const r = cross(sireInput(`sire-${gen}`), dam, "F1", `anti-drift-${gen}`, ctx);
       bvSeries.push(r.specimen.genotype.qtl.porte!);
       damGenotype = r.specimen.genotype; // BV segue geração a geração
@@ -86,12 +86,12 @@ describe("Efeito materno (ADR-0014) — recíproco", () => {
       // bvMismatch=0/10000). É isso que permite a comparação EXATA abaixo.
       const seed = `recip-pair-${i}`;
 
-      const sire1: ParentInput = { id: "s1", genotype: { loci: {}, qtl: { porte: BIG } }, generation: 0, sex: "M" };
-      const dam1: ParentInput = { id: "d1", genotype: { loci: {}, qtl: { porte: SMALL } }, generation: 0, sex: "F", adultPorte: SMALL };
+      const sire1: ParentInput = { id: "s1", genotype: { loci: {}, qtl: { porte: BIG } }, generation: 0, sex: "M", species: "canis-familiaris" };
+      const dam1: ParentInput = { id: "d1", genotype: { loci: {}, qtl: { porte: SMALL } }, generation: 0, sex: "F", adultPorte: SMALL, species: "canis-familiaris" };
       const r1 = cross(sire1, dam1, "F1", seed, ctx);
 
-      const sire2: ParentInput = { id: "s2", genotype: { loci: {}, qtl: { porte: SMALL } }, generation: 0, sex: "M" };
-      const dam2: ParentInput = { id: "d2", genotype: { loci: {}, qtl: { porte: BIG } }, generation: 0, sex: "F", adultPorte: BIG };
+      const sire2: ParentInput = { id: "s2", genotype: { loci: {}, qtl: { porte: SMALL } }, generation: 0, sex: "M", species: "canis-familiaris" };
+      const dam2: ParentInput = { id: "d2", genotype: { loci: {}, qtl: { porte: BIG } }, generation: 0, sex: "F", adultPorte: BIG, species: "canis-familiaris" };
       const r2 = cross(sire2, dam2, "F1", seed, ctx);
 
       const bv1 = r1.specimen.genotype.qtl.porte!;
@@ -163,8 +163,8 @@ describe("Efeito materno (ADR-0014) — recíproco", () => {
 
 describe("Efeito materno (ADR-0014) — preview (enumerateOffspring) == cruzamento executado", () => {
   it("porteAdulto/porteNascimento do preview == materializeCross() para a mesma opção, mesmos pais", () => {
-    const sire: ParentInput = { id: "sire-prev", genotype: { loci: {}, qtl: { porte: 0.7 } }, generation: 0, sex: "M" };
-    const dam: ParentInput = { id: "dam-prev", genotype: { loci: {}, qtl: { porte: 0.3 } }, generation: 0, sex: "F", adultPorte: 0.85 };
+    const sire: ParentInput = { id: "sire-prev", genotype: { loci: {}, qtl: { porte: 0.7 } }, generation: 0, sex: "M", species: "canis-familiaris" };
+    const dam: ParentInput = { id: "dam-prev", genotype: { loci: {}, qtl: { porte: 0.3 } }, generation: 0, sex: "F", adultPorte: 0.85, species: "canis-familiaris" };
 
     const options = enumerateOffspring(sire, dam, ctx, 6);
     expect(options.length).toBeGreaterThan(0);
@@ -183,8 +183,8 @@ describe("Efeito materno (ADR-0014) — preview (enumerateOffspring) == cruzamen
   });
 
   it("sem adultPorte da mãe conhecido: preview cai no BV puro (desvio materno = 0), igual ao motor", () => {
-    const sire: ParentInput = { id: "sire-prev2", genotype: { loci: {}, qtl: { porte: 0.6 } }, generation: 0, sex: "M" };
-    const dam: ParentInput = { id: "dam-prev2", genotype: { loci: {}, qtl: { porte: 0.4 } }, generation: 0, sex: "F" }; // sem adultPorte
+    const sire: ParentInput = { id: "sire-prev2", genotype: { loci: {}, qtl: { porte: 0.6 } }, generation: 0, sex: "M", species: "canis-familiaris" };
+    const dam: ParentInput = { id: "dam-prev2", genotype: { loci: {}, qtl: { porte: 0.4 } }, generation: 0, sex: "F", species: "canis-familiaris" }; // sem adultPorte
 
     const options = enumerateOffspring(sire, dam, ctx, 6);
     const chosen = options[0]!;
@@ -196,7 +196,7 @@ describe("Efeito materno (ADR-0014) — preview (enumerateOffspring) == cruzamen
 describe("Efeito materno (ADR-0014) — anti-P2W e determinismo", () => {
   it("mesma seed + mesmo adultPorte → porteAdulto/porteNascimento idênticos (determinístico)", () => {
     const sire = sireInput("sire");
-    const dam: ParentInput = { id: "dam", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "F", adultPorte: 0.8 };
+    const dam: ParentInput = { id: "dam", genotype: { loci: {}, qtl: { porte: 0.5 } }, generation: 0, sex: "F", adultPorte: 0.8, species: "canis-familiaris" };
     const r1 = cross(sire, dam, "F1", "det-me-01", ctx);
     const r2 = cross(sire, dam, "F1", "det-me-01", ctx);
     expect(r1.specimen.phenotype.porteAdulto).toBe(r2.specimen.phenotype.porteAdulto);

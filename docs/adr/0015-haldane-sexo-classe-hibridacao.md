@@ -32,24 +32,47 @@ dos dois indivíduos (`ParentInput.species`, já normalizado pelo chamador via
 tem a mesma `hybridClass` que teria rotulada "F1" — quem decide se Haldane
 entra em jogo é o `method` E a classe juntos, dentro de `fertilityScore()`).
 
-- `SAME_SPECIES` — mesma `biologicalSpecies`, **ou** `species` ausente de
-  QUALQUER lado. Esse segundo caso é o default conservador de verdade:
-  `species` é campo novo e opcional; a esmagadora maioria dos chamadores
-  hoje (todo cruzamento canino, todo golden felino que não liga essa
-  informação) nunca o preenche. Tratar "sem dado" como interespecífico
-  inventaria uma restrição que não foi informada — o mesmo princípio da
-  regra 1 do CLAUDE.md (não inventar), só que no sentido inverso (assumir
-  restrição em vez de assumir alelo). **Bug real pego durante o
-  desenvolvimento**: a primeira versão fazia o oposto (`species` ausente →
-  `UNDOCUMENTED`) e isso quebrou `golden/goldendoodle.test.ts` assim que
-  ligado em `fertilityScore` (nenhum golden canino define `species`) —
-  corrigido antes de qualquer commit do item 3 existir (ver histórico do
-  commit do item 2, amendado).
-- `DOCUMENTED_FERTILE_FEMALE` — espécies diferentes e **conhecidas** dos
-  dois lados, em `pack.hybridGenusWhitelist` (qualquer par do mesmo gênero
-  listado) ou `pack.hybridSpeciesWhitelist` (par nomeado, fonte citada).
-- `UNDOCUMENTED` — espécies diferentes e conhecidas, fora de qualquer
-  whitelist.
+- `SAME_SPECIES` — mesma `biologicalSpecies` nos dois lados.
+- `DOCUMENTED_FERTILE_FEMALE` — espécies diferentes, em
+  `pack.hybridGenusWhitelist` (qualquer par do mesmo gênero listado) ou
+  `pack.hybridSpeciesWhitelist` (par nomeado, fonte citada).
+- `UNDOCUMENTED` — qualquer outro par de espécies diferentes.
+
+> **Correção (mesmo dia, pós-aprovação inicial da Etapa 2c): `species`
+> passou a ser OBRIGATÓRIO em `ParentInput`, e o fallback "ausente ⇒
+> SAME_SPECIES" descrito abaixo foi REMOVIDO.**
+>
+> Histórico completo, pra quem for ler o commit original: a primeira versão
+> (durante o desenvolvimento) tinha `species` opcional com fallback
+> "ausente → UNDOCUMENTED" — isso quebrou `golden/goldendoodle.test.ts`
+> assim que ligado em `fertilityScore` (nenhum golden canino definia
+> `species`), porque tratar "sem dado" como interespecífico inventaria uma
+> restrição não informada (mesmo princípio da regra 1 do CLAUDE.md, no
+> sentido inverso: assumir restrição em vez de assumir alelo). Corrigido
+> então pra "ausente ⇒ SAME_SPECIES" (default conservador, sem quebrar
+> golden nenhum). Essa segunda versão foi a que a Etapa 2c aprovou.
+>
+> Na revisão seguinte, decidiu-se que exigir o dado explicitamente é MAIS
+> seguro que qualquer inferência por ausência — um fallback silencioso pode
+> mascarar um chamador que simplesmente esqueceu de setar `species` (bug
+> real, não hipotético: foi exatamente isso que aconteceu na primeira
+> versão, só que no sentido contrário). `ParentInput.species: string`
+> (sem `?`) força TypeScript a rejeitar em tempo de compilação qualquer
+> `ParentInput` sem esse campo — não há mais "ausência" legítima a tratar
+> em runtime. Todos os fixtures de teste (goldens caninos, felinos,
+> `maternal-effect`, `reciprocity`, `sterile-parent-gate`, `polygenic`)
+> ganharam `species` explícito (`"canis-familiaris"` pra caninos,
+> `biologicalSpecies` real pra felinos). Verificado: os 4 goldens
+> continuam com os mesmos valores exatos — nada mudou além do tipo exigir
+> o dado que os testes já forneciam implicitamente (via fallback) antes.
+>
+> Caso notável: Delta (fixture do golden Pumajaguar) é um híbrido F1 sem
+> `biologicalSpecies` única no catálogo. Em vez de inventar uma, seu
+> `species` usa a convenção `"puma×panthera-onca"` — o MESMO formato de
+> composição por "×" que `combineSpecies()` (apps/api) já usa pra nomear
+> híbridos; reflete o pedigree real dela (é literalmente o F1 desses dois
+> parentais), não uma espécie fabricada. Esse valor nunca colide com
+> nenhuma chave de `speciesGenus`/whitelist.
 
 Whitelist hoje (`packages/engine/src/data/feline.ts`), **dados do pack**,
 fonte citada por par:
@@ -239,6 +262,12 @@ documenta fertilidade, só a existência dos híbridos).
   concreto pra diferenciar um par do outro dentro do gênero.
 - **`species` ausente → UNDOCUMENTED** (primeira tentativa, revertida):
   quebrou golden tests reais ao ser integrada — ver seção 1. Rejeitada.
+- **`species` ausente → SAME_SPECIES** (fallback conservador, aprovado na
+  Etapa 2c, depois removido na revisão seguinte): funcionava e não quebrava
+  golden nenhum, mas permitia que um chamador esquecesse `species` sem
+  nenhum aviso — rejeitada em favor de exigir o campo em tempo de
+  compilação (`species: string`, sem `?`), que é estritamente mais seguro
+  (erro cedo, não comportamento silencioso).
 - **Modelar probabilidade de concepção no gate de fertilidade** (item 4):
   rejeitada explicitamente pelo Tales nesta etapa — mudaria o consumo de
   rng de todos os goldens; só gate binário (`fertility===0` bloqueia) por

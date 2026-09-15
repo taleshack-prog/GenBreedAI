@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { hybridClass, FELINE_PACK, CANINE_PACK, type ParentInput } from "../index";
 
-function p(id: string, sex: "M" | "F", species?: string): ParentInput {
+function p(id: string, sex: "M" | "F", species: string): ParentInput {
   return { id, genotype: { loci: {}, qtl: {} }, generation: 0, sex, species };
 }
 
@@ -30,17 +30,18 @@ describe("hybridClass() (ADR-0015)", () => {
     expect(hybridClass(p("puma", "M", "puma"), p("onca", "F", "panthera-onca"), FELINE_PACK)).toBe("UNDOCUMENTED");
   });
 
-  it("espécie ausente em QUALQUER lado → SAME_SPECIES (conservador de verdade: nunca inventa interespecificidade sem dado)", () => {
-    // `species` é campo novo/opcional — a esmagadora maioria dos chamadores
-    // ainda não o preenche (ex.: todo golden canino). Tratar isso como
-    // UNDOCUMENTED acionaria Haldane em cruzas comuns nunca marcadas como
-    // interespecíficas — bug real encontrado ao rodar os goldens (ver commit).
-    expect(hybridClass(p("a", "M"), p("b", "F", "panthera-onca"), FELINE_PACK)).toBe("SAME_SPECIES");
-    expect(hybridClass(p("a", "M"), p("b", "F"), FELINE_PACK)).toBe("SAME_SPECIES");
+  it("`species` é OBRIGATÓRIO em ParentInput — TypeScript rejeita omissão (ADR-0015, correção pós-Etapa-2c)", () => {
+    // O fallback antigo ("ausente ⇒ SAME_SPECIES") foi REMOVIDO — species
+    // agora é exigido em tempo de compilação, não há mais "ausência" a
+    // tratar em runtime. Prova negativa abaixo: o literal só compila com a
+    // diretiva de supressão na linha imediatamente anterior a ele.
+    // @ts-expect-error — 'species' faltando deve ser erro de tipo
+    const semSpecies: ParentInput = { id: "x", genotype: { loci: {}, qtl: {} }, generation: 0, sex: "M" };
+    expect(semSpecies.species).toBeUndefined(); // em runtime puro JS isso ainda "funciona"; o ponto é o erro de TIPO acima
   });
 
-  it("pack canino: toda raça sem `species` → SAME_SPECIES, nunca crasha", () => {
-    expect(hybridClass(p("a", "M"), p("b", "F"), CANINE_PACK)).toBe("SAME_SPECIES");
+  it("pack canino: toda raça com species='canis-familiaris' → SAME_SPECIES entre quaisquer duas raças", () => {
+    expect(hybridClass(p("a", "M", "canis-familiaris"), p("b", "F", "canis-familiaris"), CANINE_PACK)).toBe("SAME_SPECIES");
   });
 
   it("classe deriva do PAR de espécies, não do method — hybridClass não recebe method", () => {

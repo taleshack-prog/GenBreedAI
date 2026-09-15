@@ -3,8 +3,10 @@ import { cross, hashGenotype, FELINE_PACK, type ParentInput } from "../index";
 import { DELTA_F1, ONCA_NEGRA, PUMAJAGUAR_PEDIGREE } from "./fixtures";
 // Orientação corrigida (ADR-0015, item 5, mesma do golden pumajaguar.test.ts):
 // Delta (F1 macho seria estéril por Haldane) vira fêmea/dam; Onça Negra vira
-// macho/sire. Ver comentário completo em golden/pumajaguar.test.ts.
-const delta: ParentInput = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "F", fertility: 10 };
+// macho/sire. `species` de Delta = "puma×panthera-onca" (convenção de
+// combineSpecies, não espécie inventada — ver comentário completo em
+// golden/pumajaguar.test.ts).
+const delta: ParentInput = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "F", fertility: 10, species: "puma×panthera-onca" };
 const negra: ParentInput = { id: "negra", genotype: ONCA_NEGRA, generation: 0, sex: "M", species: "panthera-onca" };
 const ctx = { pack: FELINE_PACK, pedigree: PUMAJAGUAR_PEDIGREE, interspecific: true, targetLoci: ["A"], generationsUnderSelection: 2 };
 const TIERS = ["FREE","JUNIOR","SENIOR","PHD"] as const;

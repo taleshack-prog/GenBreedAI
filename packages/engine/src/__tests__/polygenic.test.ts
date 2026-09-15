@@ -4,7 +4,7 @@ import { CANINE_PACK } from "../data/canine";
 
 describe("QTL poligênico (ADR-0012)", () => {
   const loci = { B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], E:["E","E"], S:["S","S"], R:["r","r"], F:["f","f"], C:["C","C"], M:["m","m"], H:["h","h"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], Ct:["Ct^n","Ct^n"], Tl:["Tl^l","Tl^l"], D:["D","D"] } as any;
-  const mk = (porte: number, sex: "M" | "F") => ({ id: porte > 0.5 ? "big" : "small", genotype: { loci, qtl: { porte, vigor: 0.5, beleza: 0.5, temperamento: 0.5 } }, generation: 0, sex });
+  const mk = (porte: number, sex: "M" | "F") => ({ id: porte > 0.5 ? "big" : "small", genotype: { loci, qtl: { porte, vigor: 0.5, beleza: 0.5, temperamento: 0.5 } }, generation: 0, sex, species: "canis-familiaris" });
   const ctx = { pack: CANINE_PACK, pedigree: {} } as any;
 
   it("determinístico sob seed", () => {

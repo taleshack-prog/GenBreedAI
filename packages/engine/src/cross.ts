@@ -40,15 +40,18 @@ export interface ParentInput {
    */
   adultPorte?: number;
   /**
-   * Espécie BIOLÓGICA deste indivíduo (ADR-0015) — já normalizada pelo
-   * chamador via `biologicalSpecies()` de @genbreedai/shared (morfos de cor
-   * colapsados na espécie selvagem; o motor NÃO importa o catálogo de
-   * espécies, só recebe o slug pronto). Usada por `hybridClass()` pra decidir
-   * Haldane em F1 interespecífico. Ausente em QUALQUER lado = hybridClass()
-   * resolve SAME_SPECIES (nunca aciona Haldane) — não presumir
-   * interespecificidade sem dado; ver JSDoc de `hybridClass()`.
+   * Espécie BIOLÓGICA deste indivíduo (ADR-0015) — OBRIGATÓRIO. Já
+   * normalizada pelo chamador via `biologicalSpecies()` de @genbreedai/
+   * shared (morfos de cor colapsados na espécie selvagem; o motor NÃO
+   * importa o catálogo de espécies, só recebe o slug pronto). Usada por
+   * `hybridClass()` pra decidir Haldane em F1 interespecífico. Pra caninos,
+   * é sempre "canis-familiaris" (toda raça é a mesma espécie biológica) —
+   * ver `biologicalSpecies("canine", ...)`. Campo obrigatório desde
+   * ADR-0015 (correção — a versão anterior tinha fallback "ausente ⇒
+   * SAME_SPECIES", removido: exigir o dado explicitamente é mais seguro que
+   * inferir por ausência).
    */
-  species?: string;
+  species: string;
   /**
    * Fertilidade (score 0–100) já conhecida deste indivíduo, de um cruzamento
    * anterior (ADR-0015, item 4) — só usada pro GATE de reprodução (ver
@@ -146,32 +149,23 @@ export function validateBreedingConstraints(
  * indivíduos de espécies diferentes tem a MESMA hybridClass que teria como
  * "F1" — quem decide Haldane em fertilityScore é o método E a classe juntos).
  *
- *   SAME_SPECIES              — `species` igual nos dois, OU ausente de um
- *                                dos lados (ou dos dois). Esse é o default
- *                                CONSERVADOR de verdade: `species` é um campo
- *                                novo e opcional (ADR-0015) — a esmagadora
- *                                maioria dos chamadores existentes (todo
- *                                cruzamento canino, todo cruzamento felino
- *                                sem essa informação ainda ligada) nunca o
- *                                preenche. Tratar "sem dado" como
- *                                UNDOCUMENTED inventaria interespecificidade
- *                                que não foi informada — o mesmo erro que a
- *                                regra 1 do CLAUDE.md proíbe, só que no
- *                                sentido inverso (assumir restrição em vez de
- *                                assumir alelo). Sem dado ⇒ motor se comporta
- *                                como sempre se comportou (sem Haldane).
- *   DOCUMENTED_FERTILE_FEMALE — espécies DIFERENTES E conhecidas dos dois
- *                                lados, em `pack.hybridGenusWhitelist`
- *                                (mesmo gênero, ambos em `pack.speciesGenus`)
- *                                OU em `pack.hybridSpeciesWhitelist` (par
- *                                nomeado).
- *   UNDOCUMENTED               — espécies DIFERENTES E conhecidas dos dois
- *                                lados, mas fora de qualquer whitelist.
+ *   SAME_SPECIES              — `species` igual nos dois lados.
+ *   DOCUMENTED_FERTILE_FEMALE — espécies DIFERENTES, em
+ *                                `pack.hybridGenusWhitelist` (mesmo gênero,
+ *                                ambos em `pack.speciesGenus`) OU em
+ *                                `pack.hybridSpeciesWhitelist` (par nomeado).
+ *   UNDOCUMENTED               — qualquer outro par de espécies diferentes.
+ *
+ * `ParentInput.species` é OBRIGATÓRIO (ADR-0015, correção pós-Etapa-2c) —
+ * removido o fallback anterior "ausente ⇒ SAME_SPECIES". Exigir o dado
+ * explicitamente é mais seguro que inferir por ausência: o fallback existia
+ * só porque `species` era opcional e quase nenhum chamador o preenchia; com
+ * o campo obrigatório, TypeScript já impede a omissão em tempo de
+ * compilação — não há mais "ausência" legítima a tratar aqui.
  */
 export function hybridClass(parentA: ParentInput, parentB: ParentInput, pack: SpeciesPack): HybridClass {
   const spA = parentA.species;
   const spB = parentB.species;
-  if (!spA || !spB) return "SAME_SPECIES";
   if (spA === spB) return "SAME_SPECIES";
 
   const genusA = pack.speciesGenus?.[spA];
