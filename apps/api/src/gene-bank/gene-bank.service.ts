@@ -11,6 +11,7 @@ import { WalletService, FREEZE_COST, THAW_COST } from "../economy/wallet.service
 import type { Wallet } from "../economy/wallet.repository";
 import type { CrossDto } from "../cross/dto/cross.dto";
 import { FREEZE_COST as FC } from "../economy/wallet.service";
+import { specimenVisibleAtTier } from "../common/tier-access";
 
 @Injectable()
 export class GeneBankService {
@@ -35,9 +36,11 @@ export class GeneBankService {
   }
 
   /** Congela um ESPÉCIME já existente. */
-  async freezeSpecimen(owner: string, id: string) {
+  async freezeSpecimen(owner: string, tier: Tier, id: string) {
     const s = await this.repo.get(id);
     if (!s) throw new NotFoundException(`Espécime ${id} não encontrado.`);
+    // Pool de espécie (ADR-0016): fora do pool do tier = 404, como se não existisse.
+    if (!specimenVisibleAtTier(tier, s.pack, s.species)) throw new NotFoundException(`Espécime ${id} não encontrado.`);
     if (s.status === "FROZEN") throw new BadRequestException("Já está congelado.");
     await this.wallet.charge(owner, FREEZE_COST);
     const updated = await this.repo.save({ ...s, status: "FROZEN" });
@@ -45,9 +48,10 @@ export class GeneBankService {
   }
 
   /** Descongela: materializa para uso (custa Biomassa/síntese). */
-  async thaw(owner: string, id: string) {
+  async thaw(owner: string, tier: Tier, id: string) {
     const s = await this.repo.get(id);
     if (!s) throw new NotFoundException(`Espécime ${id} não encontrado.`);
+    if (!specimenVisibleAtTier(tier, s.pack, s.species)) throw new NotFoundException(`Espécime ${id} não encontrado.`);
     if (s.status !== "FROZEN") throw new BadRequestException("Não está congelado.");
     await this.wallet.charge(owner, THAW_COST);
     const updated = await this.repo.save({ ...s, status: "ALIVE" });

@@ -32,14 +32,16 @@ export class GeneBankController {
 
   @Post("gene-bank/freeze/:id")
   @UseGuards(AuthGuard)
-  freeze(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.gb.freezeSpecimen(user.id, id);
+  async freeze(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.gb.freezeSpecimen(user.id, tier, id);
   }
 
   @Post("gene-bank/thaw/:id")
   @UseGuards(AuthGuard)
-  thaw(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.gb.thaw(user.id, id);
+  async thaw(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.gb.thaw(user.id, tier, id);
   }
 
   /** Sintetiza o escolhido e congela os demais (fluxo pedido). */

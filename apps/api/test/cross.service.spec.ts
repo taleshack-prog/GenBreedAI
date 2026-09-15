@@ -10,16 +10,29 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
   let svc: CrossService;
   beforeEach(() => { repo = new InMemorySpecimenRepository(); svc = new CrossService(repo, new WalletService(new InMemoryWalletRepository())); });
 
-  it("FREE cruza Panthera×Panthera (intraespécie) e segrega melanismo", async () => {
-    const r = await svc.execute("demo", "FREE", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
+  it("FREE cruza gato doméstico × gato doméstico (DOMESTIC_CAT — ADR-0016)", async () => {
+    const r = await svc.execute("demo", "FREE", { sireId: "gato-tabby", damId: "gato-siames", method: "F1" });
+    expect(r.engine.phenotype.viable).toBe(true);
+    expect(r.specimen.pack).toBe("feline");
+  });
+
+  it("FREE é BLOQUEADO em felino selvagem, MESMO intraespécie (Onça×Onça — pool ADR-0016) → 404", async () => {
+    // Não é sobre interespecificidade (onça×onça é a MESMA biologicalSpecies)
+    // — é sobre a espécie estar fora do pool grátis (WILD_FELINE exige JUNIOR).
+    await expect(svc.execute("demo", "FREE", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" }))
+      .rejects.toThrow(/não encontrado/i);
+  });
+
+  it("JUNIOR libera felino selvagem intraespécie (Onça×Onça) e segrega melanismo", async () => {
+    const r = await svc.execute("demo", "JUNIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
     expect(r.engine.phenotype.viable).toBe(true);
     expect(r.engine.fPedigree).toBe(0);
     expect(r.specimen.pack).toBe("feline");
   });
 
-  it("FREE é BLOQUEADO no interespecífico (Puma×Panthera) → 403", async () => {
+  it("FREE é BLOQUEADO no interespecífico selvagem (Puma×Panthera) → 404 (pool, não mais 403 'interespecífico')", async () => {
     await expect(svc.execute("demo", "FREE", { sireId: "puma", damId: "onca-pintada", method: "F1" }))
-      .rejects.toThrow(/interespec/i);
+      .rejects.toThrow(/não encontrado/i);
   });
 
   it("JUNIOR libera interespecífico felino (Pumajaguar F1)", async () => {
@@ -28,9 +41,18 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
     expect(r.specimen.species).toContain("×");
   });
 
-  it("FREE/JUNIOR são BLOQUEADOS em caninos → 403 (Senior+)", async () => {
+  it("TESTE OBRIGATÓRIO (ADR-0016, item 2): FREE não cruza tigre-de-bengala × tigre-branco (intraespécie, mas WILD_FELINE) → 404", async () => {
+    await expect(svc.execute("demo", "FREE", { sireId: "tigre-bengala", damId: "tigre-branco", method: "F1" }))
+      .rejects.toThrow(/não encontrado/i);
+  });
+
+  it("FREE/JUNIOR são BLOQUEADOS em caninos → 404 (pool DOG exige SENIOR+, checado antes de família)", async () => {
+    // O gate de pool (resolve(), ADR-0016) roda ANTES do gate de família
+    // (assertTierAllows) — ambos concordam no mínimo (DOG = SENIOR, igual
+    // família canina de sempre), mas quem intercepta primeiro é o pool, e
+    // vira 404 "não encontrado" (nunca 403), como qualquer fora-do-pool.
     await expect(svc.execute("demo", "JUNIOR", { sireId: "boerboel", damId: "braco-alemao", method: "F1" }))
-      .rejects.toThrow(/SENIOR/);
+      .rejects.toThrow(/não encontrado/i);
   });
 
   it("SENIOR cruza caninos (Boerpointer F1)", async () => {
@@ -54,15 +76,16 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
     expect(a.engine.fixationIndex).toBe(b.engine.fixationIndex);
   });
 
-  it("OPÇÕES: Senior vê top-6 e PODE escolher; Free não escolhe", async () => {
+  it("OPÇÕES: Senior vê top-6 e PODE escolher; Junior não escolhe", async () => {
+    // Junior (não Free — onça é WILD_FELINE, pool ADR-0016 exige JUNIOR+)
     const senior = await svc.options("SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
     expect(senior.canChoose).toBe(true);
     expect(senior.maxOptions).toBe(6);
     expect(senior.options.length).toBeGreaterThan(0);
-    const free = await svc.options("FREE", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
-    expect(free.canChoose).toBe(false);
+    const junior = await svc.options("JUNIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
+    expect(junior.canChoose).toBe(false);
     // ANTI-P2W: mesmas probabilidades independentemente do tier
-    expect(free.options[0]!.prob).toBe(senior.options[0]!.prob);
+    expect(junior.options[0]!.prob).toBe(senior.options[0]!.prob);
   });
 
   it("SELEÇÃO: Senior escolhe uma opção → filhote tem o genótipo escolhido", async () => {

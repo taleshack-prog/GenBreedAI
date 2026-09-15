@@ -9,12 +9,11 @@ import {
   CANINE_PACK, FELINE_PACK, type OffspringOption,
 } from "@genbreedai/engine";
 import { biologicalSpecies } from "@genbreedai/shared";
-function biologicalSpeciesDiffer(a: StoredSpecimen, b: StoredSpecimen) { return biologicalSpecies(a.pack, a.species) !== biologicalSpecies(b.pack, b.species); }
 /** Une espécies de híbrido sem repetir ancestrais. */
 function combineSpecies(a: string, b: string) { if (a === b) return a; return [...new Set([...a.split("×"), ...b.split("×")])].join("×"); }
 import type { BreedingMethod, Genotype, CrossResult, Tier } from "@genbreedai/shared";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
-import { assertTierAllows } from "../common/tier-access";
+import { assertTierAllows, specimenVisibleAtTier } from "../common/tier-access";
 import { classifyCross, type CrossClassification } from "@genbreedai/engine";
 import { WalletService } from "../economy/wallet.service";
 import type { CrossDto } from "./dto/cross.dto";
@@ -36,11 +35,18 @@ export interface OptionsResponse {
 export class CrossService {
   constructor(private readonly repo: SpecimenRepository, private readonly wallet: WalletService) {}
 
-  private async resolve(dto: CrossDto) {
+  private async resolve(dto: CrossDto, tier: Tier) {
     const sire = await this.repo.get(dto.sireId);
     const dam = await this.repo.get(dto.damId);
     if (!sire) throw new NotFoundException(`Sire "${dto.sireId}" não encontrado.`);
     if (!dam) throw new NotFoundException(`Dam "${dto.damId}" não encontrado.`);
+    // Pool de espécie (ADR-0016) — ANTES de qualquer outra validação: um
+    // espécime fora do pool do tier atual é tratado como se NÃO EXISTISSE
+    // (404, mesma mensagem/formato de "não encontrado"), nunca 403 — sem
+    // cadeado, sem revelar que existe. Cobre "não vê" (specimens.controller)
+    // e "não cruza" (aqui).
+    if (!specimenVisibleAtTier(tier, sire.pack, sire.species)) throw new NotFoundException(`Sire "${dto.sireId}" não encontrado.`);
+    if (!specimenVisibleAtTier(tier, dam.pack, dam.species)) throw new NotFoundException(`Dam "${dto.damId}" não encontrado.`);
     if (sire.status === "FROZEN") throw new BadRequestException(`"${sire.id}" está congelado — descongele antes de cruzar.`);
     if (dam.status === "FROZEN") throw new BadRequestException(`"${dam.id}" está congelado — descongele antes de cruzar.`);
     if (sire.pack !== dam.pack) throw new BadRequestException(`Famílias distintas (${sire.pack} × ${dam.pack}).`);
@@ -56,8 +62,8 @@ export class CrossService {
 
   /** Opções de prole para o tier (Senior/PhD podem escolher). */
   async options(tier: Tier, dto: CrossDto): Promise<OptionsResponse> {
-    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto);
-    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
+    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack);
     const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
     return {
       canChoose: canChoose(tier), maxOptions: optionCount(tier),
@@ -67,8 +73,8 @@ export class CrossService {
 
   /** Resolve a opção escolhida em um "espécime de preview" (não persistido). */
   async resolveChoice(tier: Tier, dto: CrossDto): Promise<{ pack: string; species: string; genotype: Genotype }> {
-    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto);
-    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
+    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack);
     const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
     const chosen = dto.choiceKey ? opts.find((o) => o.key === dto.choiceKey) : opts[0];
     if (!chosen) throw new BadRequestException("Opção de fenótipo inválida.");
@@ -92,9 +98,9 @@ export class CrossService {
 
   /** Calcula o resultado do cruzamento (resolve+gate+motor) SEM persistir. */
   async computeResult(tier: Tier, dto: CrossDto): Promise<{ result: CrossResult; sire: StoredSpecimen; dam: StoredSpecimen; species: string; pack: string }> {
-    const { sire, dam, a, b, ctx } = await this.resolve(dto);
+    const { sire, dam, a, b, ctx } = await this.resolve(dto, tier);
     const interspecific = sire.species !== dam.species;
-    assertTierAllows(tier, sire.pack, dam.pack, biologicalSpeciesDiffer(sire, dam));
+    assertTierAllows(tier, sire.pack, dam.pack);
     const seed = dto.seed ?? `${dto.method}:${[sire.id, dam.id].sort().join("x")}`;
     let result: CrossResult;
     try {

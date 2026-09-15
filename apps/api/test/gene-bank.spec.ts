@@ -22,7 +22,7 @@ describe("Criopreservação (Gene Bank)", () => {
     await expect(cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-pintada", method: "BC1" }))
       .rejects.toThrow(/congelado/);
     // descongela → agora cruza
-    const thawed = await gb.thaw("demo", frozen.specimen.id);
+    const thawed = await gb.thaw("demo", "SENIOR", frozen.specimen.id);
     expect(thawed.specimen.status).toBe("ALIVE");
     expect(thawed.wallet.biomassa).toBe(125480 - 10000);
     const r = await cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-pintada", method: "BC1" });
@@ -30,11 +30,11 @@ describe("Criopreservação (Gene Bank)", () => {
   });
 
   it("congela ESPÉCIME existente e bloqueia por saldo insuficiente", async () => {
-    const f = await gb.freezeSpecimen("demo", "onca-pintada");
+    const f = await gb.freezeSpecimen("demo", "JUNIOR", "onca-pintada");
     expect(f.specimen.status).toBe("FROZEN");
     // drena catalisadores e tenta de novo
     await wallet.charge("demo", { catalisadores: f.wallet.catalisadores });
-    await expect(gb.freezeSpecimen("demo", "onca-negra")).rejects.toThrow(/insuficientes/);
+    await expect(gb.freezeSpecimen("demo", "JUNIOR", "onca-negra")).rejects.toThrow(/insuficientes/);
   });
 
   it("sintetiza o escolhido e CONGELA os demais (fluxo do Tales)", async () => {
