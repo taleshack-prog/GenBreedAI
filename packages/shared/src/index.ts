@@ -105,7 +105,24 @@ export interface FertilityResult {
   score: number;
   /** Probabilidade de óbito embrionário não-reversível [0,1] (TDD §4.2). */
   inviabilityRisk: number;
-  /** True quando a Regra de Haldane esteriliza o sexo heterogamético (F1 interespecífico). */
+  /**
+   * Estado da Regra de Haldane (ADR-0015) para ESTE indivíduo, em F1
+   * interespecífico (SAME_SPECIES nunca aciona):
+   *   NONE    — não é F1 interespecífico (intraespécie, ou método != F1).
+   *   STERILE — sexo heterogamético (macho) em F1 interespecífico: score=0.
+   *   REDUCED — fêmea em F1 interespecífico: score numa faixa reduzida,
+   *             dependente de `DOCUMENTED_FERTILE_FEMALE`/`UNDOCUMENTED`
+   *             (ver hybridClass()/fertility.ts).
+   */
+  haldaneStatus: "NONE" | "STERILE" | "REDUCED";
+  /**
+   * @deprecated (ADR-0015) derivado de `haldaneStatus === "STERILE"`.
+   * Mantido porque apps/web (lib/api.ts) e apps/api (cross.service.spec.ts)
+   * ainda leem este campo — não removido nesta etapa (Etapa 5-API decide).
+   * Note bem: `false` aqui NÃO significa "fértil plena" — uma fêmea F1
+   * interespecífico com `haldaneStatus === "REDUCED"` também tem
+   * `haldaneSterile === false`, mesmo com fertilidade bem abaixo de 100.
+   */
   haldaneSterile: boolean;
   /** Trilha de auditoria dos modificadores aplicados. */
   notes: string[];

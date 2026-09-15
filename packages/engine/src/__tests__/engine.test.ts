@@ -44,12 +44,15 @@ describe("Índice de Fixação e Auras", () => {
 
 describe("Fertilidade", () => {
   const rng = createPrng("f");
-  it("F1 interespecífico → Haldane (0, estéril)", () => {
-    const r = fertilityScore("F1", 0, { interspecific: true, rng });
-    expect(r.score).toBe(0); expect(r.haldaneSterile).toBe(true);
+  // Split completo (macho×fêmea × DOCUMENTED×UNDOCUMENTED) fica em
+  // hybridization-haldane.test.ts (ADR-0015, item 6) — aqui só o caso base
+  // (macho, qualquer classe → estéril), pra manter este arquivo compilando.
+  it("F1 interespecífico, macho → Haldane (0, STERILE)", () => {
+    const r = fertilityScore("F1", 0, { sex: "M", hybridClass: "UNDOCUMENTED", rng });
+    expect(r.score).toBe(0); expect(r.haldaneStatus).toBe("STERILE"); expect(r.haldaneSterile).toBe(true);
   });
   it("depressão endogâmica F=0.25 → −20%", () => {
-    expect(fertilityScore("LINE", 0.25, { interspecific: false, rng }).score).toBeCloseTo(80, 6);
+    expect(fertilityScore("LINE", 0.25, { sex: "M", hybridClass: "SAME_SPECIES", rng }).score).toBeCloseTo(80, 6);
   });
 });
 

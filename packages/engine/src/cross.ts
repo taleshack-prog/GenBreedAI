@@ -231,7 +231,9 @@ function finalizeSpecimen(
   }
 
   const fPedigree = wrightF(ctx.pedigree, parentA.id, parentB.id);
-  const fertility = fertilityScore(method, fPedigree, { interspecific: ctx.interspecific ?? false, rng });
+  // Haldane por sexo (ADR-0015): `sex` é o do ZIGOTO (já resolvido acima, via
+  // combineXGametes), `hybridClass` vem SEMPRE dos PAIS — nunca do `method`.
+  const fertility = fertilityScore(method, fPedigree, { sex, hybridClass: hybridClass(parentA, parentB, ctx.pack), rng });
   const generation = Math.max(parentA.generation, parentB.generation) + 1;
   const targetLoci = ctx.targetLoci ?? Object.keys(zygote.loci);
   const generationsUnderSelection = ctx.generationsUnderSelection ?? generation;

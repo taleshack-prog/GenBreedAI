@@ -1,9 +1,14 @@
 /**
- * Dinâmica de fertilidade e viabilidade (TDD §4.2).
+ * Dinâmica de fertilidade e viabilidade (TDD §4.2; Haldane por sexo — ADR-0015).
  *
  * Base por método:
  *   - Intraespécie (F1 intra, LINE, INBREED, OUTCROSS): 100
- *   - F1 interespecífico: 0 no sexo heterogamético (Regra de Haldane)
+ *   - F1 interespecífico (Regra de Haldane, condicionada ao SEXO do zigoto e
+ *     à `hybridClass` do PAR DE PAIS — ADR-0015, corrige TDD §4.2 "sexo
+ *     heterogamético", que o código anterior zerava pros dois sexos):
+ *       macho (heterogamético, XY)               → 0, haldaneStatus STERILE
+ *       fêmea, hybridClass DOCUMENTED_FERTILE_FEMALE → 50–80, REDUCED
+ *       fêmea, hybridClass UNDOCUMENTED              → 5–15, REDUCED
  *   - BC1: 60–80   ·   F2: 30–50
  * Modificadores:
  *   - F_pedigree > 0.15 → −10% da base por 0.05 adicional (depressão endogâmica)
@@ -13,13 +18,20 @@
  * Determinismo: valores dentro de faixas são resolvidos por PRNG semeado.
  */
 
-import type { BreedingMethod, FertilityResult } from "@genbreedai/shared";
+import type { BreedingMethod, FertilityResult, Sex } from "@genbreedai/shared";
+import type { HybridClass } from "./types";
 import type { Rng } from "./rng";
 
 export interface FertilityOptions {
-  /** True quando o cruzamento é entre espécies distintas (aciona Haldane em F1). */
-  interspecific: boolean;
-  /** PRNG determinístico para resolver faixas (BC1/F2/outcross). */
+  /** Sexo do ZIGOTO sendo avaliado (ADR-0015) — decide o ramo de Haldane em F1 interespecífico. */
+  sex: Sex;
+  /**
+   * Classe de hibridação do PAR DE PAIS (ADR-0015) — `hybridClass(parentA,
+   * parentB, pack)`, SEMPRE derivada da espécie real dos pais, nunca do
+   * `method`. SAME_SPECIES nunca aciona Haldane (base 100, igual intraespécie).
+   */
+  hybridClass: HybridClass;
+  /** PRNG determinístico para resolver faixas (BC1/F2/outcross/Haldane-fêmea). */
   rng: Rng;
 }
 
@@ -35,17 +47,33 @@ export function fertilityScore(
 ): FertilityResult {
   const notes: string[] = [];
   let base: number;
-  let haldaneSterile = false;
+  let haldaneStatus: "NONE" | "STERILE" | "REDUCED" = "NONE";
 
   switch (method) {
     case "F1":
-      if (opts.interspecific) {
-        base = 0;
-        haldaneSterile = true;
-        notes.push("Regra de Haldane: sexo heterogamético estéril em F1 interespecífico.");
-      } else {
+      if (opts.hybridClass === "SAME_SPECIES") {
         base = 100;
         notes.push("Cruzamento intraespécie basal: fertilidade 100.");
+      } else if (opts.sex === "M") {
+        // Sexo heterogamético (XY, felinos/caninos) — Regra de Haldane: F1
+        // interespecífico macho é estéril, INDEPENDENTE da hybridClass (ADR-0015).
+        base = 0;
+        haldaneStatus = "STERILE";
+        notes.push(
+          `Regra de Haldane: macho (sexo heterogamético) estéril em F1 interespecífico (classe ${opts.hybridClass}).`,
+        );
+      } else if (opts.hybridClass === "DOCUMENTED_FERTILE_FEMALE") {
+        base = withinRange(opts.rng, 50, 80);
+        haldaneStatus = "REDUCED";
+        notes.push(
+          "Regra de Haldane: fêmea (sexo homogamético) em F1 interespecífico documentado (par com hibridação real conhecida) — fertilidade reduzida 50–80.",
+        );
+      } else {
+        base = withinRange(opts.rng, 5, 15);
+        haldaneStatus = "REDUCED";
+        notes.push(
+          "Regra de Haldane: fêmea (sexo homogamético) em F1 interespecífico SEM documentação de hibridação — fertilidade reduzida conservadora 5–15 (GRADE muito baixo, ver ADR-0015).",
+        );
       }
       break;
     case "BC1":
@@ -97,7 +125,9 @@ export function fertilityScore(
   return {
     score: Number(score.toFixed(4)),
     inviabilityRisk: Number(inviabilityRisk.toFixed(4)),
-    haldaneSterile,
+    haldaneStatus,
+    // @deprecated (ADR-0015) — derivado, ver JSDoc do campo em @genbreedai/shared.
+    haldaneSterile: haldaneStatus === "STERILE",
     notes,
   };
 }
