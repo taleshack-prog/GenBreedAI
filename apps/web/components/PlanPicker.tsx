@@ -8,12 +8,14 @@ import { PLANS, fmtBRL, type PlanId, type PlanInfo, type PlanInterval } from "..
  * navega pra /signup?plan=...; o pós-cadastro chama /billing/subscribe direto).
  */
 export function PlanPicker({
-  onSelect, ctaLabel, initialInterval = "month", busyPlan,
+  onSelect, ctaLabel, initialInterval = "month", busyPlan, currentPlan,
 }: {
   onSelect: (plan: PlanId, interval: PlanInterval) => void;
   ctaLabel?: (plan: PlanInfo) => string;
   initialInterval?: PlanInterval;
   busyPlan?: PlanId | null;
+  /** Plano vigente do usuário (backend) — marca o card correspondente como "Plano atual" e o desabilita. */
+  currentPlan?: PlanId | null;
 }) {
   const [interval, setInterval] = useState<PlanInterval>(initialInterval);
 
@@ -35,10 +37,11 @@ export function PlanPicker({
           const price = interval === "year" && p.year !== null ? p.year : p.month;
           const suffix = p.month === 0 ? "" : interval === "year" ? "/ano" : "/mês";
           const busy = busyPlan === p.id;
+          const isCurrent = currentPlan === p.id;
           return (
             <div key={p.id}
               className="flex flex-col rounded-card border bg-bg-800/70 p-5"
-              style={{ borderColor: p.featured ? `${p.accent}80` : "rgba(255,255,255,0.1)", boxShadow: p.featured ? `0 0 20px ${p.accent}33` : undefined }}>
+              style={{ borderColor: isCurrent ? p.accent : p.featured ? `${p.accent}80` : "rgba(255,255,255,0.1)", boxShadow: p.featured || isCurrent ? `0 0 20px ${p.accent}33` : undefined }}>
               <div className="mb-1 font-display text-xs font-black uppercase tracking-widest" style={{ color: p.accent }}>{p.label}</div>
               <div className="mb-0.5 font-display text-2xl font-black text-ink tnum">{fmtBRL(price)}<span className="text-sm font-medium text-ink-muted">{suffix}</span></div>
               {interval === "year" && p.year !== null ? (
@@ -52,10 +55,10 @@ export function PlanPicker({
                 <li>{p.tools}</li>
                 <li>{p.pool}</li>
               </ul>
-              <button onClick={() => onSelect(p.id, interval)} disabled={busy}
-                className="rounded-lg border py-2.5 text-center font-display text-xs font-bold uppercase tracking-wide transition hover:brightness-110 disabled:opacity-50"
-                style={{ borderColor: p.accent, color: p.accent }}>
-                {busy ? "…" : ctaLabel ? ctaLabel(p) : p.id === "FREE" ? "Começar de graça" : "Assinar"}
+              <button onClick={() => onSelect(p.id, interval)} disabled={busy || isCurrent}
+                className="rounded-lg border py-2.5 text-center font-display text-xs font-bold uppercase tracking-wide transition hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
+                style={{ borderColor: p.accent, color: p.accent, backgroundColor: isCurrent ? `${p.accent}1A` : undefined }}>
+                {busy ? "…" : isCurrent ? "Plano atual" : ctaLabel ? ctaLabel(p) : p.id === "FREE" ? "Começar de graça" : "Assinar"}
               </button>
             </div>
           );

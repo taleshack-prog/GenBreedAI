@@ -1,16 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { register, login, loginWithGoogle } from "../../lib/auth";
+import Link from "next/link";
+import { login, loginWithGoogle } from "../../lib/auth";
 
 declare global { interface Window { google?: any; } }
 
+// Criar conta vive só em /signup (dali sai a tela de escolha de plano) —
+// /login não tem mais um formulário de cadastro próprio. Duas telas de
+// registro divergentes deixavam gente criar conta e cair em FREE sem
+// nunca ver os planos.
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,25 +27,21 @@ export default function LoginPage() {
       window.google?.accounts.id.initialize({
         client_id: googleClientId,
         callback: async (resp: { credential: string }) => {
-          try { await loginWithGoogle(resp.credential); router.push("/"); }
+          try { await loginWithGoogle(resp.credential); router.push("/app"); }
           catch (e) { setErr((e as Error).message); }
         },
       });
-      window.google?.accounts.id.renderButton(document.getElementById("gbtn"), { theme: "filled_black", size: "large", width: 300, text: mode === "register" ? "signup_with" : "signin_with" });
+      window.google?.accounts.id.renderButton(document.getElementById("gbtn"), { theme: "filled_black", size: "large", width: 300, text: "signin_with" });
     };
     document.body.appendChild(s);
     return () => { s.remove(); };
-  }, [googleClientId, mode, router]);
+  }, [googleClientId, router]);
 
   async function submit() {
     setErr(null); setBusy(true);
     try {
-      if (mode === "register") {
-        await register(email, password, name || undefined);
-      } else {
-        await login(email, password);
-      }
-      router.push("/");
+      await login(email, password);
+      router.push("/app");
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -55,28 +54,20 @@ export default function LoginPage() {
 
       <div className="rounded-card border border-white/10 bg-bg-800/70 p-6">
         <div className="mb-5 flex gap-1 rounded-lg bg-bg-900 p-1">
-          {(["login","register"] as const).map((m) => (
-            <button key={m} onClick={() => setMode(m)}
-              className={`flex-1 rounded-md py-2 font-mono text-xs uppercase transition ${mode === m ? "bg-cyan/15 text-cyan" : "text-ink-muted"}`}>
-              {m === "login" ? "Entrar" : "Criar conta"}
-            </button>
-          ))}
+          <div className="flex-1 rounded-md bg-cyan/15 py-2 text-center font-mono text-xs uppercase text-cyan">Entrar</div>
+          <Link href="/signup" className="flex-1 rounded-md py-2 text-center font-mono text-xs uppercase text-ink-muted transition hover:text-ink">Criar conta</Link>
         </div>
 
-        {mode === "register" && (
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (opcional)"
-            className="mb-3 w-full rounded-lg border border-white/10 bg-bg-900 px-3 py-2.5 text-ink placeholder:text-ink-muted focus:border-cyan focus:outline-none" />
-        )}
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="E-mail" autoComplete="email"
           className="mb-3 w-full rounded-lg border border-white/10 bg-bg-900 px-3 py-2.5 text-ink placeholder:text-ink-muted focus:border-cyan focus:outline-none" />
-        <input value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} type="password" placeholder="Senha (mín. 8)" autoComplete={mode === "register" ? "new-password" : "current-password"}
+        <input value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} type="password" placeholder="Senha" autoComplete="current-password"
           className="mb-4 w-full rounded-lg border border-white/10 bg-bg-900 px-3 py-2.5 text-ink placeholder:text-ink-muted focus:border-cyan focus:outline-none" />
 
         {err && <p className="mb-3 rounded-lg border border-crit/30 bg-crit/10 px-3 py-2 text-xs text-crit">{err}</p>}
 
         <button onClick={submit} disabled={busy}
           className="w-full rounded-lg bg-cyan py-3 font-display text-sm font-semibold text-bg-900 shadow-neon-cyan transition hover:brightness-110 disabled:opacity-50">
-          {busy ? "…" : mode === "login" ? "Entrar" : "Criar conta"}
+          {busy ? "…" : "Entrar"}
         </button>
 
         {googleClientId ? (

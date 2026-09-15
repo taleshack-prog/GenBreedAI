@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { listSpecimens, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getSubscription, effectiveTierFromSubscription, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
@@ -77,11 +78,14 @@ export default function ProfilePage() {
     <Screen title="Perfil" subtitle="Criador">
       <div className="mb-5 flex items-center gap-4 rounded-card border border-purple/30 bg-bg-800 p-4 neon-purpura">
         <div className="grid h-16 w-16 place-items-center rounded-full border-2 border-purple text-2xl">🧬</div>
-        <div>
+        <div className="flex-1">
           <div className="font-display text-lg font-bold uppercase text-ink">{getUser()?.name || getUser()?.email || "Criador"}</div>
           <div className="text-sm text-purple">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).name}</div>
           <div className="mt-1 text-xs text-ink-muted">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).crossesDay} cruzamentos/dia · {(TIER_INFO[tier] ?? TIER_INFO.FREE!).imgsMonth} imagens IA/mês</div>
         </div>
+        <Link href="/app/planos" className="shrink-0 rounded-lg border border-purple/40 px-3 py-2 text-center font-display text-[0.68rem] font-bold uppercase tracking-wide text-purple transition hover:bg-purple/10">
+          {tier === "FREE" ? "Assinar" : "Ver planos"}
+        </Link>
       </div>
       {(() => { const u = getUser(); return u ? (
         <div className="mb-5 flex items-center justify-between rounded-card border border-white/10 bg-bg-800/70 p-4">
