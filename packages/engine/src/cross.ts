@@ -14,7 +14,7 @@ import {
   type Genotype,
   type Sex,
 } from "@genbreedai/shared";
-import type { Pedigree, SpeciesPack } from "./types";
+import type { MaternalEffectConfig, Pedigree, SpeciesPack } from "./types";
 import { createPrng } from "./rng";
 import { generateGamete, combineGametes, generateXGamete, combineXGametes } from "./gamete";
 import { expressPhenotype } from "./phenotype";
@@ -31,6 +31,14 @@ export interface ParentInput {
   generation: number;
   /** Sexo cromossômico (ADR-0013). cross()/enumerateOffspring()/materializeCross() exigem parentA=M, parentB=F. */
   sex: Sex;
+  /**
+   * Porte ADULTO (fenótipo, com efeito materno já aplicado) deste indivíduo
+   * quando ELE nasceu — ADR-0014. Só importa no papel de DAM (parentB); é o
+   * "porteAdultoMãe" da fórmula. Ausente = desvio materno tratado como 0
+   * (nunca inventa o valor) — quem chama é responsável por repassar o
+   * `phenotype.porteAdulto` da geração anterior, se tiver.
+   */
+  adultPorte?: number;
 }
 
 /**
@@ -106,6 +114,28 @@ export function hashGenotype(genotype: Genotype): string {
 }
 
 /**
+ * Efeito materno no porte (ADR-0014 — Walton & Hammond 1938). PURA função dos
+ * valores JÁ COMPUTADOS (BV do zigoto, BV dos pais, porteAdulto conhecido da
+ * mãe) — NENHUM sorteio novo, então nunca perturba nenhum stream de RNG.
+ *
+ * `zygoteBV` já inclui o "ruído atual" da segregação (ADR-0012) — por isso
+ * porteAdulto/porteNascimento reusam o MESMO ruído: não sorteia um segundo.
+ * Sem `damAdultPorte` conhecido, o desvio materno é 0 (nunca inventa valor) —
+ * porteAdulto/porteNascimento saem iguais ao BV, como antes desta ADR.
+ */
+function applyMaternalEffect(
+  zygoteBV: number, sireBV: number, damBV: number,
+  damAdultPorte: number | undefined, cfg: MaternalEffectConfig,
+): { porteAdulto: number; porteNascimento: number } {
+  const midparentBV = (sireBV + damBV) / 2;
+  const deviation = damAdultPorte !== undefined ? damAdultPorte - midparentBV : 0;
+  return {
+    porteAdulto: clamp01(zygoteBV + cfg.mAdult * deviation),
+    porteNascimento: clamp01(zygoteBV + cfg.mBirth * deviation),
+  };
+}
+
+/**
  * Finaliza um zigoto: sexo+xLoci, fenótipo, F, fertilidade, IF, aura, cacheKey.
  *
  * O sexo/xLoci usa um RNG PRÓPRIO derivado da mesma seed (`${seed}|x`) — NUNCA
@@ -125,6 +155,18 @@ function finalizeSpecimen(
   const zygoteWithX: Genotype = { ...zygote, xLoci };
 
   const phenotype = expressPhenotype(zygoteWithX, ctx.pack);
+
+  // Efeito materno (ADR-0014) — PROIBIDO gravar em genotype.qtl; só no phenotype.
+  const maternalCfg = ctx.pack.maternalEffect?.porte;
+  const zygoteBV = zygote.qtl.porte;
+  const sireBV = parentA.genotype.qtl.porte;
+  const damBV = parentB.genotype.qtl.porte;
+  if (maternalCfg && zygoteBV !== undefined && sireBV !== undefined && damBV !== undefined) {
+    const { porteAdulto, porteNascimento } = applyMaternalEffect(zygoteBV, sireBV, damBV, parentB.adultPorte, maternalCfg);
+    phenotype.porteAdulto = porteAdulto;
+    phenotype.porteNascimento = porteNascimento;
+  }
+
   const fPedigree = wrightF(ctx.pedigree, parentA.id, parentB.id);
   const fertility = fertilityScore(method, fPedigree, { interspecific: ctx.interspecific ?? false, rng });
   const generation = Math.max(parentA.generation, parentB.generation) + 1;

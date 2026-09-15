@@ -79,4 +79,7 @@ export const FELINE_PACK: SpeciesPack = {
   ],
   lethals: [],
   quantitative: { porte: { mean: 0.5, h2: 0.5 }, vigor: { mean: 0.5, h2: 0.35 }, beleza: { mean: 0.5, h2: 0.25 }, rosetas: { mean: 0.5, h2: 0.6 } },
+  // Efeito materno no porte (ADR-0014 — Walton & Hammond 1938). Mesmo valor
+  // em FELINE e CANINE nesta versão — PARÂMETRO DO JOGO, Tales define.
+  maternalEffect: { porte: { mBirth: 0.75, mBirthRange: [0.67, 1.0], mAdult: 0.25 } },
 };

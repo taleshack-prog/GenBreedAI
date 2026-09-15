@@ -90,6 +90,14 @@ export interface Phenotype {
   pigmentDiluted?: boolean;
   /** True quando PHEOMELANIN + padrão "uniforme" — listras/rosetas residuais fracas. */
   ghostPattern?: boolean;
+  /**
+   * Porte na maturidade, com efeito materno (ADR-0014 — Walton & Hammond
+   * 1938). Alimenta prompt/IF/classificador/papel de mãe na próxima geração.
+   * Ausente quando o pack não declara `maternalEffect.porte`.
+   */
+  porteAdulto?: number;
+  /** Porte ao nascer, com efeito materno — só exibição, não alimenta nada além disso. */
+  porteNascimento?: number;
 }
 
 export interface FertilityResult {

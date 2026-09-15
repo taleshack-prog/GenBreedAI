@@ -58,4 +58,6 @@ export const CANINE_PACK: SpeciesPack = {
     override: "arlequim (fundo branco, manchas)", label: "harlequin-sobre-merle" }],
   lethals: [{ locus: "M", genotype: ["M", "M"], label: "duplo-merle-letal" }],
   quantitative: { porte: { mean: 0.5, h2: 0.5 }, vigor: { mean: 0.5, h2: 0.35 }, beleza: { mean: 0.5, h2: 0.25 }, temperamento: { mean: 0.5, h2: 0.3 } },
+  // Efeito materno no porte (ADR-0014). Mesmo valor de FELINE nesta versão.
+  maternalEffect: { porte: { mBirth: 0.75, mBirthRange: [0.67, 1.0], mAdult: 0.25 } },
 };

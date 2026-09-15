@@ -122,6 +122,26 @@ export interface SpeciesPack {
   lethals: LethalCombo[];
   /** QTLs conhecidos e sua herdabilidade h² (TDD §4.1). */
   quantitative: Record<string, { mean: number; h2: number }>;
+  /**
+   * Efeito materno por traço QTL (ADR-0014 — Walton & Hammond 1938). PARÂMETRO
+   * DO JOGO, não constante biológica medida — ver o ADR pro campo "valores das
+   * tabelas W&H usados" e a distinção do m de Falconer. Ausente = sem efeito
+   * materno nesse traço (equivalente ao antigo m=0).
+   */
+  maternalEffect?: Record<string, MaternalEffectConfig>;
+}
+
+/**
+ * Coeficientes do efeito materno num traço (ADR-0014). `mBirth`/`mAdult` são
+ * a fração — em [0,1] — do desvio materno (porteAdultoMãe − médiaParentalBV)
+ * que se expressa no nascimento e na maturidade, respectivamente. O efeito
+ * DECAI mas não ZERA na maturidade (mAdult > 0, tipicamente < mBirth).
+ */
+export interface MaternalEffectConfig {
+  mBirth: number;
+  /** Faixa reportada por W&H pro efeito ao nascimento — documental, não usada no cálculo. */
+  mBirthRange: [number, number];
+  mAdult: number;
 }
 
 // ─── Pedigree (para F de Wright, TDD §4.2) ────────────────────────────────────
