@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { listSpecimens, getTier, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../lib/api";
-import { Screen } from "../../components/Screen";
-import { getUser, clearSession } from "../../lib/auth";
+import { listSpecimens, getTier, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
+import { Screen } from "../../../components/Screen";
+import { getUser, clearSession } from "../../../lib/auth";
 
 const TIER_INFO: Record<string, { name: string; crossesDay: number; imgsMonth: number }> = {
   FREE: { name: "FREEBREEDER", crossesDay: 1, imgsMonth: 0 },

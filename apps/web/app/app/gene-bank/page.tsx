@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { listSpecimens, getWallet, freezeSpecimen, thawSpecimen, type ApiSpecimen, type Wallet } from "../../lib/api";
-import { CapsuleCard } from "../../components/CapsuleCard";
-import { displayName } from "../../lib/display";
+import { listSpecimens, getWallet, freezeSpecimen, thawSpecimen, type ApiSpecimen, type Wallet } from "../../../lib/api";
+import { CapsuleCard } from "../../../components/CapsuleCard";
+import { displayName } from "../../../lib/display";
 
 export default function GeneBankPage() {
   const router = useRouter();
@@ -100,7 +100,7 @@ export default function GeneBankPage() {
               <span className="rounded border border-purple/40 px-2 py-1 text-purple">B: {b ? nameOf(b) : "—"}</span>
             </div>
             <button onClick={() => setPicks([])} className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase text-ink-muted">Limpar</button>
-            <button disabled={picks.length < 2} onClick={() => router.push(`/?a=${a}&b=${b}`)}
+            <button disabled={picks.length < 2} onClick={() => router.push(`/app?a=${a}&b=${b}`)}
               className="rounded-lg bg-ok px-4 py-2 font-display text-sm font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none">
               Cruzar →
             </button>

@@ -1,10 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { BottomNav } from "../components/BottomNav";
 
 export const metadata: Metadata = {
-  title: "GenBreedAI · Laboratório",
-  description: "Cruze espécies, preveja a herança mendeliana e fixe fenótipos.",
+  title: "GenBreedAI",
+  description: "Cruze espécies, estude a herança mendeliana e quantitativa real, e tente fixar fenótipos ao longo de gerações.",
   manifest: "/manifest.webmanifest",
   applicationName: "GenBreedAI",
   appleWebApp: { capable: true, title: "GenBreedAI", statusBarStyle: "black-translucent" },
@@ -19,7 +18,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body>{children}<BottomNav /></body>
+      <body>{children}</body>
     </html>
   );
 }

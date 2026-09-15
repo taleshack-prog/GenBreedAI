@@ -21,7 +21,7 @@ export function AscendancyTree({ specimen, byId, depth = 0 }: {
   return (
     <div style={{ paddingLeft: depth === 0 ? 0 : 14 }} className={depth === 0 ? "" : "border-l border-white/10 ml-1"}>
       <div
-        onClick={() => router.push(`/genome/${specimen.id}`)}
+        onClick={() => router.push(`/app/genome/${specimen.id}`)}
         className="my-1 flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-bg-800 px-3 py-2 transition hover:border-cyan/40"
       >
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cyan/10 font-display text-[0.6rem] font-bold text-cyan">

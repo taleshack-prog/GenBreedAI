@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getGenome, type GenomeResponse, type LineageNode } from "../../../lib/api";
+import { getGenome, type GenomeResponse, type LineageNode } from "../../../../lib/api";
 import { speciesInfo } from "@genbreedai/shared";
 
 function TreeNode({ node, depth = 0, cor }: { node: LineageNode | null; depth?: number; cor: string }) {
@@ -132,7 +132,7 @@ export default function GenomePage() {
           : <p className="text-xs text-ink-muted">Fundador — sem ancestrais.</p>}
       </section>
 
-      <Link href="/crosses" className="block w-full rounded-xl border border-white/10 py-3 text-center font-display text-sm uppercase tracking-wide text-ink-muted transition hover:text-ink">← Voltar</Link>
+      <Link href="/app/crosses" className="block w-full rounded-xl border border-white/10 py-3 text-center font-display text-sm uppercase tracking-wide text-ink-muted transition hover:text-ink">← Voltar</Link>
     </main>
   );
 }

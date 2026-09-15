@@ -70,8 +70,8 @@ export function CapsuleCard({
         <span
           role="button"
           tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); router.push(`/genome/${specimen.id}`); }}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); router.push(`/genome/${specimen.id}`); } }}
+          onClick={(e) => { e.stopPropagation(); router.push(`/app/genome/${specimen.id}`); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); router.push(`/app/genome/${specimen.id}`); } }}
           title="Genoma detalhado"
           className="absolute right-2 top-2 z-20 grid h-7 w-7 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-sm transition hover:scale-110"
           style={{ borderColor: `${cor}66`, color: cor }}

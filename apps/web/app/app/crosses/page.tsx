@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { listSpecimens, type ApiSpecimen } from "../../lib/api";
-import { AscendancyTree } from "../../components/AscendancyTree";
-import { Screen, ComingSoon } from "../../components/Screen";
-import { displayName } from "../../lib/display";
+import { listSpecimens, type ApiSpecimen } from "../../../lib/api";
+import { AscendancyTree } from "../../../components/AscendancyTree";
+import { Screen, ComingSoon } from "../../../components/Screen";
+import { displayName } from "../../../lib/display";
 
 type Fam = "feline" | "canine";
 
@@ -63,7 +63,7 @@ export default function LineagesPage() {
       {err && <ComingSoon>{err}</ComingSoon>}
       {!err && roots.length === 0 ? (
         <ComingSoon>
-          Nenhuma linhagem de {fam === "feline" ? "felinos" : "canídeos"} ainda. Vá ao <a href="/" className="text-cyan underline">Laboratório</a> e sintetize um cruzamento.
+          Nenhuma linhagem de {fam === "feline" ? "felinos" : "canídeos"} ainda. Vá ao <a href="/app" className="text-cyan underline">Laboratório</a> e sintetize um cruzamento.
         </ComingSoon>
       ) : (
         <div className="space-y-2">

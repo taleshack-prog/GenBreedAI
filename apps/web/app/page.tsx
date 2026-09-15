@@ -1,217 +1,177 @@
 "use client";
+import { useState } from "react";
+import Link from "next/link";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { listSpecimens, postCross, type ApiSpecimen } from "../lib/api";
-import { compatibility } from "../lib/lab";
-import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getTier, classifyCross, type OffspringOption, type CrossClassification } from "../lib/api";
-import { PhenotypeSelector } from "../components/PhenotypeSelector";
-import { displayName } from "../lib/display";
-import { CapsuleCard } from "../components/CapsuleCard";
-import { FertilizationCore } from "../components/FertilizationCore";
-import { PunnettGridView, InbreedingGauge, HybridPreview, CurrencyBar } from "../components/LabSections";
-import { wrightF } from "@genbreedai/engine";
+const IMG_BASE = "https://img.genbreed.com.br/generated";
 
-const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as const;
+/** Retratos reais do catálogo — hashes conferidos no bucket, nenhum inventado. */
+const GALLERY = [
+  { hash: "b79e8a4f4b555931e295c8a7d5f5aa908fabf03f7760e7565edc054e33faba1e", name: "Leopardo-das-neves × Tigre-albino", sub: "Híbrido sintetizado no jogo" },
+  { hash: "37a4c1244d0c2f2692275e9cbb70425f559c65757eadadedefbd5f15bdbd40ec", name: "Onça-pintada", sub: "Panthera onca" },
+  { hash: "1cc64c98b21550023f7aa5a9dfef7843f439416c3ed369a67686d249d96cf58b", name: "Tigre-branco", sub: "Panthera tigris (leucístico)" },
+  { hash: "cb64cf67b2fdb4fcf6808e5b218e44dda8bc80a973950e29bb0492ef9e2f88aa", name: "Leopardo-das-neves", sub: "Panthera uncia" },
+  { hash: "3ee2a48a81b748e0be38953260a50537a55fafbbfb1365863c1a0fc03b7c14cc", name: "Pastor Alemão", sub: "Canis familiaris" },
+  { hash: "46cf3178f6668e91e9459690d25e02855d1a3329b8bcdbe08fc9eba0a2ff0eb3", name: "Rottweiler", sub: "Canis familiaris" },
+];
 
-function LabInner() {
-  const router = useRouter();
-  const search = useSearchParams();
-  const [options, setOptions] = useState<OffspringOption[]>([]);
-  const [canChoose, setCanChoose] = useState(false);
-  const [maxOptions, setMaxOptions] = useState(6);
-  const [choiceKey, setChoiceKey] = useState<string | null>(null);
-  const [freezeMsg, setFreezeMsg] = useState<string | null>(null);
-  const [freezeRest, setFreezeRest] = useState(true);
-  const [describeMode, setDescribeMode] = useState(false);
-  const [classification, setClassification] = useState<CrossClassification | null>(null);
-  useEffect(() => { setDescribeMode(getTier() === "FREE"); }, []);
-  const [specimens, setSpecimens] = useState<ApiSpecimen[]>([]);
-  const [sireId, setSireId] = useState("");
-  const [damId, setDamId] = useState("");
-  const [method, setMethod] = useState<(typeof METHODS)[number]>("F1");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [listError, setListError] = useState<string | null>(null);
+type PlanId = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
+interface Plan {
+  id: PlanId; label: string; month: number; year: number | null;
+  crosses: string; images: string; tools: string; pool: string; accent: string; featured?: boolean;
+}
+const PLANS: Plan[] = [
+  { id: "FREE", label: "Free", month: 0, year: null, crosses: "1 / dia", images: "0 (só retrato procedural)", tools: "Sorteio de fenótipo", pool: "Felinos — só intraespécie", accent: "#9E9E9E" },
+  { id: "JUNIOR", label: "Junior", month: 19.9, year: 218.9, crosses: "3 / dia", images: "10 / mês", tools: "Sorteio de fenótipo", pool: "+ Híbridos interespecíficos entre felinos", accent: "#00F0FF" },
+  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "5 / dia", images: "20 / mês", tools: "Escolhe entre 6 opções de fenótipo", pool: "+ Caninos", accent: "#BF00FF", featured: true },
+  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "10 / dia", images: "30 / mês", tools: "Escolhe entre 12 opções de fenótipo", pool: "+ Acesso liberado a grandes animais (bovino, equino, suíno, ovino) conforme entrarem no catálogo", accent: "#F5C542" },
+];
+const fmtBRL = (v: number) => v === 0 ? "R$ 0" : `R$ ${v.toFixed(2).replace(".", ",")}`;
 
-  useEffect(() => {
-    listSpecimens().then(setSpecimens).catch((e) => { const m = (e as Error).message; if (/401|autentica|Sess/i.test(m)) { router.push("/login"); return; } setListError(m); });
-  }, []);
-
-  const sire = specimens.find((s) => s.id === sireId) ?? null;
-  const dam = specimens.find((s) => s.id === damId) ?? null;
-  useEffect(() => {
-    if (sire?.id && dam?.id) {
-      classifyCross({ sireId: sire.id, damId: dam.id })
-        .then((c) => { setClassification(c); setMethod(c.method as (typeof METHODS)[number]); })
-        .catch(() => setClassification(null));
-    } else { setClassification(null); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sireId, damId]);
-  useEffect(() => {
-    const a = search.get("a"), b = search.get("b");
-    if (a && specimens.some((s) => s.id === a)) setSireId(a);
-    if (b && specimens.some((s) => s.id === b)) setDamId(b);
-  }, [specimens, search]);
-
-  useEffect(() => {
-    setChoiceKey(null); setOptions([]);
-    if (sire && dam && sire.pack === dam.pack) {
-      getCrossOptions({ sireId: sire.id, damId: dam.id, method })
-        .then((r) => { setOptions(r.options); setCanChoose(r.canChoose); setMaxOptions(r.maxOptions); })
-        .catch(() => setOptions([]));
-    }
-  }, [sire?.id, dam?.id, method]);
-
-  const compatible = sire && dam && sire.pack === dam.pack;
-
-  const fPed = useMemo(() => {
-    if (!sire || !dam) return null;
-    const ped: Record<string, { id: string; sire: string | null; dam: string | null }> = {};
-    for (const s of specimens) ped[s.id] = { id: s.id, sire: s.sireId, dam: s.damId };
-    return wrightF(ped, sire.id, dam.id);
-  }, [sire, dam, specimens]);
-
-  const compat = compatible ? compatibility(sire!, dam!) : null;
-
-  async function onCross() {
-    if (!sire || !dam) return;
-    setLoading(true);
-    setError(null);
-    try {
-      if (canChoose && choiceKey && freezeRest && options.length > 1) {
-        const res = await synthesizeAndFreeze({
-          sireId: sire.id, damId: dam.id, method, choiceKey,
-          freezeKeys: options.map((o) => o.key),
-        });
-        router.push(`/reveal/${res.specimen.id}`);
-        return;
-      }
-      const res = await postCross({ sireId: sire.id, damId: dam.id, method, choiceKey: choiceKey ?? undefined });
-      router.push(`/reveal/${res.specimen.id}`);
-      return;
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function LandingPage() {
+  const [interval, setInterval] = useState<"month" | "year">("month");
 
   return (
-    <main className="mx-auto max-w-4xl px-4 pb-28 pt-5">
-      {/* Cabeçalho + moedas */}
-      <header className="mb-5 flex items-center justify-between gap-4">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-2xl font-semibold text-ink">Genetic Lab</h1>
-          <span className="font-mono text-[0.7rem] text-ink-muted">// síntese genética</span>
-        </div>
-        <CurrencyBar />
-      </header>
+    <main className="mx-auto max-w-5xl">
+      {/* 1. HERO */}
+      <section className="relative flex min-h-[86vh] flex-col justify-end overflow-hidden px-5 pb-10 pt-24 sm:min-h-[80vh]">
+        <img
+          src="/hero-tigre-albino.jpg"
+          alt="Híbrido de Leopardo-das-neves × Tigre-albino gerado no GenBreedAI"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg-900 via-bg-900/70 to-bg-900/20" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-bg-900/90 to-transparent" />
 
-      {listError && (
-        <div className="mb-5 rounded-lg border border-crit/40 bg-crit/10 p-4 text-sm text-crit">
-          {listError} — a API está no ar em :3001? Rode <code className="font-mono">pnpm dev</code>.
-        </div>
-      )}
-
-      {/* Progenitores + fertilização */}
-      <section className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1fr_auto_1fr]">
-        <div>
-          <CapsuleCard specimen={sire} slot="A" />
-          <select value={sireId} onChange={(e) => setSireId(e.target.value)} className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-ink focus:border-cyan">
-            <option value="">selecionar progenitor A…</option>
-            {specimens.map((s) => <option key={s.id} value={s.id}>{displayName(s)} · {s.id}</option>)}
-          </select>
-        </div>
-
-        <div className="flex flex-col items-center gap-3 py-2">
-          <FertilizationCore compatibility={compat} />
-          {classification && (
-            <div className="mb-2 w-full max-w-xs rounded-lg border border-white/10 bg-bg-800/80 px-3 py-2">
-              <div className="flex items-center gap-1.5">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00F0FF" strokeWidth="1.6"><path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 6h10M7 18h10" /></svg>
-                <span className="font-mono text-[0.7rem] text-ink-muted">tipo sugerido</span>
-                <span className="font-mono text-[0.72rem] font-semibold text-cyan">{classification.method}</span>
-              </div>
-              <div className="mt-1 text-[0.68rem] leading-snug text-ink-muted">{classification.reason}</div>
-              {classification.inbreedingRisk && (
-                <div className="mt-1.5 flex items-center gap-1 border-t border-white/5 pt-1.5 text-[0.62rem] text-crit">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
-                  <span>endogamia · F=<span className="tnum">{classification.kinship.toFixed(3)}</span></span>
-                </div>
-              )}
-            </div>
-          )}
-          <select value={method} onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])} className="w-44 rounded-lg border border-white/10 bg-bg-900 px-2 py-1.5 text-center font-mono text-sm text-ink transition focus:border-cyan focus:outline-none">
-            {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <CapsuleCard specimen={dam} slot="B" />
-          <select value={damId} onChange={(e) => setDamId(e.target.value)} className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-ink focus:border-purple">
-            <option value="">selecionar progenitor B…</option>
-            {specimens.map((s) => <option key={s.id} value={s.id}>{displayName(s)} · {s.id}</option>)}
-          </select>
+        <div className="relative z-10 mx-auto w-full max-w-2xl">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="font-display text-lg font-black uppercase tracking-wide text-ink">GenBreed<span className="text-cyan">AI</span></span>
+            <span className="font-mono text-[0.6rem] uppercase tracking-widest text-ink-muted">// console de laboratório</span>
+          </div>
+          <h1
+            className="font-display text-4xl font-black uppercase leading-[1.05] tracking-wide text-ink sm:text-5xl"
+            style={{ textShadow: "0 0 18px rgba(0,240,255,0.35)" }}
+          >
+            Genética aplicada,<br /><span className="text-cyan">de verdade</span>.
+          </h1>
+          <p className="mt-4 max-w-lg text-sm leading-relaxed text-ink-muted sm:text-base">
+            Cruze espécies reais, aplique herança mendeliana e quantitativa de verdade, e tente fixar fenótipos ao longo de gerações — ou falhe tentando.
+          </p>
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <Link href="/signup"
+              className="rounded-lg bg-cyan px-6 py-3.5 text-center font-display text-sm font-bold uppercase tracking-wide text-bg-900 shadow-neon-cyan transition hover:brightness-110">
+              Criar conta
+            </Link>
+            <Link href="/login"
+              className="rounded-lg border border-white/15 bg-bg-800/60 px-6 py-3.5 text-center font-display text-sm font-bold uppercase tracking-wide text-ink transition hover:border-cyan/40 hover:text-cyan">
+              Entrar
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* Punnett + endogamia */}
-      {compatible && (
-        <section className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <PunnettGridView sire={sire!} dam={dam!} />
-          {fPed !== null && <InbreedingGauge f={fPed} />}
-        </section>
-      )}
-      {sire && dam && !compatible && (
-        <div className="mt-5 rounded-card border border-crit/40 bg-crit/10 p-4 text-sm text-crit">
-          Espécies de packs distintos ({sire.pack} × {dam.pack}) — cruzamento incompatível.
+      {/* 2. O QUE É */}
+      <section className="px-5 py-14 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-cyan">// o que é</h2>
+          <p className="mb-10 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Um laboratório de genética, não um bicho-de-estimação virtual.</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              { t: "Cruze espécies reais", d: "Felinos e caninos com loci genéticos de verdade — cor, padrão, diluição, albinismo — não paletas aleatórias." },
+              { t: "Herança mendeliana e quantitativa", d: "O motor calcula Punnett, dominância/codominância e traços quantitativos (QTL, herdabilidade) igual a um livro-texto de genética." },
+              { t: "F de Wright, sem enrolação", d: "Endogamia é calculada de verdade a partir do pedigree — cruzar parentes tem consequência genética real, visível no jogo." },
+              { t: "Fixe fenótipos ao longo de gerações — ou falhe", d: "Selecionar, cruzar e tentar estabilizar uma linhagem pura (aura) é um jogo de longo prazo. Nem toda tentativa dá certo." },
+            ].map((b) => (
+              <div key={b.t} className="rounded-card border border-white/10 bg-bg-800/60 p-5">
+                <h3 className="mb-1.5 font-display text-sm font-bold uppercase tracking-wide text-ink">{b.t}</h3>
+                <p className="text-[0.8rem] leading-relaxed text-ink-muted">{b.d}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      </section>
 
-      {/* Seletor de fenótipo (Senior+ escolhe; Free só vê) */}
-      {compatible && options.length > 0 && (
-        <section className="mt-5">
-          <PhenotypeSelector
-            options={options} canChoose={canChoose} maxOptions={maxOptions}
-            selectedKey={choiceKey} onSelect={setChoiceKey}
-            crossInput={{ sireId: sire!.id, damId: dam!.id, method }}
-            family={sire!.pack}
-            describeMode={describeMode}
-            onFrozen={setFreezeMsg}
-          />
-          {freezeMsg && <p className="mt-2 text-center text-xs text-cyan">{freezeMsg}</p>}
-        </section>
-      )}
+      {/* 3. GALERIA */}
+      <section className="px-5 py-14 sm:py-20">
+        <div className="mx-auto max-w-4xl">
+          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-purple">// catálogo</h2>
+          <p className="mb-10 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Retratos reais, sintetizados no motor do jogo</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {GALLERY.map((g) => (
+              <figure key={g.hash} className="overflow-hidden rounded-card border border-white/10 bg-bg-800">
+                <div className="aspect-square w-full bg-bg-studio">
+                  <img src={`${IMG_BASE}/${g.hash}.png`} alt={g.name} className="h-full w-full object-cover" loading="lazy" />
+                </div>
+                <figcaption className="p-2.5">
+                  <div className="font-display text-[0.72rem] font-semibold uppercase tracking-wide text-ink">{g.name}</div>
+                  <div className="font-mono text-[0.62rem] text-ink-muted">{g.sub}</div>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </section>
 
-      {/* Congelar os não escolhidos */}
-      {canChoose && options.length > 1 && (
-        <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 text-xs text-ink-muted">
-          <input type="checkbox" checked={freezeRest} onChange={(e) => setFreezeRest(e.target.checked)} className="accent-cyan" />
-          Congelar os {options.length - 1} fenótipos não escolhidos (−100 cat. cada = −{(options.length - 1) * 100} catalisadores)
-        </label>
-      )}
+      {/* 4. PLANOS */}
+      <section className="px-5 py-14 sm:py-20">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-cyan">// tiers</h2>
+          <p className="mb-6 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Um plano para cada profundidade de estudo</p>
 
-      {/* Botão sintetizar */}
-      <button
-        onClick={onCross}
-        disabled={!compatible || loading}
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl bg-ok px-4 py-4 font-display text-lg font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
-      >
-        {loading ? "Sintetizando…" : canChoose && choiceKey ? "Sintetizar fenótipo escolhido" : "Sintetizar genoma"}
-        {compatible && <span className="font-mono text-sm opacity-80">🌿 25.000 · ⬢ 750</span>}
-      </button>
-      {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
+          <div className="mb-8 flex justify-center">
+            <div className="inline-flex rounded-lg border border-white/10 bg-bg-800 p-1">
+              {(["month", "year"] as const).map((k) => (
+                <button key={k} onClick={() => setInterval(k)}
+                  className={`rounded-md px-4 py-2 font-display text-xs font-bold uppercase tracking-wide transition ${interval === k ? "bg-cyan/15 text-cyan" : "text-ink-muted"}`}>
+                  {k === "month" ? "Mensal" : "Anual · 1 mês grátis"}
+                </button>
+              ))}
+            </div>
+          </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {PLANS.map((p) => {
+              const price = interval === "year" && p.year !== null ? p.year : p.month;
+              const suffix = p.month === 0 ? "" : interval === "year" ? "/ano" : "/mês";
+              return (
+                <div key={p.id}
+                  className="flex flex-col rounded-card border bg-bg-800/70 p-5"
+                  style={{ borderColor: p.featured ? `${p.accent}80` : "rgba(255,255,255,0.1)", boxShadow: p.featured ? `0 0 20px ${p.accent}33` : undefined }}>
+                  <div className="mb-1 font-display text-xs font-black uppercase tracking-widest" style={{ color: p.accent }}>{p.label}</div>
+                  <div className="mb-0.5 font-display text-2xl font-black text-ink tnum">{fmtBRL(price)}<span className="text-sm font-medium text-ink-muted">{suffix}</span></div>
+                  {interval === "year" && p.year !== null && (
+                    <div className="mb-3 font-mono text-[0.62rem] text-ok">equivale a 11 meses — 1 mês grátis</div>
+                  )}
+                  {(interval === "month" || p.year === null) && <div className="mb-3" />}
+                  <ul className="mb-5 flex-1 space-y-2.5 text-[0.72rem] leading-snug text-ink-muted">
+                    <li><span className="text-ink">{p.crosses}</span> de cruzamentos</li>
+                    <li><span className="text-ink">{p.images}</span> de imagens IA</li>
+                    <li>{p.tools}</li>
+                    <li>{p.pool}</li>
+                  </ul>
+                  <Link href={`/signup?plan=${p.id}&interval=${interval === "year" ? "year" : "month"}`}
+                    className="rounded-lg border py-2.5 text-center font-display text-xs font-bold uppercase tracking-wide transition hover:brightness-110"
+                    style={{ borderColor: p.accent, color: p.accent }}>
+                    {p.id === "FREE" ? "Começar de graça" : "Assinar"}
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
+      {/* 5. RODAPÉ */}
+      <footer className="border-t border-white/10 px-5 py-8">
+        <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 text-center">
+          <div className="font-display text-sm font-bold uppercase tracking-wide text-ink">GenBreed<span className="text-cyan">AI</span></div>
+          <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 font-mono text-[0.7rem] uppercase tracking-wide text-ink-muted">
+            <Link href="/termos" className="hover:text-cyan">Termos de uso</Link>
+            <Link href="/privacidade" className="hover:text-cyan">Privacidade</Link>
+            <Link href="/reembolso" className="hover:text-cyan">Reembolso</Link>
+          </nav>
+          <p className="font-mono text-[0.62rem] text-ink-muted">© {new Date().getFullYear()} GenBreedAI. Todos os direitos reservados.</p>
+        </div>
+      </footer>
     </main>
-  );
-}
-
-export default function LabPage() {
-  return (
-    <Suspense fallback={<main className="mx-auto max-w-4xl px-4 pb-28 pt-5 text-ink-muted">Carregando laboratório…</main>}>
-      <LabInner />
-    </Suspense>
   );
 }

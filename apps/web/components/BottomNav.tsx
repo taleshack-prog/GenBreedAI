@@ -15,12 +15,12 @@ const icons: Record<string, React.ReactNode> = {
 const profilePath = <><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0114 0" /></>;
 
 const TABS = [
-  { href: "/", key: "lab", label: "Laboratório" },
-  { href: "/species", key: "species", label: "Espécies" },
-  { href: "/crosses", key: "crosses", label: "Cruzamentos" },
-  { href: "/gene-bank", key: "genome", label: "Gene Bank" },
-  { href: "/market", key: "market", label: "Mercado" },
-  { href: "/profile", key: "profile", label: "Perfil" },
+  { href: "/app", key: "lab", label: "Laboratório" },
+  { href: "/app/species", key: "species", label: "Espécies" },
+  { href: "/app/crosses", key: "crosses", label: "Cruzamentos" },
+  { href: "/app/gene-bank", key: "genome", label: "Gene Bank" },
+  { href: "/app/market", key: "market", label: "Mercado" },
+  { href: "/app/profile", key: "profile", label: "Perfil" },
 ];
 
 export function BottomNav() {
@@ -29,7 +29,7 @@ export function BottomNav() {
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-cyan/15 bg-bg-900/95 backdrop-blur">
       <div className="mx-auto flex max-w-2xl items-stretch justify-around px-2 py-2">
         {TABS.map((t) => {
-          const active = t.href === "/" ? path === "/" : path.startsWith(t.href);
+          const active = t.href === "/app" ? path === "/app" : path.startsWith(t.href);
           const color = active ? "#00F0FF" : "#9E9E9E";
           return (
             <Link key={t.href} href={t.href} className="flex flex-1 flex-col items-center gap-1 py-1">

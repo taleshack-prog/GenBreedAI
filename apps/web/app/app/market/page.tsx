@@ -1,4 +1,4 @@
-import { Screen, ComingSoon } from "../../components/Screen";
+import { Screen, ComingSoon } from "../../../components/Screen";
 export default function MarketPage() {
   return (
     <Screen title="Mercado" subtitle="Comércio com escrow — exclusivo PhD Breeder">

@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { listSpecimens, generateImage, type ApiSpecimen } from "../../../lib/api";
-import { CapsuleCard } from "../../../components/CapsuleCard";
-import { GenotypeChips } from "../../../components/Genome";
-import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../lib/reveal";
+import { listSpecimens, generateImage, type ApiSpecimen } from "../../../../lib/api";
+import { CapsuleCard } from "../../../../components/CapsuleCard";
+import { GenotypeChips } from "../../../../components/Genome";
+import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../../lib/reveal";
 import { speciesInfo } from "@genbreedai/shared";
 
 const QTL_LABEL: Record<string,string> = { porte:"Porte", vigor:"Vigor", beleza:"Beleza", temperamento:"Temperamento", rosetas:"Rosetas" };
@@ -111,7 +111,7 @@ export default function RevealPage() {
           className="flex w-full items-center justify-between rounded-xl border border-cyan/30 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan">
           <span>⌗ Ver Genoma (resumo)</span><span>{showGenome ? "▲" : "▼"}</span>
         </button>
-        <a href={`/genome/${specimen.id}`} className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-purple transition hover:bg-purple/10">
+        <a href={`/app/genome/${specimen.id}`} className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-purple transition hover:bg-purple/10">
           🧬 Genoma detalhado (árvore · F · alelos)
         </a>
       </div>
@@ -154,7 +154,7 @@ export default function RevealPage() {
         </div>
       )}
 
-      <button onClick={() => router.push("/")} className="mt-6 w-full rounded-xl border border-white/10 py-3 font-display text-sm uppercase tracking-wide text-ink-muted transition hover:text-ink">
+      <button onClick={() => router.push("/app")} className="mt-6 w-full rounded-xl border border-white/10 py-3 font-display text-sm uppercase tracking-wide text-ink-muted transition hover:text-ink">
         ← Novo cruzamento
       </button>
     </main>

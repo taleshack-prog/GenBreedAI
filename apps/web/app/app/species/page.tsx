@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { listSpecimens, type ApiSpecimen } from "../../lib/api";
-import { CapsuleCard } from "../../components/CapsuleCard";
-import { Screen, CurrencyChip, ComingSoon } from "../../components/Screen";
+import { listSpecimens, type ApiSpecimen } from "../../../lib/api";
+import { CapsuleCard } from "../../../components/CapsuleCard";
+import { Screen, CurrencyChip, ComingSoon } from "../../../components/Screen";
 
 export default function SpeciesPage() {
   const [items, setItems] = useState<ApiSpecimen[]>([]);
