@@ -44,7 +44,7 @@ function biologicalComponents(pack: string, species: string): Set<string> {
  * marcar interespecífico; tigre-de-bengala × tigre-branco (mesma
  * biologicalSpecies "panthera-tigris") também deixa de marcar.
  */
-function isInterspecific(sire: StoredSpecimen, dam: StoredSpecimen): boolean {
+export function isInterspecific(sire: StoredSpecimen, dam: StoredSpecimen): boolean {
   const sireComponents = biologicalComponents(sire.pack, sire.species);
   const damComponents = biologicalComponents(dam.pack, dam.species);
   if (sireComponents.size > 1 || damComponents.size > 1) return true;
