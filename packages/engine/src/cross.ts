@@ -49,6 +49,14 @@ export interface ParentInput {
    * interespecificidade sem dado; ver JSDoc de `hybridClass()`.
    */
   species?: string;
+  /**
+   * Fertilidade (score 0–100) já conhecida deste indivíduo, de um cruzamento
+   * anterior (ADR-0015, item 4) — só usada pro GATE de reprodução (ver
+   * `validateBreedingConstraints`). Ausente = fertilidade desconhecida, NÃO
+   * bloqueia (nunca inventa esterilidade sem dado); só `fertility === 0`
+   * explícito rejeita.
+   */
+  fertility?: number;
 }
 
 /**
@@ -60,6 +68,19 @@ export class SexMismatchError extends Error {
   constructor(public readonly sireSex: Sex, public readonly damSex: Sex) {
     super(`Cruzamento exige sire macho (M) e dam fêmea (F) — recebido sire=${sireSex}, dam=${damSex}.`);
     this.name = "SexMismatchError";
+  }
+}
+
+/**
+ * Erro TIPADO (ADR-0015, item 4): gate de reprodução — um parental com
+ * `fertility === 0` (conhecido, explícito) não pode ser sire nem dam. SÓ
+ * gate: não modela probabilidade de concepção (isso mudaria o consumo de rng
+ * dos goldens — fora de escopo desta etapa).
+ */
+export class SterileParentError extends Error {
+  constructor(public readonly parentId: string, public readonly role: "sire" | "dam") {
+    super(`Espécime estéril não pode reproduzir (${role}: "${parentId}", fertility=0).`);
+    this.name = "SterileParentError";
   }
 }
 
@@ -83,7 +104,7 @@ export interface CrossContext {
   mutationRateOverride?: number;
 }
 
-/** Validação de restrições de cruzamento (TDD §4.4, passo 1; sexo — ADR-0013). */
+/** Validação de restrições de cruzamento (TDD §4.4, passo 1; sexo — ADR-0013; fertilidade — ADR-0015). */
 export function validateBreedingConstraints(
   parentA: ParentInput,
   parentB: ParentInput,
@@ -92,6 +113,12 @@ export function validateBreedingConstraints(
   if (parentA.sex !== "M" || parentB.sex !== "F") {
     throw new SexMismatchError(parentA.sex, parentB.sex);
   }
+  // Gate de fertilidade (ADR-0015, item 4): só rejeita fertility === 0
+  // EXPLÍCITO — ausência de dado (undefined) nunca bloqueia (não inventa
+  // esterilidade sem informação). SÓ gate — não modela probabilidade de
+  // concepção (não consome rng, não muda os goldens).
+  if (parentA.fertility === 0) throw new SterileParentError(parentA.id, "sire");
+  if (parentB.fertility === 0) throw new SterileParentError(parentB.id, "dam");
   const packLoci = new Set(Object.keys(pack.loci));
   for (const p of [parentA, parentB]) {
     for (const locus of Object.keys(p.genotype.loci)) {

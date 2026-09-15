@@ -41,6 +41,7 @@ export {
   hashGenotype,
   hybridClass,
   SexMismatchError,
+  SterileParentError,
   type OffspringOption,
   type ParentInput,
   type CrossContext,
