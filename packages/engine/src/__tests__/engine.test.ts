@@ -42,17 +42,57 @@ describe("Índice de Fixação e Auras", () => {
   });
 });
 
-describe("Fertilidade", () => {
+describe("Fertilidade — F1 interespecífico, split por sexo × hybridClass (ADR-0015, item 6)", () => {
   const rng = createPrng("f");
-  // Split completo (macho×fêmea × DOCUMENTED×UNDOCUMENTED) fica em
-  // hybridization-haldane.test.ts (ADR-0015, item 6) — aqui só o caso base
-  // (macho, qualquer classe → estéril), pra manter este arquivo compilando.
-  it("F1 interespecífico, macho → Haldane (0, STERILE)", () => {
+
+  it("SAME_SPECIES (intraespécie) → 100, haldaneStatus NONE, independente do sexo", () => {
+    const m = fertilityScore("F1", 0, { sex: "M", hybridClass: "SAME_SPECIES", rng });
+    const f = fertilityScore("F1", 0, { sex: "F", hybridClass: "SAME_SPECIES", rng });
+    expect(m.score).toBe(100); expect(m.haldaneStatus).toBe("NONE"); expect(m.haldaneSterile).toBe(false);
+    expect(f.score).toBe(100); expect(f.haldaneStatus).toBe("NONE"); expect(f.haldaneSterile).toBe(false);
+  });
+
+  it("macho, DOCUMENTED_FERTILE_FEMALE → 0, STERILE (classe NÃO importa pro macho)", () => {
+    const r = fertilityScore("F1", 0, { sex: "M", hybridClass: "DOCUMENTED_FERTILE_FEMALE", rng });
+    expect(r.score).toBe(0); expect(r.haldaneStatus).toBe("STERILE"); expect(r.haldaneSterile).toBe(true);
+  });
+
+  it("macho, UNDOCUMENTED → 0, STERILE (idêntico ao caso DOCUMENTED — a classe não muda o resultado do macho)", () => {
     const r = fertilityScore("F1", 0, { sex: "M", hybridClass: "UNDOCUMENTED", rng });
     expect(r.score).toBe(0); expect(r.haldaneStatus).toBe("STERILE"); expect(r.haldaneSterile).toBe(true);
   });
+
+  it("fêmea, DOCUMENTED_FERTILE_FEMALE → faixa 50–80, REDUCED", () => {
+    for (let i = 0; i < 50; i++) {
+      const r = fertilityScore("F1", 0, { sex: "F", hybridClass: "DOCUMENTED_FERTILE_FEMALE", rng: createPrng(`doc-${i}`) });
+      expect(r.score).toBeGreaterThanOrEqual(50); expect(r.score).toBeLessThanOrEqual(80);
+      expect(r.haldaneStatus).toBe("REDUCED"); expect(r.haldaneSterile).toBe(false);
+    }
+  });
+
+  it("fêmea, UNDOCUMENTED → faixa 5–15, REDUCED", () => {
+    for (let i = 0; i < 50; i++) {
+      const r = fertilityScore("F1", 0, { sex: "F", hybridClass: "UNDOCUMENTED", rng: createPrng(`und-${i}`) });
+      expect(r.score).toBeGreaterThanOrEqual(5); expect(r.score).toBeLessThanOrEqual(15);
+      expect(r.haldaneStatus).toBe("REDUCED"); expect(r.haldaneSterile).toBe(false);
+    }
+  });
+
+  it("determinismo: mesma seed → mesma fertilidade da fêmea (nas duas classes)", () => {
+    const a1 = fertilityScore("F1", 0, { sex: "F", hybridClass: "DOCUMENTED_FERTILE_FEMALE", rng: createPrng("det-fem") });
+    const a2 = fertilityScore("F1", 0, { sex: "F", hybridClass: "DOCUMENTED_FERTILE_FEMALE", rng: createPrng("det-fem") });
+    expect(a1.score).toBe(a2.score);
+    const b1 = fertilityScore("F1", 0, { sex: "F", hybridClass: "UNDOCUMENTED", rng: createPrng("det-fem-2") });
+    const b2 = fertilityScore("F1", 0, { sex: "F", hybridClass: "UNDOCUMENTED", rng: createPrng("det-fem-2") });
+    expect(b1.score).toBe(b2.score);
+  });
+
   it("depressão endogâmica F=0.25 → −20%", () => {
     expect(fertilityScore("LINE", 0.25, { sex: "M", hybridClass: "SAME_SPECIES", rng }).score).toBeCloseTo(80, 6);
+  });
+
+  it("anti-P2W: fertilityScore/cross() não recebem tier (fertilityScore tem 3 params fixos)", () => {
+    expect(fertilityScore.length).toBe(3);
   });
 });
 
