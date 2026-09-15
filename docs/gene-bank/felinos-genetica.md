@@ -26,6 +26,43 @@ biologia felina. Compatível com o arco Pumajaguar existente (o loco A é mantid
 | **Ma** | Juba (poligênico, dependente de andrógenos — simplificado) | `Ma` > `ma` (dominância INCOMPLETA) | `Ma/Ma` = juba completa (leão); `Ma/ma` = juba parcial/menor (híbrido tipo lígre); `ma/ma` = sem juba |
 | **S** | KIT (manchas brancas) | `S` (bicolor/malhas) > `s` | `S_` = manchas brancas (bicolor/piebald) |
 
+## Locus ligado ao X — O (laranja)
+
+**Adição (ADR-0013).** O gene real do laranja em felinos é **ligado ao
+cromossomo X** — não se comporta como os loci autossômicos acima (um par de
+alelos por indivíduo, dominância simples). Por isso fica documentado à parte.
+
+| Loco | Gene real | Alelos | Ligação | Genótipos possíveis |
+|---|---|---|---|---|
+| **O** | Laranja/feomelanina (ligado ao X) | `O` (laranja) / `o` (não-laranja) | Ligado ao X | Macho (XY): **hemizigoto** — `O` ou `o` (um alelo só, nunca os dois). Fêmea (XX): `O/O`, `O/o` ou `o/o`. |
+
+**Interações do O:**
+- **O mascara A**: laranja é pigmento feomelanina, uma via diferente da que
+  `A` controla (eumelanina) — com `O` presente e ativo, a cor de base vai pra
+  laranja independente do genótipo em `A`.
+- **O NÃO mascara P**: o tipo de padrão (rosetas/listras/pintas/uniforme)
+  continua vindo de `P` normalmente — só a COR do padrão muda pra laranja.
+- **Fêmea O/o = MOSAICO** (tartaruga): por inativação aleatória do X
+  (lyonização), cada região da pele expressa só um dos dois X — o resultado é
+  um mosaico de manchas laranja e manchas na cor que `A` determinaria. Não é
+  um terceiro alelo — é o efeito biológico já esperado de heterozigose num
+  loco ligado ao X.
+- **d/d (diluição, já existente) dilui o laranja → creme.**
+- **B não altera a cor do laranja** — `B` (TYRP1) só afeta a via eumelanina;
+  gatos `O` ficam laranja/creme independentemente do alelo em `B`.
+- **c^s (pontos, já existente) + O → colorpoint ruivo** (extremidades numa cor
+  laranja/creme mais escura sobre corpo mais claro).
+- **W (branco dominante, já existente) mascara tudo**, `O` incluso — mesma
+  regra que já mascara `P`/`B` hoje.
+- **S (manchas brancas, já existente) + fêmea O/o → calico** (mosaico +
+  manchas brancas).
+
+**Restrição biológica real:** a mutação `O` só é modelada em **Felis catus**
+(raças de gato doméstico) — felinos selvagens (onça, tigre, leão etc.) ficam
+fixados em `o` (não-laranja); "laranja" nesses casos continua vindo só da
+combinação `a/a` + tom de `Bd`, como hoje. Aneuploidias (ex.: macho XXY
+tartaruga, condição real porém rara) estão fora do escopo — ver ADR-0013.
+
 **QTL felinos (contínuos, HERDÁVEIS como média parental — TDD §4.1):** `porte` (tamanho/robustez do animal no retrato: 0=pequeno … 1=muito grande), `vigor` (musculatura), `beleza` (acabamento/simetria da pelagem), `rosetas` (intensidade
 do padrão — "marcas fantasma"). Herdabilidade conforme TDD §4.1.
 
@@ -35,7 +72,11 @@ do padrão — "marcas fantasma"). Herdabilidade conforme TDD §4.1.
 1. **W_** (branco dominante) → animal **branco**, mascara cor e padrão.
 2. **C**: `cc`/`c^a` → **albino** (branco/creme, olhos claros); `c^s` → corpo
    claro com **extremidades pigmentadas** (pointed).
-3. **A_** (melanismo) → base escura; padrão vira "marcas fantasma".
+3. **A_** (melanismo) ou **O** (laranja, ligado ao X — ver seção própria acima)
+   definem a via de pigmento: eumelanina (`A`) vs. feomelanina (`O`). Macho `O`
+   ou fêmea `O/O` → laranja, `A` deixa de se expressar. Fêmea `O/o` → MOSAICO
+   (regiões laranja + regiões conforme `A`). Sem `O` (macho `o`, fêmea `o/o`),
+   a via segue só por `A`: base escura, padrão vira "marcas fantasma".
 4. **B**+**D** definem o tom da eumelanina (preto/chocolate/canela × denso/diluído).
 5. **P** define o tipo de padrão (rosetas/listras/pintas/ticked), modulado por
    `rosetas` (QTL).
@@ -72,3 +113,6 @@ branco W, manchas S), permitindo o jogo mendeliano completo dentro da espécie.
   golden tests do TDD §4.5 (que usam só A) permanecem válidos e verdes.
 - Regra Anti-P2W, determinismo e Regra de Haldane (F1 interespecífico) inalterados.
 - Registrado em ADR-0010.
+- Sexo cromossômico (XX/XY) e o loco ligado ao X **O** (laranja) estendem o
+  pack FELINE sem alterar `A`, `P` ou `Bd`, nem o arco Pumajaguar — Wright F
+  segue autossômico, sexo não entra na `cacheKey`. Registrado em ADR-0013.
