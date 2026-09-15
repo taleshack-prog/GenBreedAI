@@ -8,7 +8,7 @@
  */
 
 import type { Genotype, Phenotype } from "@genbreedai/shared";
-import type { LocusDef, SpeciesPack } from "./types";
+import type { LocusDef, PigmentOverrideRule, SpeciesPack } from "./types";
 import { baseAllele, isMutant } from "./gamete";
 
 /** Chave de heterozigoto normalizada, ex.: ("F","f") → "F|f" pela ordem do rank. */
@@ -46,6 +46,67 @@ function expressLocus(def: LocusDef, rawA: string, rawB: string): string {
 }
 
 /**
+ * Resolve o descritor de UM loco LIGADO AO X (ADR-0013) — 1 alelo (macho
+ * hemizigoto) ou 2 (fêmea). Fêmea heterozigota NÃO é dominância clássica: é
+ * MOSAICO por inativação do X — o pack declara o rótulo via
+ * `heteroPhenotype`, mesma convenção usada pra INCOMPLETE/CODOMINANT acima.
+ */
+function expressXLocus(def: LocusDef, alleles: readonly string[]): string {
+  if (alleles.length === 1) {
+    const a = baseAllele(alleles[0]!);
+    return def.phenotypeByAllele[a] ?? a;
+  }
+  const [rawA, rawB] = alleles as [string, string];
+  const a = baseAllele(rawA);
+  const b = baseAllele(rawB);
+  if (a === b) return def.phenotypeByAllele[a] ?? a;
+  const key = heteroKey(def, a, b);
+  const hetero = def.heteroPhenotype?.[key];
+  if (hetero) return hetero;
+  return `${def.phenotypeByAllele[a] ?? a}+${def.phenotypeByAllele[b] ?? b}`;
+}
+
+/**
+ * Resolve a regra `pigmentOverride` (ADR-0013) a partir do loco ligado ao X.
+ * Retorna `null` quando o zigoto não tem dado nesse loco (genótipo legado —
+ * NUNCA um erro, só "regra não se aplica").
+ */
+function resolvePigmentOverride(
+  rule: PigmentOverrideRule,
+  zygote: Genotype,
+  pack: SpeciesPack,
+  loci: Record<string, string>,
+): { coatPigment: "EUMELANIN" | "PHEOMELANIN" | "MOSAIC"; pigmentDiluted: boolean; ghostPattern: boolean } | null {
+  const rawX = zygote.xLoci?.[rule.xLocus];
+  if (!rawX) return null;
+  const alleles = rawX.map(baseAllele);
+
+  let coatPigment: "EUMELANIN" | "PHEOMELANIN" | "MOSAIC";
+  if (alleles.length === 1) {
+    coatPigment = alleles[0] === rule.activeAllele ? "PHEOMELANIN" : "EUMELANIN";
+  } else {
+    const bothActive = alleles.every((a) => a === rule.activeAllele);
+    const noneActive = alleles.every((a) => a !== rule.activeAllele);
+    coatPigment = bothActive ? "PHEOMELANIN" : noneActive ? "EUMELANIN" : "MOSAIC";
+  }
+
+  let pigmentDiluted = false;
+  if (rule.dilutionLocus && rule.dilutedAllele) {
+    const pair = zygote.loci[rule.dilutionLocus];
+    if (pair) pigmentDiluted = baseAllele(pair[0]) === rule.dilutedAllele && baseAllele(pair[1]) === rule.dilutedAllele;
+  }
+
+  let ghostPattern = false;
+  if (coatPigment === "PHEOMELANIN" && rule.patternLocus && rule.uniformPatternAllele) {
+    const pDef = pack.loci[rule.patternLocus];
+    const uniformLabel = pDef?.phenotypeByAllele[rule.uniformPatternAllele];
+    ghostPattern = uniformLabel !== undefined && loci[rule.patternLocus] === uniformLabel;
+  }
+
+  return { coatPigment, pigmentDiluted, ghostPattern };
+}
+
+/**
  * Expressa o fenótipo completo de um zigoto sob um data pack.
  */
 export function expressPhenotype(
@@ -64,7 +125,7 @@ export function expressPhenotype(
     if (match) viable = false;
   }
 
-  // 2. Dominância por loco.
+  // 2. Dominância por loco (autossômico).
   const loci: Record<string, string> = {};
   for (const [locusName, pair] of Object.entries(zygote.loci)) {
     const def = pack.loci[locusName];
@@ -73,6 +134,17 @@ export function expressPhenotype(
       continue;
     }
     loci[locusName] = expressLocus(def, pair[0], pair[1]);
+  }
+
+  // 2b. Loci ligados ao X (ADR-0013) — hemizigoto (macho) ou mosaico (fêmea
+  // heterozigota). Ausente em genótipos legados/packs sem xLoci: sem efeito.
+  for (const [locusName, alleles] of Object.entries(zygote.xLoci ?? {})) {
+    const def = pack.xLoci[locusName];
+    if (!def) {
+      loci[locusName] = alleles.map(baseAllele).join("/");
+      continue;
+    }
+    loci[locusName] = expressXLocus(def, alleles);
   }
 
   // 3. Epistasia — sobrescreve o alvo quando o modificador está presente.
@@ -96,10 +168,26 @@ export function expressPhenotype(
     }
   }
 
-  // Mutação: presente se qualquer alelo do zigoto carrega o rótulo indelével.
-  const hasMutation = Object.values(zygote.loci).some((pair) =>
-    pair.some(isMutant),
-  );
+  // 4. Interações tipadas (ADR-0013) — hoje só pigmentOverride. Formato
+  // PRÓPRIO, não reaproveita nem altera as regras de epistasia acima.
+  let coatPigment: Phenotype["coatPigment"];
+  let pigmentDiluted: boolean | undefined;
+  let ghostPattern: boolean | undefined;
+  for (const rule of pack.interactionRules ?? []) {
+    if (rule.kind === "pigmentOverride") {
+      const resolved = resolvePigmentOverride(rule, zygote, pack, loci);
+      if (resolved) {
+        coatPigment = resolved.coatPigment;
+        pigmentDiluted = resolved.pigmentDiluted;
+        ghostPattern = resolved.ghostPattern;
+      }
+    }
+  }
 
-  return { loci, qtl: { ...zygote.qtl }, viable, epistasis, hasMutation };
+  // Mutação: presente se qualquer alelo do zigoto (autossômico ou ligado ao X) carrega o rótulo indelével.
+  const hasMutation =
+    Object.values(zygote.loci).some((pair) => pair.some(isMutant)) ||
+    Object.values(zygote.xLoci ?? {}).some((alleles) => alleles.some(isMutant));
+
+  return { loci, qtl: { ...zygote.qtl }, viable, epistasis, hasMutation, coatPigment, pigmentDiluted, ghostPattern };
 }

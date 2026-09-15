@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { cross, punnettLocus, genotypeProbability, jointGenotypeProbability, expressPhenotype, CANINE_PACK } from "../../index";
 import { OMEGA_II, DANECOLLIE_BETA, DANECOLLIE_PEDIGREE } from "../fixtures";
 const O = OMEGA_II.loci, B = DANECOLLIE_BETA.loci;
-const omega = { id: "omegaII", genotype: OMEGA_II, generation: 2 };
-const beta = { id: "beta", genotype: DANECOLLIE_BETA, generation: 1 };
+const omega = { id: "omegaII", genotype: OMEGA_II, generation: 2, sex: "M" as const };
+const beta = { id: "beta", genotype: DANECOLLIE_BETA, generation: 1, sex: "F" as const };
 const ctx = { pack: CANINE_PACK, pedigree: DANECOLLIE_PEDIGREE, interspecific: false, targetLoci: ["M","A"], generationsUnderSelection: 3 };
 describe("Danecollie F3 (TDD §4.5)", () => {
   it("m/m reaparece em EXATOS 25%", () => { expect(genotypeProbability(O.M!, B.M!, "m/m")).toBe(0.25); });

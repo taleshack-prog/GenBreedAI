@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { cross, hashGenotype, FELINE_PACK } from "../index";
 import { DELTA_F1, ONCA_NEGRA, PUMAJAGUAR_PEDIGREE } from "./fixtures";
-const delta = { id: "delta", genotype: DELTA_F1, generation: 1 };
-const negra = { id: "negra", genotype: ONCA_NEGRA, generation: 0 };
+const delta = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "M" as const };
+const negra = { id: "negra", genotype: ONCA_NEGRA, generation: 0, sex: "F" as const };
 const ctx = { pack: FELINE_PACK, pedigree: PUMAJAGUAR_PEDIGREE, interspecific: true, targetLoci: ["A"], generationsUnderSelection: 2 };
 const TIERS = ["FREE","JUNIOR","SENIOR","PHD"] as const;
 describe("Anti-P2W", () => {

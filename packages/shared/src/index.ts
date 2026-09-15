@@ -42,10 +42,25 @@ export type Allele = string;
 /** Par diploide de alelos em um loco. */
 export type LocusPair = [Allele, Allele];
 
-/** Genótipo: pares alélicos por loco + vetor de QTLs contínuos em [0,1]. */
+/** Sexo cromossômico (ADR-0013). XY = macho, XX = fêmea. Aneuploidias fora de escopo. */
+export type Sex = "M" | "F";
+
+/**
+ * Alelo(s) de UM loco ligado ao X num indivíduo: 1 elemento = macho
+ * (hemizigoto, um X só); 2 elementos = fêmea (XX). Nunca 0 nem >2 (ADR-0013).
+ */
+export type XLocusAlleles = [Allele] | [Allele, Allele];
+
+/**
+ * Genótipo: pares alélicos autossômicos por loco + vetor de QTLs contínuos em
+ * [0,1]. `xLoci` é OPCIONAL — ausente = sem dado (packs sem loci ligados ao X,
+ * ex. canino; ou genótipos legados anteriores à ADR-0013, tratados como "sem
+ * override" pelo motor, nunca como erro).
+ */
 export interface Genotype {
   loci: Record<string, LocusPair>;
   qtl: Record<string, number>;
+  xLoci?: Record<string, XLocusAlleles>;
 }
 
 // ─── Auras (TDD §4.3) ─────────────────────────────────────────────────────────
@@ -65,6 +80,16 @@ export interface Phenotype {
   epistasis: string[];
   /** True se algum alelo mutante ("mutação") está presente. */
   hasMutation: boolean;
+  /**
+   * Via de pigmento resultante de uma regra `pigmentOverride` (ADR-0013),
+   * ex.: locus O ligado ao X felino. Ausente em packs/indivíduos sem essa
+   * regra ou sem dado em `xLoci` — nunca um valor "adivinhado".
+   */
+  coatPigment?: "EUMELANIN" | "PHEOMELANIN" | "MOSAIC";
+  /** True quando o loco de diluição autossômico (ex.: D=d/d) dilui o pigmento acima. */
+  pigmentDiluted?: boolean;
+  /** True quando PHEOMELANIN + padrão "uniforme" — listras/rosetas residuais fracas. */
+  ghostPattern?: boolean;
 }
 
 export interface FertilityResult {
@@ -95,6 +120,8 @@ export interface CrossResultSpecimen {
   aura: Aura;
   generation: number;
   method: BreedingMethod;
+  /** Sexo cromossômico do zigoto (ADR-0013) — sorteado pelo RNG da seed, nunca opcional. */
+  sex: Sex;
 }
 
 export interface CrossResult {

@@ -3,6 +3,10 @@
  * ADR-0010). Loci: A (melanismo, Gene-Bank original), P (padrão/Taqpep),
  * B (TYRP1), C (série albino/TYR), D (diluição/MLPH), W (branco dominante/KIT),
  * S (manchas brancas/KIT). Compatível com o arco Pumajaguar (que usa só A).
+ *
+ * xLoci: O (laranja, ligado ao X — ADR-0013, gene-bank §"Locus ligado ao X").
+ * Mutação O só é modelada em Felis catus (Etapa 5/dados); felinos selvagens
+ * ficam fixados em `o` — A, P e Bd continuam intocados por esta extensão.
  */
 import { DEFAULT_MUTATION_RATE } from "@genbreedai/shared";
 import type { SpeciesPack } from "../types";
@@ -52,10 +56,26 @@ export const FELINE_PACK: SpeciesPack = {
     Ec: { name: "Ec", alleles: ["Ec^t", "Ec^l", "Ec^n"], dominance: "COMPLETE", dominanceRank: ["Ec^t", "Ec^l", "Ec^n"],
       phenotypeByAllele: { "Ec^t": "orelhas tufadas (lince)", "Ec^l": "orelhas grandes (serval)", "Ec^n": "orelhas normais" }, mutationRate: µ },
   },
+  xLoci: {
+    // Laranja (ADR-0013) — mascara a via de A (eumelanina→feomelanina), NÃO
+    // mascara P. Fêmea O/o = mosaico (inativação do X), não dominância.
+    O: { name: "O", alleles: ["O", "o"], dominance: "CODOMINANT", dominanceRank: ["O", "o"],
+      phenotypeByAllele: { O: "laranja", o: "não-laranja" }, heteroPhenotype: { "O|o": "mosaico" }, mutationRate: µ },
+  },
   epistasis: [
     // Branco dominante mascara cor e padrão.
     { modifierLocus: "W", whenAllelePresent: "W", targetLocus: "P", override: "branco", label: "branco-dominante" },
     { modifierLocus: "W", whenAllelePresent: "W", targetLocus: "B", override: "branco", label: "branco-dominante-cor" },
+  ],
+  // Interação tipada (ADR-0013): O decide a via de pigmento; P continua
+  // definindo o padrão. Formato PRÓPRIO — não reaproveita/altera `epistasis`.
+  interactionRules: [
+    {
+      kind: "pigmentOverride", xLocus: "O", activeAllele: "O",
+      dilutionLocus: "D", dilutedAllele: "d",
+      patternLocus: "P", uniformPatternAllele: "P^t",
+      label: "laranja-ligado-ao-x",
+    },
   ],
   lethals: [],
   quantitative: { porte: { mean: 0.5, h2: 0.5 }, vigor: { mean: 0.5, h2: 0.35 }, beleza: { mean: 0.5, h2: 0.25 }, rosetas: { mean: 0.5, h2: 0.6 } },

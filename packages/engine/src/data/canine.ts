@@ -51,6 +51,9 @@ export const CANINE_PACK: SpeciesPack = {
     Tl: { name: "Tl", alleles: ["Tl^l", "Tl^c", "Tl^b"], dominance: "COMPLETE", dominanceRank: ["Tl^l", "Tl^c", "Tl^b"],
       phenotypeByAllele: { "Tl^l": "cauda longa", "Tl^c": "cauda enrolada", "Tl^b": "cauda curta" }, mutationRate: µ },
   },
+  // Nenhum loco canino é ligado ao X (ADR-0013) — sexo continua universal
+  // (todo canino tem sexo cromossômico), só não há gene aqui pra carregar.
+  xLoci: {},
   epistasis: [{ modifierLocus: "H", whenAllelePresent: "H", targetLocus: "M", targetWhenAllelePresent: "M",
     override: "arlequim (fundo branco, manchas)", label: "harlequin-sobre-merle" }],
   lethals: [{ locus: "M", genotype: ["M", "M"], label: "duplo-merle-letal" }],

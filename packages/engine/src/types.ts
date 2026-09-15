@@ -6,9 +6,9 @@
  * SpeciesPack documentado (ver src/data/*). O motor nunca infere loci fora dele.
  */
 
-import type { Allele, Dominance, Genotype } from "@genbreedai/shared";
+import type { Allele, Dominance, Genotype, Sex, XLocusAlleles } from "@genbreedai/shared";
 
-export type { Allele, Dominance, Genotype };
+export type { Allele, Dominance, Genotype, Sex, XLocusAlleles };
 
 /**
  * Regra de epistasia: quando o loco `modifierLocus` contém `whenAllelePresent`,
@@ -37,6 +37,17 @@ export interface LethalCombo {
 }
 
 /**
+ * Expressão condicionada ao sexo de um traço (preparação p/ bovinos/ovinos —
+ * TIPO SÓ, sem uso na resolução ainda). Default BOTH quando ausente.
+ *   BOTH            — expressa igual nos dois sexos (padrão).
+ *   SEX_LIMITED_F   — só se expressa em fêmeas (ex.: produção de leite).
+ *   SEX_LIMITED_M   — só se expressa em machos (ex.: chifres em certas raças).
+ *   SEX_INFLUENCED  — expressa nos dois sexos, mas com dominância diferente
+ *                     conforme o sexo (ex.: calvície em carneiros).
+ */
+export type SexExpression = "BOTH" | "SEX_LIMITED_F" | "SEX_LIMITED_M" | "SEX_INFLUENCED";
+
+/**
  * Definição de um loco dentro de um data pack.
  */
 export interface LocusDef {
@@ -57,7 +68,39 @@ export interface LocusDef {
   /** Descritores de heterozigotos para dominância incompleta/codominante. */
   heteroPhenotype?: Record<string, string>;
   mutationRate: number;
+  /** Ver `SexExpression`. Default BOTH — só tipo, não consultado na resolução ainda. */
+  sexExpression?: SexExpression;
 }
+
+/**
+ * Regra de interação TIPADA entre um loco ligado ao X e a via de pigmento
+ * (ADR-0013) — formato PRÓPRIO, não reaproveita/altera `EpistasisRule`.
+ *
+ * `activeAllele` no loco `xLocus` desvia a via de eumelanina pra feomelanina:
+ *   macho hemizigoto com `activeAllele`, ou fêmea homozigota `activeAllele/
+ *   activeAllele` → PHEOMELANIN; fêmea heterozigota → MOSAIC (inativação do
+ *   X); nenhum `activeAllele` → EUMELANIN. O padrão (loco de `P`) não é
+ *   tocado por esta regra.
+ */
+export interface PigmentOverrideRule {
+  kind: "pigmentOverride";
+  /** Loco ligado ao X que decide a via de pigmento (ex.: "O"). */
+  xLocus: string;
+  /** Alelo desse loco que ativa a via feomelanina (ex.: "O"). */
+  activeAllele: string;
+  /** Loco autossômico de diluição (ex.: "D") — opcional. */
+  dilutionLocus?: string;
+  /** Alelo diluído desse loco (ex.: "d") — `dd` marca `pigmentDiluted`. */
+  dilutedAllele?: string;
+  /** Loco de padrão (ex.: "P") — opcional, só p/ o flag `ghostPattern`. */
+  patternLocus?: string;
+  /** Alelo desse loco cujo fenótipo resolvido conta como "padrão uniforme". */
+  uniformPatternAllele?: string;
+  label: string;
+}
+
+/** União de regras de interação tipadas. Hoje só `pigmentOverride`; extensível. */
+export type InteractionRule = PigmentOverrideRule;
 
 /**
  * Data pack de uma espécie/arquétipo: conjunto de loci + regras epistáticas +
@@ -68,7 +111,14 @@ export interface SpeciesPack {
   slug: string;
   archetype: string;
   loci: Record<string, LocusDef>;
+  /**
+   * Loci ligados ao X (ADR-0013) — mesmo shape de `loci`, resolvidos à parte
+   * por causa da hemizigose/mosaico. Pack sem nenhum: `{}` (ex.: canino).
+   */
+  xLoci: Record<string, LocusDef>;
   epistasis: EpistasisRule[];
+  /** Regras tipadas (hoje só pigmentOverride). Ausente = nenhuma. */
+  interactionRules?: InteractionRule[];
   lethals: LethalCombo[];
   /** QTLs conhecidos e sua herdabilidade h² (TDD §4.1). */
   quantitative: Record<string, { mean: number; h2: number }>;
@@ -94,5 +144,18 @@ export type Pedigree = Record<string, PedigreeNode>;
 export interface Gamete {
   loci: Record<string, Allele>;
   qtl: Record<string, number>;
+  mutations: string[];
+}
+
+/**
+ * Contribuição de UM progenitor ao sexo/loci ligados ao X do zigoto
+ * (ADR-0013). Gerada por um RNG PRÓPRIO (não o `rng` autossômico) — ver
+ * gamete.ts. `sexChromosome: "Y"` só é possível vindo de um macho; nesse
+ * caso `xLoci` vem vazio (Y não carrega loci ligados ao X).
+ */
+export interface XGameteResult {
+  sexChromosome: "X" | "Y";
+  /** 1 alelo por loco ligado ao X presente no pack — vazio se `sexChromosome === "Y"`. */
+  xLoci: Record<string, Allele>;
   mutations: string[];
 }

@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { cross, punnettLocus, genotypeProbability, wrightF, FELINE_PACK } from "../../index";
 import { DELTA_F1, ONCA_NEGRA, PUMAJAGUAR_PEDIGREE } from "../fixtures";
 const D = DELTA_F1.loci, N = ONCA_NEGRA.loci;
-const delta = { id: "delta", genotype: DELTA_F1, generation: 1 };
-const negra = { id: "negra", genotype: ONCA_NEGRA, generation: 0 };
+const delta = { id: "delta", genotype: DELTA_F1, generation: 1, sex: "M" as const };
+const negra = { id: "negra", genotype: ONCA_NEGRA, generation: 0, sex: "F" as const };
 const ctx = { pack: FELINE_PACK, pedigree: PUMAJAGUAR_PEDIGREE, interspecific: true, targetLoci: ["A"], generationsUnderSelection: 2 };
 describe("Pumajaguar BC1 (TDD §4.5)", () => {
   it("F_pedigree = 0.25 (retrocruzamento ao progenitor)", () => { expect(wrightF(PUMAJAGUAR_PEDIGREE, "delta", "negra")).toBe(0.25); });

@@ -8,6 +8,8 @@ export { createPrng, type Rng } from "./rng";
 export {
   generateGamete,
   combineGametes,
+  generateXGamete,
+  combineXGametes,
   baseAllele,
   isMutant,
 } from "./gamete";
@@ -37,6 +39,7 @@ export {
   materializeCross,
   validateBreedingConstraints,
   hashGenotype,
+  SexMismatchError,
   type OffspringOption,
   type ParentInput,
   type CrossContext,

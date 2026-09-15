@@ -12,10 +12,11 @@ import {
   type BreedingMethod,
   type CrossResult,
   type Genotype,
+  type Sex,
 } from "@genbreedai/shared";
 import type { Pedigree, SpeciesPack } from "./types";
 import { createPrng } from "./rng";
-import { generateGamete, combineGametes } from "./gamete";
+import { generateGamete, combineGametes, generateXGamete, combineXGametes } from "./gamete";
 import { expressPhenotype } from "./phenotype";
 import { wrightF } from "./wright";
 import { fertilityScore } from "./fertility";
@@ -28,6 +29,20 @@ export interface ParentInput {
   id: string;
   genotype: Genotype;
   generation: number;
+  /** Sexo cromossômico (ADR-0013). cross()/enumerateOffspring()/materializeCross() exigem parentA=M, parentB=F. */
+  sex: Sex;
+}
+
+/**
+ * Erro TIPADO (ADR-0013): cross()/enumerateOffspring()/materializeCross()
+ * exigem sire (parentA) macho e dam (parentB) fêmea — `instanceof
+ * SexMismatchError`, nunca um `Error` genérico de string solta.
+ */
+export class SexMismatchError extends Error {
+  constructor(public readonly sireSex: Sex, public readonly damSex: Sex) {
+    super(`Cruzamento exige sire macho (M) e dam fêmea (F) — recebido sire=${sireSex}, dam=${damSex}.`);
+    this.name = "SexMismatchError";
+  }
 }
 
 export interface CrossContext {
@@ -44,18 +59,29 @@ export interface CrossContext {
   mutationRateOverride?: number;
 }
 
-/** Validação de restrições de cruzamento (TDD §4.4, passo 1). */
+/** Validação de restrições de cruzamento (TDD §4.4, passo 1; sexo — ADR-0013). */
 export function validateBreedingConstraints(
   parentA: ParentInput,
   parentB: ParentInput,
   pack: SpeciesPack,
 ): void {
+  if (parentA.sex !== "M" || parentB.sex !== "F") {
+    throw new SexMismatchError(parentA.sex, parentB.sex);
+  }
   const packLoci = new Set(Object.keys(pack.loci));
   for (const p of [parentA, parentB]) {
     for (const locus of Object.keys(p.genotype.loci)) {
       if (!packLoci.has(locus)) {
         throw new Error(
           `Loco "${locus}" do espécime ${p.id} não pertence ao pack ${pack.slug}.`,
+        );
+      }
+    }
+    const packXLoci = new Set(Object.keys(pack.xLoci));
+    for (const locus of Object.keys(p.genotype.xLoci ?? {})) {
+      if (!packXLoci.has(locus)) {
+        throw new Error(
+          `Loco ligado ao X "${locus}" do espécime ${p.id} não pertence ao pack ${pack.slug}.`,
         );
       }
     }
@@ -79,12 +105,26 @@ export function hashGenotype(genotype: Genotype): string {
   return `loci{${loci}}|qtl{${qtl}}`;
 }
 
-/** Finaliza um zigoto: fenótipo, F, fertilidade, IF, aura, cacheKey. */
+/**
+ * Finaliza um zigoto: sexo+xLoci, fenótipo, F, fertilidade, IF, aura, cacheKey.
+ *
+ * O sexo/xLoci usa um RNG PRÓPRIO derivado da mesma seed (`${seed}|x`) — NUNCA
+ * o `rng` autossômico recebido em `rng`. Isso é o que garante que packs com
+ * xLoci não-vazio (ex. felino) não mudem NENHUM valor já golden-testado: o
+ * stream consumido pelos loci autossômicos/QTL/fertilidade é bit-a-bit o
+ * mesmo de antes da ADR-0013, em qualquer pack.
+ */
 function finalizeSpecimen(
   zygote: Genotype, parentA: ParentInput, parentB: ParentInput,
-  method: BreedingMethod, ctx: CrossContext, rng: ReturnType<typeof createPrng>,
+  method: BreedingMethod, ctx: CrossContext, rng: ReturnType<typeof createPrng>, seed: string,
 ): CrossResult {
-  const phenotype = expressPhenotype(zygote, ctx.pack);
+  const xRng = createPrng(`${seed}|x`);
+  const sireX = generateXGamete(parentA.sex, parentA.genotype.xLoci, ctx.pack.xLoci, xRng, ctx.mutationRateOverride);
+  const damX = generateXGamete(parentB.sex, parentB.genotype.xLoci, ctx.pack.xLoci, xRng, ctx.mutationRateOverride);
+  const { sex, xLoci } = combineXGametes(sireX, damX, Object.keys(ctx.pack.xLoci));
+  const zygoteWithX: Genotype = { ...zygote, xLoci };
+
+  const phenotype = expressPhenotype(zygoteWithX, ctx.pack);
   const fPedigree = wrightF(ctx.pedigree, parentA.id, parentB.id);
   const fertility = fertilityScore(method, fPedigree, { interspecific: ctx.interspecific ?? false, rng });
   const generation = Math.max(parentA.generation, parentB.generation) + 1;
@@ -94,7 +134,7 @@ function finalizeSpecimen(
   const aura = mapFixationToAura(fixation.index);
   const cacheKey = sha256(hashGenotype(zygote) + "|" + ctx.pack.id + "|" + CURRENT_ART_VERSION);
   return {
-    specimen: { genotype: zygote, phenotype, fPedigree: Number(fPedigree.toFixed(6)), fertility, fixationIndex: fixation.index, aura, generation, method },
+    specimen: { genotype: zygoteWithX, phenotype, fPedigree: Number(fPedigree.toFixed(6)), fertility, fixationIndex: fixation.index, aura, generation, method, sex },
     cacheKey,
   };
 }
@@ -147,7 +187,7 @@ export function cross(
   const zygote = combineGametes(gameteA, gameteB);
   // QTL poligênico: substitui a média-exata por amostra de segregação (determinística).
   zygote.qtl = segregateQtl(parentA.genotype.qtl, parentB.genotype.qtl, rng);
-  return finalizeSpecimen(zygote, parentA, parentB, method, ctx, rng);
+  return finalizeSpecimen(zygote, parentA, parentB, method, ctx, rng, seed);
 }
 
 /** Uma opção de prole enumerada (para seleção fenotípica em tiers pagos). */
@@ -226,5 +266,5 @@ export function materializeCross(
 ): CrossResult {
   validateBreedingConstraints(parentA, parentB, ctx.pack);
   const rng = createPrng(seed);
-  return finalizeSpecimen(chosenGenotype, parentA, parentB, method, ctx, rng);
+  return finalizeSpecimen(chosenGenotype, parentA, parentB, method, ctx, rng, seed);
 }

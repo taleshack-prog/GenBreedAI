@@ -8,8 +8,8 @@
  */
 
 import { MUTATION_TAG } from "@genbreedai/shared";
-import type { Genotype } from "@genbreedai/shared";
-import type { Gamete, SpeciesPack } from "./types";
+import type { Genotype, Sex, XLocusAlleles } from "@genbreedai/shared";
+import type { Gamete, LocusDef, SpeciesPack, XGameteResult } from "./types";
 import type { Rng } from "./rng";
 
 /** Marcador anexado a um alelo mutante. Ex.: "b" → "b⟦mutação⟧". */
@@ -103,4 +103,102 @@ export function combineGametes(gameteA: Gamete, gameteB: Gamete): Genotype {
   }
 
   return { loci, qtl };
+}
+
+// ─── Ligado ao X (ADR-0013) ───────────────────────────────────────────────────
+//
+// generateXGamete/combineXGametes usam um RNG PRÓPRIO (xRng — ver cross.ts),
+// NUNCA o `rng` autossômico acima. Isso é deliberado: preserva bit-a-bit a
+// sequência de sorteios que generateGamete() já consumia pros loci
+// autossômicos, mesmo em packs com xLoci não-vazio (ex. felino) — os 4 golden
+// tests continuam determinísticos com os MESMOS valores de sempre.
+
+/** Alelo default quando o indivíduo não tem dado no loco ligado ao X (genótipo
+ * legado, anterior à ADR-0013): o alelo menos dominante do rank — convenção
+ * "selvagem"/ancestral (ex.: `o` em O, "felinos selvagens = o" no gene-bank).
+ * Nunca lança erro por ausência — só teria erro por INCOMPATIBILIDADE de pack
+ * (ver validateXLoci em cross.ts). */
+function defaultXAllele(def: LocusDef): string {
+  return def.dominanceRank[def.dominanceRank.length - 1] ?? def.alleles[0]!;
+}
+
+/**
+ * Gameta ligado ao X de UM progenitor.
+ *   Macho (hemizigoto): 50% X (carrega seu único alelo por loco), 50% Y
+ *   (xLoci vazio — Y não carrega loci ligados ao X).
+ *   Fêmea: sempre X; para cada loco, sorteia qual das duas cópias herdar.
+ */
+export function generateXGamete(
+  sex: Sex,
+  xGenotype: Record<string, XLocusAlleles> | undefined,
+  xLociDefs: Record<string, LocusDef>,
+  xRng: Rng,
+  mutationRateOverride?: number,
+): XGameteResult {
+  const names = Object.keys(xLociDefs);
+
+  if (sex === "M") {
+    const contributesX = xRng.next() < 0.5;
+    if (!contributesX) return { sexChromosome: "Y", xLoci: {}, mutations: [] };
+    return { sexChromosome: "X", ...drawXAlleles(names, xGenotype, xLociDefs, xRng, mutationRateOverride, /* femaleChoice */ false) };
+  }
+  return { sexChromosome: "X", ...drawXAlleles(names, xGenotype, xLociDefs, xRng, mutationRateOverride, /* femaleChoice */ true) };
+}
+
+function drawXAlleles(
+  names: string[],
+  xGenotype: Record<string, XLocusAlleles> | undefined,
+  xLociDefs: Record<string, LocusDef>,
+  xRng: Rng,
+  mutationRateOverride: number | undefined,
+  femaleChoice: boolean,
+): { xLoci: Record<string, string>; mutations: string[] } {
+  const xLoci: Record<string, string> = {};
+  const mutations: string[] = [];
+  for (const name of names) {
+    const def = xLociDefs[name]!;
+    const pair = xGenotype?.[name];
+    let allele: string;
+    if (!pair) {
+      allele = defaultXAllele(def);
+    } else if (femaleChoice && pair.length === 2) {
+      allele = xRng.next() < 0.5 ? pair[0] : pair[1]!;
+    } else {
+      allele = pair[0]!; // macho hemizigoto: só há 1 alelo, sem sorteio
+    }
+
+    const µ = mutationRateOverride ?? def.mutationRate;
+    if (µ > 0 && xRng.chance(µ)) {
+      const alternatives = def.alleles.filter((a) => a !== baseAllele(allele));
+      if (alternatives.length > 0) {
+        const mutant = xRng.pick(alternatives);
+        allele = `${mutant}${MUT_MARK}`;
+        mutations.push(name);
+      }
+    }
+    xLoci[name] = allele;
+  }
+  return { xLoci, mutations };
+}
+
+/**
+ * Funde a contribuição ligada ao X dos dois progenitores num zigoto.
+ * O SEXO do zigoto é o que o gameta do PAI decidiu (X→fêmea, Y→macho) — como
+ * na biologia real, é o espermatozoide que determina o sexo da prole.
+ */
+export function combineXGametes(
+  sireX: XGameteResult,
+  damX: XGameteResult,
+  xLocusNames: string[],
+): { sex: Sex; xLoci: Record<string, XLocusAlleles> } {
+  if (damX.sexChromosome !== "X") {
+    throw new Error("combineXGametes: a mãe sempre contribui X — gameta materno veio Y (contrato violado; validar sex=F antes de chamar).");
+  }
+  const xLoci: Record<string, XLocusAlleles> = {};
+  if (sireX.sexChromosome === "Y") {
+    for (const name of xLocusNames) xLoci[name] = [damX.xLoci[name]!];
+    return { sex: "M", xLoci };
+  }
+  for (const name of xLocusNames) xLoci[name] = [sireX.xLoci[name]!, damX.xLoci[name]!];
+  return { sex: "F", xLoci };
 }

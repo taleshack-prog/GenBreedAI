@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { cross, punnettPhenotypeLocus, wrightF, CANINE_PACK } from "../../index";
 import { GOLDEN_RETRIEVER, POODLE, GOLDENDOODLE_PEDIGREE } from "../fixtures";
-const A = { id: "golden", genotype: GOLDEN_RETRIEVER, generation: 0 };
-const B = { id: "poodle", genotype: POODLE, generation: 0 };
+const A = { id: "golden", genotype: GOLDEN_RETRIEVER, generation: 0, sex: "M" as const };
+const B = { id: "poodle", genotype: POODLE, generation: 0, sex: "F" as const };
 const ctx = { pack: CANINE_PACK, pedigree: GOLDENDOODLE_PEDIGREE, interspecific: false, targetLoci: ["F"], generationsUnderSelection: 1 };
 describe("Goldendoodle F1 (TDD §4.5)", () => {
   it("F_pedigree = 0.00", () => { expect(wrightF(GOLDENDOODLE_PEDIGREE, "golden", "poodle")).toBe(0); });
