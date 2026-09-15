@@ -45,9 +45,42 @@ orientações colapsa exatamente nesse Δ — ver
 que verifica isso EXATO por indivíduo, com `|Δporte − m×Δ| < 1e-9`, excluindo
 só os pares em que `clamp01()` atuou — contados e reportados no teste).
 
-> **VALORES DAS TABELAS W&H USADOS:** _[Tales preenche — não inventado aqui.
-> Precisa dos números de porte adulto Shire/Shetland e da F1 recíproca nas
-> tabelas originais do artigo pra derivar o m empírico correspondente.]_
+### Coeficientes derivados (W&H 1938) — efeito materno no porte
+
+**Origem:** derivados por Tales Hack (geneticista responsável) a partir de
+Walton & Hammond (1938), Proc R Soc B 125:311–335, cruzamentos recíprocos
+Shire × Shetland.
+
+**Método de derivação:** os F1 recíprocos são geneticamente idênticos
+(mesmo genoma nuclear médio). Portanto:
+  diferença recíproca = m × (Shire − Shetland)
+Um cruzado de mãe Shetland com porte igual ao Shetland puro implica m = 1.
+
+**Valores adotados:**
+| Fase | m | Faixa |
+|---|---|---|
+| Nascimento | 0,75 | 0,67 – 1,0 |
+| Maturidade | ~0,25 | — |
+
+**Dinâmica:** o efeito materno decai do nascimento à maturidade, mas persiste
+(não zera). Corroborado qualitativamente por fontes secundárias: cruzados de
+mãe Shetland, aos 3 anos, eram maiores que Shetland puro e menores que os
+cruzados de mãe Shire.
+
+**Definição formal vs. jogo:** o m de Falconer é uma regressão parcial, não
+limitada a 0–1, e é usado aqui só como definição. O parâmetro do jogo é
+limitado a [0, 1].
+
+**Pendências de auditoria (GRADE baixo):**
+1. Medidas brutas dos quatro grupos (Shire puro, Shetland puro e os dois
+   recíprocos, ao nascer e na maturidade) não transcritas. O recálculo
+   independente dos coeficientes está pendente até a transcrição.
+2. Hipótese em aberto: efeito assimétrico (restrição por mãe pequena ≈ 1;
+   aumento por mãe grande < 1). A faixa 0,67–1,0 pode refletir essa
+   assimetria. Fontes secundárias divergem; resolver com a tabela original.
+3. Extrapolação de equino (um filhote por gestação) para cães e gatos
+   (ninhada).
+4. Imprinting genômico (Panthera) é mecanismo distinto, fora deste parâmetro.
 
 Os valores `mBirth = 0.75` / `mAdult = 0.25` usados no pack **não vêm
 diretamente dessa derivação** — são parâmetros de jogo escolhidos a partir da
