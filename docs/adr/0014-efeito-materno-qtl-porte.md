@@ -82,10 +82,14 @@ limitado a [0, 1].
    (ninhada).
 4. Imprinting genômico (Panthera) é mecanismo distinto, fora deste parâmetro.
 
-Os valores `mBirth = 0.75` / `mAdult = 0.25` usados no pack **não vêm
-diretamente dessa derivação** — são parâmetros de jogo escolhidos a partir da
-faixa qualitativa relatada (efeito forte ao nascer, atenua mas não zera na
-maturidade). Ver seção "Parâmetro do jogo" abaixo.
+Os valores do pack (mBirth = 0.75, mBirthRange = [0.67, 1.0], mAdult = 0.25)
+são os coeficientes derivados por Tales Hack a partir da estrutura de recíprocos
+geneticamente idênticos de Walton & Hammond (1938), descrita no bloco
+"Coeficientes derivados (W&H 1938)" acima. mBirth = 0.75 é o valor pontual
+adotado dentro da faixa derivada 0,67–1,0. A derivação existe; o que ainda
+não foi feito é o recálculo independente a partir das medidas brutas dos quatro
+grupos (pendência de auditoria nº 1). Até esse recálculo, os coeficientes são
+tratados como parâmetros de jogo com base científica, GRADE baixo.
 
 ## Decisão
 
