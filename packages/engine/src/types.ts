@@ -129,6 +129,27 @@ export interface SpeciesPack {
    * materno nesse traço (equivalente ao antigo m=0).
    */
   maternalEffect?: Record<string, MaternalEffectConfig>;
+  /**
+   * Taxonomia por espécie (ADR-0015): `biologicalSpecies` (slug) → gênero.
+   * ESPELHA `packages/shared/src/species.ts` (SPECIES_INFO.genus) —
+   * duplicado deliberadamente aqui pra o motor não depender de @genbreedai/
+   * shared pra dados de negócio (só tipos). Se o catálogo de species.ts
+   * mudar, atualizar aqui também. Ausente/vazio = pack sem espécies múltiplas
+   * (ex.: canino, onde toda raça é "canis-familiaris").
+   */
+  speciesGenus?: Record<string, string>;
+  /**
+   * Gêneros cujo QUALQUER par de espécies distintas conta como
+   * DOCUMENTED_FERTILE_FEMALE (ADR-0015) — hoje só "Panthera" no pack
+   * felino. NÃO adicionar gênero sem ADR (item 2, Etapa 2c).
+   */
+  hybridGenusWhitelist?: string[];
+  /**
+   * Pares específicos (fora do gênero acima) DOCUMENTED_FERTILE_FEMALE, com
+   * fonte citada (ADR-0015) — hoje só felis-catus×leptailurus-serval
+   * (Savannah). NÃO adicionar par sem ADR (item 2, Etapa 2c).
+   */
+  hybridSpeciesWhitelist?: HybridWhitelistEntry[];
 }
 
 /**
@@ -142,6 +163,32 @@ export interface MaternalEffectConfig {
   /** Faixa reportada por W&H pro efeito ao nascimento — documental, não usada no cálculo. */
   mBirthRange: [number, number];
   mAdult: number;
+}
+
+// ─── Classe de hibridação (ADR-0015, Etapa 2c) ─────────────────────────────────
+
+/**
+ * Classificação de um par de progenitores pra fins de fertilidade/Haldane
+ * (ADR-0015) — SEMPRE derivada da identidade biológica dos PAIS
+ * (`ParentInput.species`), NUNCA do rótulo `method` da cruza (ver cross.ts).
+ *   SAME_SPECIES               — mesma `biologicalSpecies` (nunca é Haldane).
+ *   DOCUMENTED_FERTILE_FEMALE  — par interespecífico com hibridação REAL
+ *                                 documentada (ver `hybridGenusWhitelist`/
+ *                                 `hybridSpeciesWhitelist` do pack).
+ *   UNDOCUMENTED                — qualquer outro par interespecífico.
+ */
+export type HybridClass = "SAME_SPECIES" | "DOCUMENTED_FERTILE_FEMALE" | "UNDOCUMENTED";
+
+/**
+ * Par de espécies com hibridação documentada (ADR-0015) — fonte citada,
+ * OBRIGATÓRIA. Ordem de `speciesA`/`speciesB` não importa (comparação
+ * não-ordenada). NÃO adicionar par sem ADR (item 2, Etapa 2c).
+ */
+export interface HybridWhitelistEntry {
+  speciesA: string;
+  speciesB: string;
+  /** Fonte citada (nome do híbrido real + evidência) — nunca "porque sim". */
+  source: string;
 }
 
 // ─── Pedigree (para F de Wright, TDD §4.2) ────────────────────────────────────

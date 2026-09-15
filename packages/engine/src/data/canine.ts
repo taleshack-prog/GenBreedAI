@@ -60,4 +60,8 @@ export const CANINE_PACK: SpeciesPack = {
   quantitative: { porte: { mean: 0.5, h2: 0.5 }, vigor: { mean: 0.5, h2: 0.35 }, beleza: { mean: 0.5, h2: 0.25 }, temperamento: { mean: 0.5, h2: 0.3 } },
   // Efeito materno no porte (ADR-0014). Mesmo valor de FELINE nesta versão.
   maternalEffect: { porte: { mBirth: 0.75, mBirthRange: [0.67, 1.0], mAdult: 0.25 } },
+  // Sem speciesGenus/hybridGenusWhitelist/hybridSpeciesWhitelist (ADR-0015):
+  // toda raça canina é "canis-familiaris" (mesma espécie biológica) — nunca
+  // há F1 interespecífico dentro deste pack, hybridClass() sempre resolveria
+  // SAME_SPECIES (ou UNDOCUMENTED por falta de `species`, inofensivo).
 };

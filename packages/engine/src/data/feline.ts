@@ -82,4 +82,31 @@ export const FELINE_PACK: SpeciesPack = {
   // Efeito materno no porte (ADR-0014 — Walton & Hammond 1938). Mesmo valor
   // em FELINE e CANINE nesta versão — PARÂMETRO DO JOGO, Tales define.
   maternalEffect: { porte: { mBirth: 0.75, mBirthRange: [0.67, 1.0], mAdult: 0.25 } },
+  // Taxonomia (ADR-0015, Etapa 2c, item 2) — ESPELHA packages/shared/src/
+  // species.ts (SPECIES_INFO.genus); duplicado aqui de propósito (motor não
+  // importa dados de negócio de @genbreedai/shared). Morfos de cor do tigre
+  // (branco/albino) usam biologicalSpecies="panthera-tigris" — não entram
+  // aqui como chave própria, ver item 1.
+  speciesGenus: {
+    "panthera-onca": "Panthera",
+    "panthera-leo": "Panthera",
+    "panthera-tigris": "Panthera",
+    "panthera-pardus": "Panthera",
+    "panthera-uncia": "Panthera",
+    puma: "Puma",
+    "acinonyx-jubatus": "Acinonyx",
+    "leptailurus-serval": "Leptailurus",
+    "leopardus-pardalis": "Leopardus",
+    "lynx-lynx": "Lynx",
+    caracal: "Caracal",
+    "felis-catus": "Felis",
+  },
+  // NÃO adicionar gênero/par sem ADR (item 2, Etapa 2c).
+  hybridGenusWhitelist: ["Panthera"],
+  hybridSpeciesWhitelist: [
+    {
+      speciesA: "felis-catus", speciesB: "leptailurus-serval",
+      source: "Gato Savannah (Felis catus × Leptailurus serval) — híbrido F1 real e documentado; fêmeas F1 férteis, machos estéreis até gerações avançadas (~F4/F5).",
+    },
+  ],
 };

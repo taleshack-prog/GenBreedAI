@@ -14,7 +14,7 @@ import {
   type Genotype,
   type Sex,
 } from "@genbreedai/shared";
-import type { MaternalEffectConfig, Pedigree, SpeciesPack } from "./types";
+import type { HybridClass, MaternalEffectConfig, Pedigree, SpeciesPack } from "./types";
 import { createPrng } from "./rng";
 import { generateGamete, combineGametes, generateXGamete, combineXGametes } from "./gamete";
 import { expressPhenotype } from "./phenotype";
@@ -39,6 +39,16 @@ export interface ParentInput {
    * `phenotype.porteAdulto` da geração anterior, se tiver.
    */
   adultPorte?: number;
+  /**
+   * Espécie BIOLÓGICA deste indivíduo (ADR-0015) — já normalizada pelo
+   * chamador via `biologicalSpecies()` de @genbreedai/shared (morfos de cor
+   * colapsados na espécie selvagem; o motor NÃO importa o catálogo de
+   * espécies, só recebe o slug pronto). Usada por `hybridClass()` pra decidir
+   * Haldane em F1 interespecífico. Ausente em QUALQUER lado = hybridClass()
+   * resolve SAME_SPECIES (nunca aciona Haldane) — não presumir
+   * interespecificidade sem dado; ver JSDoc de `hybridClass()`.
+   */
+  species?: string;
 }
 
 /**
@@ -57,7 +67,13 @@ export interface CrossContext {
   pack: SpeciesPack;
   /** Pedigree contendo pai, mãe e ancestrais comuns (para F_pedigree). */
   pedigree: Pedigree;
-  /** True quando os progenitores são de espécies distintas (Haldane em F1). */
+  /**
+   * @deprecated (ADR-0015, item 3) NÃO é mais consumido pelo motor — Haldane
+   * agora deriva de `hybridClass(parentA, parentB, pack)` (identidade real
+   * dos pais via `ParentInput.species`), nunca de um boolean solto. Mantido
+   * só porque apps/api ainda constrói `ctx` com este campo (Etapa 5-API
+   * decide se remove); ignorado por `finalizeSpecimen`.
+   */
   interspecific?: boolean;
   /** Loci que o jogador tenta fixar (para o IF). Default: todos os loci. */
   targetLoci?: string[];
@@ -94,6 +110,53 @@ export function validateBreedingConstraints(
       }
     }
   }
+}
+
+/**
+ * Classe de hibridação de um par de progenitores (ADR-0015, item 2) — SEMPRE
+ * derivada da identidade biológica dos PAIS (`ParentInput.species`), NUNCA do
+ * rótulo `method` da cruza que vai ser executada (uma cruza "BC1" entre dois
+ * indivíduos de espécies diferentes tem a MESMA hybridClass que teria como
+ * "F1" — quem decide Haldane em fertilityScore é o método E a classe juntos).
+ *
+ *   SAME_SPECIES              — `species` igual nos dois, OU ausente de um
+ *                                dos lados (ou dos dois). Esse é o default
+ *                                CONSERVADOR de verdade: `species` é um campo
+ *                                novo e opcional (ADR-0015) — a esmagadora
+ *                                maioria dos chamadores existentes (todo
+ *                                cruzamento canino, todo cruzamento felino
+ *                                sem essa informação ainda ligada) nunca o
+ *                                preenche. Tratar "sem dado" como
+ *                                UNDOCUMENTED inventaria interespecificidade
+ *                                que não foi informada — o mesmo erro que a
+ *                                regra 1 do CLAUDE.md proíbe, só que no
+ *                                sentido inverso (assumir restrição em vez de
+ *                                assumir alelo). Sem dado ⇒ motor se comporta
+ *                                como sempre se comportou (sem Haldane).
+ *   DOCUMENTED_FERTILE_FEMALE — espécies DIFERENTES E conhecidas dos dois
+ *                                lados, em `pack.hybridGenusWhitelist`
+ *                                (mesmo gênero, ambos em `pack.speciesGenus`)
+ *                                OU em `pack.hybridSpeciesWhitelist` (par
+ *                                nomeado).
+ *   UNDOCUMENTED               — espécies DIFERENTES E conhecidas dos dois
+ *                                lados, mas fora de qualquer whitelist.
+ */
+export function hybridClass(parentA: ParentInput, parentB: ParentInput, pack: SpeciesPack): HybridClass {
+  const spA = parentA.species;
+  const spB = parentB.species;
+  if (!spA || !spB) return "SAME_SPECIES";
+  if (spA === spB) return "SAME_SPECIES";
+
+  const genusA = pack.speciesGenus?.[spA];
+  const genusB = pack.speciesGenus?.[spB];
+  if (genusA && genusA === genusB && pack.hybridGenusWhitelist?.includes(genusA)) {
+    return "DOCUMENTED_FERTILE_FEMALE";
+  }
+
+  const explicit = pack.hybridSpeciesWhitelist?.some(
+    (w) => (w.speciesA === spA && w.speciesB === spB) || (w.speciesA === spB && w.speciesB === spA),
+  );
+  return explicit ? "DOCUMENTED_FERTILE_FEMALE" : "UNDOCUMENTED";
 }
 
 /** Gera o genótipo canônico em string (ordenado) para hash de cache/proveniência. */
