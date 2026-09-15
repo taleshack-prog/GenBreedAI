@@ -97,10 +97,10 @@ export class StripePaymentProvider extends PaymentProvider {
     return this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   }
 
-  // /profile é onde a UI de billing vive — não há página dedicada de
+  // /app/profile é onde a UI de billing vive — não há página dedicada de
   // retorno ainda, então volta pra lá com um marcador de resultado.
-  private successUrl(): string { return process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/profile?billing=success&session_id={CHECKOUT_SESSION_ID}"; }
-  private cancelUrl(): string { return process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/profile?billing=cancel"; }
+  private successUrl(): string { return process.env.STRIPE_SUCCESS_URL ?? "http://localhost:3000/app/profile?billing=success&session_id={CHECKOUT_SESSION_ID}"; }
+  private cancelUrl(): string { return process.env.STRIPE_CANCEL_URL ?? "http://localhost:3000/app/profile?billing=cancel"; }
 
   /**
    * Cria a Checkout Session de assinatura (mode=subscription). Reusa o

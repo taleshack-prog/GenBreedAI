@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Eyebrow } from "../components/Eyebrow";
+import { PlanPicker } from "../components/PlanPicker";
 
 const IMG_BASE = "https://img.genbreed.com.br/generated";
 
@@ -14,21 +16,8 @@ const GALLERY = [
   { hash: "46cf3178f6668e91e9459690d25e02855d1a3329b8bcdbe08fc9eba0a2ff0eb3", name: "Rottweiler", sub: "Canis familiaris" },
 ];
 
-type PlanId = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
-interface Plan {
-  id: PlanId; label: string; month: number; year: number | null;
-  crosses: string; images: string; tools: string; pool: string; accent: string; featured?: boolean;
-}
-const PLANS: Plan[] = [
-  { id: "FREE", label: "Free", month: 0, year: null, crosses: "1 / dia", images: "0 (só retrato procedural)", tools: "Sorteio de fenótipo", pool: "Felinos — só intraespécie", accent: "#9E9E9E" },
-  { id: "JUNIOR", label: "Junior", month: 19.9, year: 218.9, crosses: "3 / dia", images: "10 / mês", tools: "Sorteio de fenótipo", pool: "+ Híbridos interespecíficos entre felinos", accent: "#00F0FF" },
-  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "5 / dia", images: "20 / mês", tools: "Escolhe entre 6 opções de fenótipo", pool: "+ Caninos", accent: "#BF00FF", featured: true },
-  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "10 / dia", images: "30 / mês", tools: "Escolhe entre 12 opções de fenótipo", pool: "+ Acesso liberado a grandes animais (bovino, equino, suíno, ovino) conforme entrarem no catálogo", accent: "#F5C542" },
-];
-const fmtBRL = (v: number) => v === 0 ? "R$ 0" : `R$ ${v.toFixed(2).replace(".", ",")}`;
-
 export default function LandingPage() {
-  const [interval, setInterval] = useState<"month" | "year">("month");
+  const router = useRouter();
 
   return (
     <main className="mx-auto max-w-5xl">
@@ -72,7 +61,7 @@ export default function LandingPage() {
       {/* 2. O QUE É */}
       <section className="px-5 py-14 sm:py-20">
         <div className="mx-auto max-w-3xl">
-          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-cyan">// o que é</h2>
+          <Eyebrow color="#00F0FF">O que é</Eyebrow>
           <p className="mb-10 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Um laboratório de genética, não um bicho-de-estimação virtual.</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {[
@@ -93,7 +82,7 @@ export default function LandingPage() {
       {/* 3. GALERIA */}
       <section className="px-5 py-14 sm:py-20">
         <div className="mx-auto max-w-4xl">
-          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-purple">// catálogo</h2>
+          <Eyebrow color="#BF00FF">Catálogo</Eyebrow>
           <p className="mb-10 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Retratos reais, sintetizados no motor do jogo</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {GALLERY.map((g) => (
@@ -114,49 +103,10 @@ export default function LandingPage() {
       {/* 4. PLANOS */}
       <section className="px-5 py-14 sm:py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="mb-2 text-center font-mono text-[0.7rem] uppercase tracking-[0.2em] text-cyan">// tiers</h2>
+          <Eyebrow color="#00F0FF">Tiers</Eyebrow>
           <p className="mb-6 text-center font-display text-2xl font-bold text-ink sm:text-3xl">Um plano para cada profundidade de estudo</p>
 
-          <div className="mb-8 flex justify-center">
-            <div className="inline-flex rounded-lg border border-white/10 bg-bg-800 p-1">
-              {(["month", "year"] as const).map((k) => (
-                <button key={k} onClick={() => setInterval(k)}
-                  className={`rounded-md px-4 py-2 font-display text-xs font-bold uppercase tracking-wide transition ${interval === k ? "bg-cyan/15 text-cyan" : "text-ink-muted"}`}>
-                  {k === "month" ? "Mensal" : "Anual · 1 mês grátis"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PLANS.map((p) => {
-              const price = interval === "year" && p.year !== null ? p.year : p.month;
-              const suffix = p.month === 0 ? "" : interval === "year" ? "/ano" : "/mês";
-              return (
-                <div key={p.id}
-                  className="flex flex-col rounded-card border bg-bg-800/70 p-5"
-                  style={{ borderColor: p.featured ? `${p.accent}80` : "rgba(255,255,255,0.1)", boxShadow: p.featured ? `0 0 20px ${p.accent}33` : undefined }}>
-                  <div className="mb-1 font-display text-xs font-black uppercase tracking-widest" style={{ color: p.accent }}>{p.label}</div>
-                  <div className="mb-0.5 font-display text-2xl font-black text-ink tnum">{fmtBRL(price)}<span className="text-sm font-medium text-ink-muted">{suffix}</span></div>
-                  {interval === "year" && p.year !== null && (
-                    <div className="mb-3 font-mono text-[0.62rem] text-ok">equivale a 11 meses — 1 mês grátis</div>
-                  )}
-                  {(interval === "month" || p.year === null) && <div className="mb-3" />}
-                  <ul className="mb-5 flex-1 space-y-2.5 text-[0.72rem] leading-snug text-ink-muted">
-                    <li><span className="text-ink">{p.crosses}</span> de cruzamentos</li>
-                    <li><span className="text-ink">{p.images}</span> de imagens IA</li>
-                    <li>{p.tools}</li>
-                    <li>{p.pool}</li>
-                  </ul>
-                  <Link href={`/signup?plan=${p.id}&interval=${interval === "year" ? "year" : "month"}`}
-                    className="rounded-lg border py-2.5 text-center font-display text-xs font-bold uppercase tracking-wide transition hover:brightness-110"
-                    style={{ borderColor: p.accent, color: p.accent }}>
-                    {p.id === "FREE" ? "Começar de graça" : "Assinar"}
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
+          <PlanPicker onSelect={(plan, interval) => router.push(`/signup?plan=${plan}&interval=${interval}`)} />
         </div>
       </section>
 

@@ -227,6 +227,35 @@ export async function buyCredits(packId: string): Promise<BuyCreditsResult> {
   return { redirected: false, ...r };
 }
 
+export interface SubscriptionInfo { tier: Tier; interval: "MONTH" | "YEAR"; status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean; }
+/** Assinatura mais recente do usuário (qualquer status), ou null se nunca assinou. */
+export async function getSubscription(): Promise<SubscriptionInfo | null> {
+  const res = await fetch("/api/v1/billing/subscription", { headers: demoHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Falha ao carregar assinatura.");
+  return res.json();
+}
+/**
+ * Tier EFETIVO pro usuário atual, a partir da assinatura real (backend) — NUNCA
+ * de dado estático/local. Espelha a regra do TierService: só conta se ACTIVE,
+ * ou PAST_DUE ainda dentro do período; senão, FREE.
+ */
+export function effectiveTierFromSubscription(sub: SubscriptionInfo | null): Tier {
+  if (!sub) return "FREE";
+  if (sub.status === "ACTIVE") return sub.tier;
+  if (sub.status === "PAST_DUE" && new Date(sub.currentPeriodEnd).getTime() > Date.now()) return sub.tier;
+  return "FREE";
+}
+
+/** Cria a Checkout Session de assinatura (mode=subscription) e retorna o checkoutUrl. */
+export async function subscribeToPlan(tier: Exclude<Tier, "FREE">, interval: "month" | "year"): Promise<{ checkoutUrl: string }> {
+  const res = await fetch("/api/v1/billing/subscribe", {
+    method: "POST", headers: demoHeaders(),
+    body: JSON.stringify({ tier, interval: interval === "year" ? "YEAR" : "MONTH" }),
+  });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body?.message ?? "Falha ao iniciar assinatura."); }
+  return res.json();
+}
+
 export interface CrossClassification { method: string; kinship: number; reason: string; inbreedingRisk: boolean; }
 export async function classifyCross(input: { sireId: string; damId: string }): Promise<CrossClassification> {
   const res = await fetch("/api/v1/cross/classify", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { listSpecimens, getTier, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
+import { listSpecimens, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getSubscription, effectiveTierFromSubscription, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
 
@@ -13,7 +13,7 @@ const TIER_INFO: Record<string, { name: string; crossesDay: number; imgsMonth: n
 
 export default function ProfilePage() {
   const [items, setItems] = useState<ApiSpecimen[]>([]);
-  const [tier, setTierState] = useState<Tier>("PHD");
+  const [tier, setTierState] = useState<Tier>("FREE");
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [imgQuota, setImgQuota] = useState<ImageQuota | null>(null);
   const [ref, setRef] = useState<Referral | null>(null);
@@ -22,7 +22,16 @@ export default function ProfilePage() {
   const [buying, setBuying] = useState<string | null>(null);
   const [buyMsg, setBuyMsg] = useState<string | null>(null);
   const [dailyMsg, setDailyMsg] = useState<string | null>(null);
-  useEffect(() => { setTierState(getTier()); getWallet().then(setWallet).catch(() => {}); getImageQuota().then(setImgQuota).catch(() => {}); getReferral().then(setRef).catch(() => {}); getCreditPacks().then(setPacks).catch(() => {}); }, []);
+  useEffect(() => {
+    // Tier vem do backend (TierService via GET /billing/subscription) —
+    // nunca do JWT nem do seletor de tier de teste (localStorage), senão um
+    // upgrade real via Stripe não apareceria sem relogar.
+    getSubscription().then((sub) => setTierState(effectiveTierFromSubscription(sub))).catch(() => setTierState("FREE"));
+    getWallet().then(setWallet).catch(() => {});
+    getImageQuota().then(setImgQuota).catch(() => {});
+    getReferral().then(setRef).catch(() => {});
+    getCreditPacks().then(setPacks).catch(() => {});
+  }, []);
   async function comprar(packId: string) {
     setBuying(packId); setBuyMsg(null);
     try {
@@ -69,9 +78,9 @@ export default function ProfilePage() {
       <div className="mb-5 flex items-center gap-4 rounded-card border border-purple/30 bg-bg-800 p-4 neon-purpura">
         <div className="grid h-16 w-16 place-items-center rounded-full border-2 border-purple text-2xl">🧬</div>
         <div>
-          <div className="font-display text-lg font-bold uppercase text-ink">Tales Hack</div>
-          <div className="text-sm text-purple">{(TIER_INFO[tier] ?? TIER_INFO.PHD!).name}</div>
-          <div className="mt-1 text-xs text-ink-muted">{(TIER_INFO[tier] ?? TIER_INFO.PHD!).crossesDay} cruzamentos/dia · {(TIER_INFO[tier] ?? TIER_INFO.PHD!).imgsMonth} imagens IA/mês</div>
+          <div className="font-display text-lg font-bold uppercase text-ink">{getUser()?.name || getUser()?.email || "Criador"}</div>
+          <div className="text-sm text-purple">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).name}</div>
+          <div className="mt-1 text-xs text-ink-muted">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).crossesDay} cruzamentos/dia · {(TIER_INFO[tier] ?? TIER_INFO.FREE!).imgsMonth} imagens IA/mês</div>
         </div>
       </div>
       {(() => { const u = getUser(); return u ? (
