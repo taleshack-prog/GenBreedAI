@@ -26,6 +26,25 @@ Esta ADR registra essa decisão ANTES de qualquer código (Etapa 1 de um plano e
 5 etapas; Etapas 2-5 — engine, golden tortoiseshell, prompt, dados — vêm depois,
 cada uma em commit próprio).
 
+## Evidência científica
+
+A ligação ao X do laranja felino era conhecida desde os anos 1900 pela
+segregação clássica (tartaruga ≈ só fêmeas), mas o gene causador só foi
+identificado em 2025:
+
+- Toh, H. et al., **"A deletion at the X-linked ARHGAP36 gene locus…"**,
+  *Current Biology* 35(12), jun/2025.
+- Kaelin, C. B. et al., **"Molecular and genetic characterization of
+  sex-linked orange…"**, *Current Biology* 35(12), jun/2025.
+
+**Mecanismo:** uma deleção regulatória no loco `ARHGAP36` (ligado ao X) causa
+sua **expressão ectópica em melanócitos** — `ARHGAP36` normalmente não se
+expressa ali. Essa expressão fora do lugar **suprime a produção de eumelanina**
+na via de pigmentação, deslocando o melanócito pra produzir só feomelanina
+(laranja). É esse o mecanismo molecular por trás de "`O` mascara `A`" na
+Decisão abaixo — não é dominância genética clássica sobre o loco `A`, é
+supressão de uma via de pigmento inteira por um gene de outro cromossomo.
+
 ## Decisão
 
 1. Todo zigoto felino passa a ter um **sexo cromossômico** — XX (fêmea) ou XY
