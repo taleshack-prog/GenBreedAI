@@ -17,7 +17,10 @@ export class GeneBankController {
 
   @Post("wallet/daily")
   @UseGuards(AuthGuard)
-  claimDaily(@CurrentUser() user: AuthenticatedUser) { return this.wallet.claimDaily(user.id, user.tier); }
+  async claimDaily(@CurrentUser() user: AuthenticatedUser) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.wallet.claimDaily(user.id, tier);
+  }
 
   @Post("wallet/weekly")
   @UseGuards(AuthGuard)

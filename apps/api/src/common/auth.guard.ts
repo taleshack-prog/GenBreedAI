@@ -1,7 +1,8 @@
 /**
  * Guard de autenticação. Produção: valida JWT Bearer (emitido pelo AuthService).
- * Dev: se AUTH_DEV_HEADERS=true, aceita x-user-id/x-user-tier (para o seletor de
- * tier de teste e ferramentas locais). Sem token válido → 401.
+ * Dev: se AUTH_DEV_HEADERS=true, aceita x-user-id (+ x-user-tier opcional) —
+ * usado por testes e ferramentas locais; a web não manda mais x-user-tier
+ * (removido o antigo seletor de "tier de teste"). Sem credencial válida → 401.
  */
 import {
   CanActivate, ExecutionContext, Injectable, UnauthorizedException, createParamDecorator, Optional,
@@ -32,12 +33,17 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    // 2) Dev headers (apenas se habilitado).
+    // 2) Dev headers (apenas se habilitado). x-user-tier é OPCIONAL — a web não
+    // manda mais tier nenhum (removido o seletor "tier de teste"); só serve de
+    // devHint pro TierService (que só o usa se não houver assinatura/concessão
+    // real para o id, e mesmo assim só com AUTH_DEV_HEADERS=true). Ausente ou
+    // inválido → devHint "FREE" (menor privilégio), nunca PHD por omissão.
     if (process.env.AUTH_DEV_HEADERS === "true") {
       const id = req.headers["x-user-id"];
-      const tier = req.headers["x-user-tier"];
-      if (typeof id === "string" && id.length > 0 && typeof tier === "string" && VALID_TIERS.includes(tier as Tier)) {
-        req.user = { id, tier: tier as Tier };
+      if (typeof id === "string" && id.length > 0) {
+        const tierHeader = req.headers["x-user-tier"];
+        const tier = typeof tierHeader === "string" && VALID_TIERS.includes(tierHeader as Tier) ? (tierHeader as Tier) : "FREE";
+        req.user = { id, tier };
         return true;
       }
     }

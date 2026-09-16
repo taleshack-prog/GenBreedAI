@@ -54,19 +54,21 @@ export interface CrossResponse {
 
 // Usuário-demo do scaffold (dono dos fundadores semeados na API).
 export type Tier = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
-export function getTier(): Tier {
-  if (typeof window === "undefined") return "PHD";
-  return (localStorage.getItem("gb:tier") as Tier) || "PHD";
-}
-export function setTier(t: Tier) { if (typeof window !== "undefined") localStorage.setItem("gb:tier", t); }
+// Removido o seletor de "tier de teste" (localStorage "gb:tier" + cabeçalho
+// x-user-tier) — a web nunca mais escolhe o tier: quem gateia é sempre o
+// TierService no backend (ver getMyTier()). Limpa a chave antiga, se existir,
+// pra nenhuma sessão salva continuar mandando um tier "de teste" arbitrário.
+if (typeof window !== "undefined") localStorage.removeItem("gb:tier");
 function demoHeaders(): Record<string, string> {
   const base: Record<string, string> = { "content-type": "application/json" };
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("gb:token");
     if (token) { base["authorization"] = `Bearer ${token}`; return base; }
   }
-  // Fallback DEV (sem login): headers de teste + tier selecionável. Requer AUTH_DEV_HEADERS=true na API.
-  base["x-user-id"] = "demo"; base["x-user-tier"] = getTier();
+  // Fallback DEV (sem login): só id de teste, tier fixo em FREE no AuthGuard
+  // a menos que haja assinatura/concessão real para "demo". Requer
+  // AUTH_DEV_HEADERS=true na API; nunca aceito em produção.
+  base["x-user-id"] = "demo";
   return base;
 }
 
@@ -252,9 +254,11 @@ export async function getSubscription(): Promise<SubscriptionInfo | null> {
   return res.json();
 }
 /**
- * Tier EFETIVO pro usuário atual, a partir da assinatura real (backend) — NUNCA
- * de dado estático/local. Espelha a regra do TierService: só conta se ACTIVE,
- * ou PAST_DUE ainda dentro do período; senão, FREE.
+ * ATENÇÃO — considera SÓ a assinatura Stripe, ignora granted_tiers: alguém com
+ * tier concedido (sem assinatura) aparece como FREE aqui. NÃO usar pra gatear
+ * UI por tier — pra isso é `getMyTier()` (GET /api/v1/me/tier, TierService de
+ * verdade). Existe só pra telas que precisam de dado ESPECÍFICO de assinatura
+ * Stripe (ex.: "seu plano vigente é X, renova em Y").
  */
 export function effectiveTierFromSubscription(sub: SubscriptionInfo | null): Tier {
   if (!sub) return "FREE";
@@ -270,6 +274,18 @@ export async function subscribeToPlan(tier: Exclude<Tier, "FREE">, interval: "mo
     body: JSON.stringify({ tier, interval: interval === "year" ? "YEAR" : "MONTH" }),
   });
   if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body?.message ?? "Falha ao iniciar assinatura."); }
+  return res.json();
+}
+
+export interface MyTier { tier: Tier; dailyCrosses: number; monthlyImages: number; }
+/**
+ * Tier EFETIVO do usuário logado (GET /api/v1/me/tier) — TierService.resolve()
+ * no backend (assinatura → concessão em granted_tiers → FREE). Única fonte de
+ * tier na web: nunca reconstruir a partir de localStorage/headers aqui.
+ */
+export async function getMyTier(): Promise<MyTier> {
+  const res = await fetch("/api/v1/me/tier", { headers: demoHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error("Falha ao carregar tier.");
   return res.json();
 }
 

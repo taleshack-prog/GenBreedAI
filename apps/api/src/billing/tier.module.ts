@@ -3,6 +3,7 @@ import { createDb } from "../db/client";
 import { SubscriptionsRepository, InMemorySubscriptionsRepository, DrizzleSubscriptionsRepository } from "./subscriptions.repository";
 import { GrantedTiersRepository, InMemoryGrantedTiersRepository, DrizzleGrantedTiersRepository } from "./granted-tiers.repository";
 import { TierService } from "./tier.service";
+import { MeController } from "./me.controller";
 
 const subscriptionsRepositoryProvider = {
   provide: SubscriptionsRepository,
@@ -30,6 +31,7 @@ const grantedTiersRepositoryProvider = {
  * ganhar acesso sem import extra.
  */
 @Module({
+  controllers: [MeController],
   providers: [TierService, subscriptionsRepositoryProvider, grantedTiersRepositoryProvider],
   exports: [TierService, SubscriptionsRepository, GrantedTiersRepository],
 })

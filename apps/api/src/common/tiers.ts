@@ -18,10 +18,10 @@ export interface TierPolicy {
 }
 
 export const TIER_POLICIES: Record<Tier, TierPolicy> = {
-  FREE: { dailyCrosses: 1, monthlyPremiumImages: 1, lineageDepth: 1, marketAccess: false },
-  JUNIOR: { dailyCrosses: 3, monthlyPremiumImages: 6, lineageDepth: 3, marketAccess: false },
-  SENIOR: { dailyCrosses: 5, monthlyPremiumImages: 10, lineageDepth: 7, marketAccess: false },
-  PHD: { dailyCrosses: 10, monthlyPremiumImages: 20, lineageDepth: "full", marketAccess: true },
+  FREE: { dailyCrosses: 1, monthlyPremiumImages: 0, lineageDepth: 1, marketAccess: false },
+  JUNIOR: { dailyCrosses: 3, monthlyPremiumImages: 10, lineageDepth: 3, marketAccess: false },
+  SENIOR: { dailyCrosses: 5, monthlyPremiumImages: 20, lineageDepth: 7, marketAccess: false },
+  PHD: { dailyCrosses: 10, monthlyPremiumImages: 30, lineageDepth: "full", marketAccess: true },
 };
 
 export function tierPolicy(tier: Tier): TierPolicy {

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { listSpecimens, postCross, type ApiSpecimen } from "../../lib/api";
 import { compatibility } from "../../lib/lab";
-import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getTier, classifyCross, type OffspringOption, type CrossClassification } from "../../lib/api";
+import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getMyTier, classifyCross, type OffspringOption, type CrossClassification } from "../../lib/api";
 import { PhenotypeSelector } from "../../components/PhenotypeSelector";
 import { displayName } from "../../lib/display";
 import { CapsuleCard } from "../../components/CapsuleCard";
@@ -26,7 +26,8 @@ function LabInner() {
   const [freezeRest, setFreezeRest] = useState(true);
   const [describeMode, setDescribeMode] = useState(false);
   const [classification, setClassification] = useState<CrossClassification | null>(null);
-  useEffect(() => { setDescribeMode(getTier() === "FREE"); }, []);
+  // Tier efetivo (TierService, via /api/v1/me/tier) — nunca mais de um seletor local.
+  useEffect(() => { getMyTier().then((t) => setDescribeMode(t.tier === "FREE")).catch(() => {}); }, []);
   const [specimens, setSpecimens] = useState<ApiSpecimen[]>([]);
   const [sireId, setSireId] = useState("");
   const [damId, setDamId] = useState("");

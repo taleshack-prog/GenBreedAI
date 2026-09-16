@@ -2,14 +2,18 @@
  * Cota MENSAL de imagem IA por tier (economia — protege a margem da fal.ai).
  * FREE 0 (só procedural) · JUNIOR 10 · SENIOR 20 · PHD 30. Excedeu → precisa de
  * crédito. Modelo por tier: PhD usa FLUX Pro; demais usam FLUX dev.
+ *
+ * Fonte ÚNICA do número: tierPolicy() em ../common/tiers.ts (mesmos valores
+ * vendidos em apps/web/lib/plans.ts) — não duplicar a tabela aqui.
  */
 import { Injectable } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
+import type { Tier } from "@genbreedai/shared";
 import { imageQuota } from "../db/schema";
 import { createDb } from "../db/client";
+import { tierPolicy } from "../common/tiers";
 
-const MONTHLY: Record<string, number> = { FREE: 0, JUNIOR: 10, SENIOR: 20, PHD: 30 };
-export function monthlyImageLimit(tier: string): number { return MONTHLY[tier] ?? 0; }
+export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyPremiumImages ?? 0; }
 export function modelForTier(tier: string): string {
   const dev = process.env.FAL_MODEL ?? "fal-ai/flux/dev";
   // PhD usa o modelo premium só se FAL_MODEL_PHD estiver definido; senão cai no dev (evita rota inválida).

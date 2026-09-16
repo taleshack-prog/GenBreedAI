@@ -9,8 +9,8 @@
  *
  * Prioridade: assinatura ACTIVE (ou PAST_DUE ainda dentro do período) → tier
  * dela; senão, granted_tiers não expirado → tier concedido; senão, SE
- * AUTH_DEV_HEADERS=true, o `devHint` (x-user-tier do AuthGuard — seletor de
- * tier de teste, nunca produção); senão → FREE.
+ * AUTH_DEV_HEADERS=true, o `devHint` (x-user-tier do AuthGuard, opcional — só
+ * testes/ferramentas locais mandam; a web nunca envia); senão → FREE.
  */
 import { Injectable } from "@nestjs/common";
 import type { Tier } from "@genbreedai/shared";

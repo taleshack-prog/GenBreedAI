@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSubscription, subscribeToPlan, effectiveTierFromSubscription, type SubscriptionInfo } from "../../../lib/api";
+import { getSubscription, subscribeToPlan, getMyTier, type SubscriptionInfo, type Tier } from "../../../lib/api";
 import { PlanPicker } from "../../../components/PlanPicker";
 import { type PlanId, type PlanInterval } from "../../../lib/plans";
 import { Screen } from "../../../components/Screen";
@@ -16,15 +16,19 @@ function isActive(sub: SubscriptionInfo): boolean {
 export default function PlanosPage() {
   const router = useRouter();
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
+  const [currentTier, setCurrentTier] = useState<Tier>("FREE");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [subscribing, setSubscribing] = useState<PlanId | null>(null);
 
   useEffect(() => {
     getSubscription().then(setSub).catch((e) => setErr((e as Error).message)).finally(() => setLoading(false));
+    // Tier efetivo de verdade (TierService: assinatura → granted_tiers → FREE)
+    // — decide qual plano aparece como "atual" mesmo pra quem tem tier
+    // concedido sem assinatura Stripe (getSubscription() sozinho não veria).
+    getMyTier().then((t) => setCurrentTier(t.tier)).catch(() => {});
   }, []);
 
-  const currentTier = effectiveTierFromSubscription(sub);
   const activeSub = sub && isActive(sub) ? sub : null;
 
   /** Free entra direto no jogo; pago cria a Checkout Session e redireciona pro Stripe. */

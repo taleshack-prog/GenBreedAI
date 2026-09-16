@@ -1,20 +1,24 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listSpecimens, setTier, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getSubscription, effectiveTierFromSubscription, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
+import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
 
-const TIER_INFO: Record<string, { name: string; crossesDay: number; imgsMonth: number }> = {
-  FREE: { name: "FREEBREEDER", crossesDay: 1, imgsMonth: 0 },
-  JUNIOR: { name: "JUNIOR BREEDER", crossesDay: 3, imgsMonth: 10 },
-  SENIOR: { name: "SENIOR BREEDER", crossesDay: 5, imgsMonth: 20 },
-  PHD: { name: "PHD BREEDER", crossesDay: 10, imgsMonth: 30 },
+const TIER_NAME: Record<Tier, string> = {
+  FREE: "FREEBREEDER",
+  JUNIOR: "JUNIOR BREEDER",
+  SENIOR: "SENIOR BREEDER",
+  PHD: "PHD BREEDER",
 };
 
 export default function ProfilePage() {
   const [items, setItems] = useState<ApiSpecimen[]>([]);
+  // Tier efetivo (nome + limites) vem só de GET /api/v1/me/tier (TierService no
+  // backend). Nunca mais de um seletor local — dailyCrosses/imgsMonth ficam
+  // null até a resposta chegar (evita mostrar "FREE" errado por 1 instante).
   const [tier, setTierState] = useState<Tier>("FREE");
+  const [tierLimits, setTierLimits] = useState<{ dailyCrosses: number; imgsMonth: number } | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [imgQuota, setImgQuota] = useState<ImageQuota | null>(null);
   const [ref, setRef] = useState<Referral | null>(null);
@@ -24,10 +28,12 @@ export default function ProfilePage() {
   const [buyMsg, setBuyMsg] = useState<string | null>(null);
   const [dailyMsg, setDailyMsg] = useState<string | null>(null);
   useEffect(() => {
-    // Tier vem do backend (TierService via GET /billing/subscription) —
-    // nunca do JWT nem do seletor de tier de teste (localStorage), senão um
-    // upgrade real via Stripe não apareceria sem relogar.
-    getSubscription().then((sub) => setTierState(effectiveTierFromSubscription(sub))).catch(() => setTierState("FREE"));
+    // Tier efetivo (TierService: assinatura → granted_tiers → FREE) — nunca do
+    // JWT nem de /billing/subscription sozinho, que só enxerga Stripe e por
+    // isso mostraria FREE pra quem tem PHD concedido fora do Stripe.
+    getMyTier()
+      .then((t) => { setTierState(t.tier); setTierLimits({ dailyCrosses: t.dailyCrosses, imgsMonth: t.monthlyImages }); })
+      .catch(() => setTierState("FREE"));
     getWallet().then(setWallet).catch(() => {});
     getImageQuota().then(setImgQuota).catch(() => {});
     getReferral().then(setRef).catch(() => {});
@@ -80,12 +86,16 @@ export default function ProfilePage() {
         <div className="grid h-16 w-16 place-items-center rounded-full border-2 border-purple text-2xl">🧬</div>
         <div className="flex-1">
           <div className="font-display text-lg font-bold uppercase text-ink">{getUser()?.name || getUser()?.email || "Criador"}</div>
-          <div className="text-sm text-purple">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).name}</div>
-          <div className="mt-1 text-xs text-ink-muted">{(TIER_INFO[tier] ?? TIER_INFO.FREE!).crossesDay} cruzamentos/dia · {(TIER_INFO[tier] ?? TIER_INFO.FREE!).imgsMonth} imagens IA/mês</div>
+          <div className="text-sm text-purple">{TIER_NAME[tier] ?? TIER_NAME.FREE}</div>
+          {tierLimits && (
+            <div className="mt-1 text-xs text-ink-muted">{tierLimits.dailyCrosses} cruzamentos/dia · {tierLimits.imgsMonth} imagens IA/mês</div>
+          )}
         </div>
-        <Link href="/app/planos" className="shrink-0 rounded-lg border border-purple/40 px-3 py-2 text-center font-display text-[0.68rem] font-bold uppercase tracking-wide text-purple transition hover:bg-purple/10">
-          {tier === "FREE" ? "Assinar" : "Ver planos"}
-        </Link>
+        {tier !== "PHD" && (
+          <Link href="/app/planos" className="shrink-0 rounded-lg border border-purple/40 px-3 py-2 text-center font-display text-[0.68rem] font-bold uppercase tracking-wide text-purple transition hover:bg-purple/10">
+            {tier === "FREE" ? "Assinar" : "Ver planos"}
+          </Link>
+        )}
       </div>
       {(() => { const u = getUser(); return u ? (
         <div className="mb-5 flex items-center justify-between rounded-card border border-white/10 bg-bg-800/70 p-4">
@@ -169,19 +179,6 @@ export default function ProfilePage() {
           <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos de imagem ganhos: {ref.creditsEarned}</div>
         </div>
       )}
-
-      <div className="mb-5 rounded-card border border-cyan/20 bg-bg-800 p-4">
-        <div className="mb-2 font-display text-xs font-bold uppercase text-cyan">Tier (modo de teste)</div>
-        <p className="mb-3 text-[0.7rem] text-ink-muted">Alterne para ver a experiência de cada tier (ex.: no FREE os cães somem e a escolha de fenótipo é bloqueada).</p>
-        <div className="flex gap-2">
-          {(["FREE","JUNIOR","SENIOR","PHD"] as Tier[]).map((t) => (
-            <button key={t} onClick={() => { setTier(t); setTierState(t); location.reload(); }}
-              className={`flex-1 rounded-lg border py-2 font-display text-xs uppercase transition ${tier === t ? "border-cyan bg-cyan/10 text-cyan" : "border-white/10 text-ink-muted hover:text-ink"}`}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="grid grid-cols-3 gap-3">
         {stat("Espécimes", total)}
