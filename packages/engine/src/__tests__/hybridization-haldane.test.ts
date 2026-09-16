@@ -4,7 +4,7 @@
  * golden: nenhum dos 4 arcos existentes é tocado por este teste.
  */
 import { describe, it, expect } from "vitest";
-import { cross, FELINE_PACK, type ParentInput, type CrossContext } from "../index";
+import { cross, enumerateOffspring, FELINE_PACK, type ParentInput, type CrossContext } from "../index";
 import type { Pedigree } from "../index";
 import { DELTA_F1, ONCA_NEGRA, PUMAJAGUAR_PEDIGREE } from "./fixtures";
 
@@ -119,5 +119,25 @@ describe("Pumajaguar BC1 — cobertura de fertilidade sob depressão movida do g
     // → [48,64].
     expect(r.specimen.fertility.score).toBeGreaterThanOrEqual(48);
     expect(r.specimen.fertility.score).toBeLessThanOrEqual(64);
+  });
+});
+
+describe("enumerateOffspring — maleSterile (aviso de esterilidade na prévia de opções, ADR-0018)", () => {
+  it("tigre × leão (interespecífico) → toda opção vem com maleSterile true", () => {
+    const tigre: ParentInput = { id: "tigre", genotype: { loci: AUTOSOMAL, qtl: {} }, generation: 0, sex: "M", species: "panthera-tigris" };
+    const leoa: ParentInput = { id: "leoa", genotype: { loci: AUTOSOMAL, qtl: {} }, generation: 0, sex: "F", species: "panthera-leo" };
+    const ctx = ctxFor(["tigre", "leoa"]);
+    const options = enumerateOffspring(tigre, leoa, ctx);
+    expect(options.length).toBeGreaterThan(0);
+    for (const o of options) expect(o.maleSterile).toBe(true);
+  });
+
+  it("leão × leão (intraespécie) → toda opção vem com maleSterile false", () => {
+    const leao: ParentInput = { id: "leao2", genotype: { loci: AUTOSOMAL, qtl: {} }, generation: 0, sex: "M", species: "panthera-leo" };
+    const leoa: ParentInput = { id: "leoa2", genotype: { loci: AUTOSOMAL, qtl: {} }, generation: 0, sex: "F", species: "panthera-leo" };
+    const ctx = ctxFor(["leao2", "leoa2"]);
+    const options = enumerateOffspring(leao, leoa, ctx);
+    expect(options.length).toBeGreaterThan(0);
+    for (const o of options) expect(o.maleSterile).toBe(false);
   });
 });

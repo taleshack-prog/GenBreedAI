@@ -88,6 +88,8 @@ export interface OptionsResponse {
     key: string; prob: number; fixationIndex: number; aura: number; variants: number;
     phenotype: OffspringOption["phenotype"]; genotype: Genotype;
     sexDimorphic: boolean; phenotypeBySex?: OffspringOption["phenotypeBySex"];
+    /** ADR-0018: machos desta opção nascerão estéreis (aviso na prévia). */
+    maleSterile: boolean;
   }>;
 }
 
@@ -147,6 +149,7 @@ export class CrossService {
         key: o.key, prob: o.prob, fixationIndex: o.fixationIndex, aura: o.aura, variants: o.variants,
         phenotype: o.phenotype, genotype: o.genotype,
         sexDimorphic: o.sexDimorphic, phenotypeBySex: o.phenotypeBySex,
+        maleSterile: o.maleSterile,
       })),
     };
   }

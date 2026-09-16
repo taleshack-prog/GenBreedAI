@@ -118,6 +118,8 @@ export interface OffspringOption {
   sexDimorphic: boolean;
   /** Só presente quando sexDimorphic — fenótipo por sexo (ex.: juba/sem juba). */
   phenotypeBySex?: { M: ApiPhenotype; F: ApiPhenotype };
+  /** ADR-0018: machos desta opção nascerão estéreis. */
+  maleSterile: boolean;
 }
 export interface OptionsResponse { canChoose: boolean; maxOptions: number; options: OffspringOption[]; }
 export async function getCrossOptions(input: { sireId: string; damId: string; method: string }): Promise<OptionsResponse> {

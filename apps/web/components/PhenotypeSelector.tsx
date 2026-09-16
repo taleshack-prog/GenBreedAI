@@ -7,6 +7,15 @@ function AuraMini({ n }: { n: number }) {
   return <span className="text-star text-sm">{"★".repeat(n)}<span className="text-white/20">{"★".repeat(5 - n)}</span></span>;
 }
 
+/** Selo "Estéril" (ADR-0018) — mesmos tokens de SexBadge/CapsuleCard.tsx:150. */
+function SterileBadge({ title }: { title?: string }) {
+  return (
+    <span title={title} className="ml-1 inline-block shrink-0 rounded-md border border-crit/40 bg-crit/10 px-1.5 py-0.5 font-display text-[0.55rem] normal-case text-crit">
+      Estéril
+    </span>
+  );
+}
+
 function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 /** Resumo do fenótipo ciente da família (felino usa P/W; canino usa A/K/B/M/H/S). */
@@ -173,6 +182,83 @@ export function PhenotypeSelector({
         {options.map((o) => {
           const sel = canChoose && selectedKey === o.key;
           const dimorphic = o.sexDimorphic && !describeMode;
+
+          // Opção dimórfica (ADR-0017/0018): dois cards de sexo, mesmo
+          // tratamento visual (aspect-square, borda, padding) do card não
+          // dimórfico abaixo, DENTRO de uma moldura comum. `sm:col-span-2`
+          // (min-width — vale de 640px em diante, sem precisar repetir em
+          // lg:) faz a moldura ocupar 2 colunas do grid externo (=1 linha
+          // inteira em sm:, 2 de 3 em lg:) — aí cada card de sexo (grid
+          // interno de 2 colunas) fica do MESMO tamanho de um card não
+          // dimórfico. Abaixo de 640px (grid externo de 1 coluna só) não há
+          // 2 colunas pra ocupar: os dois cards dividem a largura total da
+          // moldura — menores que um card não dimórfico nesse breakpoint,
+          // mas NUNCA transbordam (compromisso deliberado, única forma de
+          // garantir 360px sem overflow com dois retratos completos).
+          if (dimorphic) {
+            return (
+              <div key={o.key}
+                className={`rounded-lg border bg-bg-900/30 p-2 sm:col-span-2 ${sel ? "border-cyan ring-2 ring-cyan" : "border-white/10"}`}
+              >
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <span className="font-display text-[0.6rem] uppercase text-ink-muted">Mesmo genótipo · sexo sorteado na síntese</span>
+                  <span className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-purple">{(o.prob * 100).toFixed(1)}%</span>
+                    <AuraMini n={o.aura} />
+                  </span>
+                </div>
+                {o.maleSterile && (
+                  <p className="mb-2 text-center font-display text-[0.6rem] uppercase text-crit">Machos desta cruza serão estéreis</p>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {(["M", "F"] as const).map((sex) => {
+                    const previewKey = `${o.key}:${sex}`;
+                    const phen = sex === "M" ? o.phenotypeBySex?.M : o.phenotypeBySex?.F;
+                    const other = sex === "M" ? o.phenotypeBySex?.F : o.phenotypeBySex?.M;
+                    const label = sexDiffLabel(phen, other) || phenoSummary(phen?.loci ?? o.phenotype.loci);
+                    return (
+                      <div key={sex} role="button" tabIndex={0} onClick={() => choose(o)}
+                        className={`w-full min-w-0 rounded-lg border bg-bg-900/60 p-2 text-left transition ${sel ? "border-cyan" : "border-white/10"} ${canChoose ? "cursor-pointer hover:border-cyan/60" : "cursor-default"}`}
+                      >
+                        <div className="mb-1.5 flex min-w-0 items-center justify-between gap-1">
+                          <span className="font-mono text-[0.6rem] text-cyan">{sex === "M" ? "♂ 50%" : "♀ 50%"}</span>
+                          {sex === "M" && o.maleSterile && <SterileBadge title="Este macho nasce estéril (ADR-0018)." />}
+                        </div>
+                        <div className="relative mb-1.5 grid aspect-square w-full place-items-center overflow-hidden rounded bg-bg-900 p-1">
+                          {previews[previewKey] ? (
+                            <>
+                              <img src={previews[previewKey]} alt={sex === "M" ? "retrato macho" : "retrato fêmea"} className="h-full w-full object-cover" />
+                              <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
+                                className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
+                            </>
+                          ) : loading === previewKey ? (
+                            <span className="animate-pulse font-mono text-[0.5rem] uppercase text-cyan">gerando…</span>
+                          ) : (
+                            <span role="button" tabIndex={0} onClick={(e) => regen(o, e, sex)}
+                              className="px-1 text-center font-mono text-[0.55rem] text-cyan underline">
+                              {sex === "M" ? "♂" : "♀"} ver retrato
+                            </span>
+                          )}
+                        </div>
+                        <div className="truncate text-center text-[0.6rem] text-ink" title={label}>{label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {o.variants > 1 && <div className="mt-1 text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
+                <p className="mt-1 text-center text-[0.55rem] text-ink-muted">O sexo é sorteado na síntese.</p>
+                {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
+                {canChoose && (
+                  <span role="button" tabIndex={0} onClick={(e) => freeze(o, e)}
+                    className="mt-2 block cursor-pointer rounded border border-cyan/30 py-1 text-center font-display text-[0.6rem] uppercase text-cyan transition hover:bg-cyan/10">
+                    {freezing === o.key ? "congelando…" : "❄ congelar (−20)"}
+                  </span>
+                )}
+              </div>
+            );
+          }
+
+          // Opção NÃO dimórfica (ou dimórfica colapsada em describeMode) — sem mudança de layout.
           return (
           <div key={o.key}>
             <button
@@ -191,37 +277,6 @@ export function PhenotypeSelector({
                       <span key={i} className="rounded-full border border-cyan/30 bg-cyan/5 px-2 py-0.5 text-[0.6rem] text-cyan">{c}</span>
                     ))}
                   </div>
-                ) : dimorphic ? (
-                  // Sex-dimórfica (ADR-0017): dois retratos lado a lado, um
-                  // por sexo — o sexo real só é sorteado na síntese; aqui só
-                  // mostramos os dois desfechos possíveis, cada um gerado só
-                  // ao clicar nele (mesma cota de sempre).
-                  <div className="flex h-full w-full gap-1">
-                    {(["M", "F"] as const).map((sex) => {
-                      const previewKey = `${o.key}:${sex}`;
-                      return (
-                        <div key={sex} className="relative flex-1 overflow-hidden rounded bg-bg-800">
-                          <span className="absolute left-0.5 top-0.5 z-10 rounded bg-bg-900/80 px-1 py-0.5 font-mono text-[0.55rem] text-cyan">
-                            {sex === "M" ? "♂ 50%" : "♀ 50%"}
-                          </span>
-                          {previews[previewKey] ? (
-                            <>
-                              <img src={previews[previewKey]} alt={sex === "M" ? "retrato macho" : "retrato fêmea"} className="h-full w-full object-cover" />
-                              <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
-                                className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
-                            </>
-                          ) : loading === previewKey ? (
-                            <span className="absolute inset-0 grid animate-pulse place-items-center font-mono text-[0.5rem] uppercase text-cyan">gerando…</span>
-                          ) : (
-                            <span role="button" tabIndex={0} onClick={(e) => regen(o, e, sex)}
-                              className="absolute inset-0 grid cursor-pointer place-items-center px-1 text-center font-mono text-[0.55rem] text-cyan underline">
-                              {sex === "M" ? "♂" : "♀"} ver retrato
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
                 ) : previews[o.key] ? (
                   <>
                     <img src={previews[o.key]} alt="retrato" className="h-full w-full object-cover" />
@@ -234,14 +289,10 @@ export function PhenotypeSelector({
                   <span className="px-2 text-center font-display text-sm font-bold text-ink">{phenoSummary(o.phenotype.loci)}</span>
                 )}
               </div>
-              {dimorphic ? (
-                <div className="flex justify-center gap-3 text-center text-[0.6rem] text-ink">
-                  <span>♂ {sexDiffLabel(o.phenotypeBySex?.M, o.phenotypeBySex?.F) || phenoSummary(o.phenotypeBySex?.M?.loci ?? o.phenotype.loci)}</span>
-                  <span>♀ {sexDiffLabel(o.phenotypeBySex?.F, o.phenotypeBySex?.M) || phenoSummary(o.phenotypeBySex?.F?.loci ?? o.phenotype.loci)}</span>
-                </div>
-              ) : (
-                <div className="text-center text-[0.7rem] text-ink">{phenoSummary(o.phenotype.loci)}</div>
-              )}
+              <div className="flex items-center justify-center gap-1 text-center text-[0.7rem] text-ink">
+                <span>{phenoSummary(o.phenotype.loci)}</span>
+                {o.maleSterile && <SterileBadge title="Machos desta cruza nascem estéreis (ADR-0018)." />}
+              </div>
               {o.variants > 1 && <div className="text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
               {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
               {canChoose && (
@@ -251,7 +302,6 @@ export function PhenotypeSelector({
                 </span>
               )}
             </button>
-            {dimorphic && <p className="mt-1 text-center text-[0.55rem] text-ink-muted">O sexo é sorteado na síntese.</p>}
           </div>
           );
         })}

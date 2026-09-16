@@ -383,6 +383,14 @@ export interface OffspringOption {
   sexDimorphic: boolean;
   /** Só presente quando `sexDimorphic` — fenótipo pra cada sexo (ex.: juba/sem juba). */
   phenotypeBySex?: { M: import("@genbreedai/shared").Phenotype; F: import("@genbreedai/shared").Phenotype };
+  /**
+   * Machos desta opção nascerão estéreis (ADR-0018 — mesma regra de
+   * `finalizeSpecimen`: união de `parentA.species.split("×")` e
+   * `parentB.species.split("×")` com mais de 1 componente biológico). Igual
+   * pra toda opção do mesmo par de pais — não depende do genótipo/sexo
+   * sorteado, então é calculado uma vez, sem rng novo.
+   */
+  maleSterile: boolean;
 }
 
 /**
@@ -420,6 +428,10 @@ export function enumerateOffspring(
   const generation = Math.max(parentA.generation, parentB.generation) + 1;
   const gens = ctx.generationsUnderSelection ?? generation;
 
+  // ADR-0018 — mesma regra de finalizeSpecimen, igual pra toda opção deste par
+  // de pais (não depende de genótipo/sexo sorteado): calculado uma vez aqui.
+  const maleSterile = new Set([...parentA.species.split("×"), ...parentB.species.split("×")]).size > 1;
+
   // Agrupa por FENÓTIPO (genótipos que produzem a mesma aparência somam probabilidade;
   // diferem só em portadores ocultos). O jogador seleciona o FENÓTIPO, não o portador.
   const groups = new Map<string, { rep: { loci: Record<string, [string, string]>; prob: number }; phenKey: string; prob: number; variants: number; phenotype: ReturnType<typeof expressPhenotype> }>();
@@ -456,7 +468,7 @@ export function enumerateOffspring(
       genotype, prob: g.prob, phenotype,
       fixationIndex: fixation.index, aura: mapFixationToAura(fixation.index),
       key: hashGenotype(genotype), variants: g.variants,
-      sexDimorphic, phenotypeBySex,
+      sexDimorphic, phenotypeBySex, maleSterile,
     };
   });
 }
