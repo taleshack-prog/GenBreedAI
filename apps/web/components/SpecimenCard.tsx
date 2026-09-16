@@ -2,6 +2,7 @@ import type { CrossResponse } from "../lib/api";
 import { Creature } from "./Creature";
 import { AuraStars } from "./AuraStars";
 import { GenotypeChips, QtlBars } from "./Genome";
+import { SexBadge } from "./SexBadge";
 
 const METHOD_LABEL: Record<string, string> = {
   F1: "F1 · primeira geração", F2: "F2 · intercruzamento", F3: "F3 · terceira geração",
@@ -48,7 +49,13 @@ export function SpecimenCard({ result }: { result: CrossResponse }) {
         <div className="text-xs text-ink-muted">
           {METHOD_LABEL[engine.method] ?? engine.method} · geração {engine.generation}
         </div>
-        <h3 className="font-display text-2xl font-bold uppercase text-ink">{specimen.species}</h3>
+        <h3 className="font-display text-2xl font-bold uppercase text-ink">
+          {specimen.species}
+          <SexBadge sex={specimen.sex} />
+          {specimen.haldaneStatus === "STERILE" && (
+            <span className="ml-2 align-middle rounded-md border border-crit/40 bg-crit/10 px-2 py-0.5 font-display text-xs normal-case text-crit">Estéril</span>
+          )}
+        </h3>
         {!engine.phenotype.viable && (
           <div className="mt-1 font-display text-sm uppercase text-crit">embrião inviável</div>
         )}

@@ -26,6 +26,9 @@ export interface ApiSpecimen {
   cacheKey: string | null;
   imageUrl?: string | null;
   status?: "ALIVE" | "FROZEN";
+  sex: "M" | "F" | null;
+  fertility: number | null;
+  haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
 }
 
 export interface CrossResponse {

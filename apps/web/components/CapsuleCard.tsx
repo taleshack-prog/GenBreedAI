@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getImage, generateImage, type ApiSpecimen } from "../lib/api";
 import { displayName, displaySci } from "../lib/display";
+import { SexBadge } from "./SexBadge";
 
 /** BarraRaridade (Design System §6): 5 estrelas preenchidas conforme raridade. */
 function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
@@ -144,6 +145,10 @@ export function CapsuleCard({
       <div className="mt-2 text-center font-display text-base font-bold uppercase tracking-wider"
         style={{ color: cor, textShadow: `0 0 8px ${cor}66` }}>
         {displayName(specimen)}
+        <SexBadge sex={specimen.sex} />
+        {specimen.haldaneStatus === "STERILE" && (
+          <span className="ml-2 align-middle rounded-md border border-crit/40 bg-crit/10 px-2 py-0.5 font-display text-xs normal-case text-crit">Estéril</span>
+        )}
       </div>
       <div className="text-center text-[0.65rem] italic text-ink-muted">{displaySci(specimen)}</div>
       <div className="mx-auto mt-1.5 flex max-w-[220px] overflow-hidden rounded-md border"

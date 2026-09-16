@@ -8,6 +8,7 @@ import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getTier, cla
 import { PhenotypeSelector } from "../../components/PhenotypeSelector";
 import { displayName } from "../../lib/display";
 import { CapsuleCard } from "../../components/CapsuleCard";
+import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
 import { PunnettGridView, InbreedingGauge, HybridPreview, CurrencyBar } from "../../components/LabSections";
 import { wrightF } from "@genbreedai/engine";
@@ -40,6 +41,23 @@ function LabInner() {
 
   const sire = specimens.find((s) => s.id === sireId) ?? null;
   const dam = specimens.find((s) => s.id === damId) ?? null;
+  // Seletor de pai: só sex "M"; seletor de mãe: só "F". fertility===0 nunca aparece (não reproduz).
+  const sireOptions = specimens.filter((s) => s.sex === "M" && s.fertility !== 0);
+  const damOptions = specimens.filter((s) => s.sex === "F" && s.fertility !== 0);
+
+  // Nunca deixa sireId/damId apontar pra fora da lista atual (seleção inicial e após refetch).
+  // Declarados ANTES do efeito de sincronização por URL (abaixo) para que um
+  // `?a=&b=` explícito e válido vença o fallback "primeiro da lista" quando os
+  // dois efeitos disparam no mesmo commit (specimens acabou de carregar).
+  useEffect(() => {
+    if (!sireOptions.some((s) => s.id === sireId)) setSireId(sireOptions[0]?.id ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specimens]);
+  useEffect(() => {
+    if (!damOptions.some((s) => s.id === damId)) setDamId(damOptions[0]?.id ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specimens]);
+
   useEffect(() => {
     if (sire?.id && dam?.id) {
       classifyCross({ sireId: sire.id, damId: dam.id })
@@ -118,10 +136,14 @@ function LabInner() {
       <section className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1fr_auto_1fr]">
         <div>
           <CapsuleCard specimen={sire} slot="A" />
-          <select value={sireId} onChange={(e) => setSireId(e.target.value)} className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-ink focus:border-cyan">
-            <option value="">selecionar progenitor A…</option>
-            {specimens.map((s) => <option key={s.id} value={s.id}>{displayName(s)} · {s.id}</option>)}
-          </select>
+          {sireOptions.length > 0 ? (
+            <select value={sireId} onChange={(e) => setSireId(e.target.value)} className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-ink focus:border-cyan">
+              <option value="">selecionar Pai ♂…</option>
+              {sireOptions.map((s) => <option key={s.id} value={s.id}>{sexChar(s.sex)} {displayName(s)} · {s.id}</option>)}
+            </select>
+          ) : (
+            <p className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-center text-sm text-ink-muted">Nenhum macho disponível</p>
+          )}
         </div>
 
         <div className="flex flex-col items-center gap-3 py-2">
@@ -149,10 +171,14 @@ function LabInner() {
 
         <div>
           <CapsuleCard specimen={dam} slot="B" />
-          <select value={damId} onChange={(e) => setDamId(e.target.value)} className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-ink focus:border-purple">
-            <option value="">selecionar progenitor B…</option>
-            {specimens.map((s) => <option key={s.id} value={s.id}>{displayName(s)} · {s.id}</option>)}
-          </select>
+          {damOptions.length > 0 ? (
+            <select value={damId} onChange={(e) => setDamId(e.target.value)} className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-ink focus:border-purple">
+              <option value="">selecionar Mãe ♀…</option>
+              {damOptions.map((s) => <option key={s.id} value={s.id}>{sexChar(s.sex)} {displayName(s)} · {s.id}</option>)}
+            </select>
+          ) : (
+            <p className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-center text-sm text-ink-muted">Nenhuma fêmea disponível</p>
+          )}
         </div>
       </section>
 
@@ -195,7 +221,7 @@ function LabInner() {
       {/* Botão sintetizar */}
       <button
         onClick={onCross}
-        disabled={!compatible || loading}
+        disabled={!compatible || loading || sireOptions.length === 0 || damOptions.length === 0}
         className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl bg-ok px-4 py-4 font-display text-lg font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
       >
         {loading ? "Sintetizando…" : canChoose && choiceKey ? "Sintetizar fenótipo escolhido" : "Sintetizar genoma"}

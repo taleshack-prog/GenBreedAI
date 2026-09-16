@@ -23,6 +23,14 @@ export default function GeneBankPage() {
   const sortedList = [...filtered].sort((a, b) => (a.status === "FROZEN" ? 1 : 0) - (b.status === "FROZEN" ? 1 : 0) || a.fPedigree - b.fPedigree);
   const nameOf = (id: string) => { const s = specimens.find((x) => x.id === id); return s ? displayName(s) : id; };
   const [a, b] = picks;
+  // O par vira sire/dam pelo SEXO, não pela ordem de clique: macho sempre
+  // sire, fêmea sempre dam, independente de qual foi clicado primeiro (a/b
+  // continuam só rotulando os badges "A"/"B" na UI, na ordem de clique).
+  const pickedA = a ? specimens.find((x) => x.id === a) : undefined;
+  const pickedB = b ? specimens.find((x) => x.id === b) : undefined;
+  const male = picks.length === 2 ? [pickedA, pickedB].find((s) => s?.sex === "M") : undefined;
+  const female = picks.length === 2 ? [pickedA, pickedB].find((s) => s?.sex === "F") : undefined;
+  const validPair = !!male && !!female && male.fertility !== 0 && female.fertility !== 0;
 
   function toggle(s: ApiSpecimen) {
     if (s.status === "FROZEN") { setMsg("Este espécime está congelado — descongele para usar no cruzamento."); return; }
@@ -100,11 +108,14 @@ export default function GeneBankPage() {
               <span className="rounded border border-purple/40 px-2 py-1 text-purple">B: {b ? nameOf(b) : "—"}</span>
             </div>
             <button onClick={() => setPicks([])} className="rounded-lg border border-white/15 px-3 py-2 text-xs uppercase text-ink-muted">Limpar</button>
-            <button disabled={picks.length < 2} onClick={() => router.push(`/app?a=${a}&b=${b}`)}
+            <button disabled={picks.length < 2 || !validPair} onClick={() => router.push(`/app?a=${male!.id}&b=${female!.id}`)}
               className="rounded-lg bg-ok px-4 py-2 font-display text-sm font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none">
               Cruzar →
             </button>
           </div>
+          {picks.length === 2 && !validPair && (
+            <p className="px-4 pb-2 text-center text-xs text-crit">Selecione um macho e uma fêmea férteis</p>
+          )}
         </div>
       )}
     </main>
