@@ -68,7 +68,14 @@ export interface LocusDef {
   /** Descritores de heterozigotos para dominância incompleta/codominante. */
   heteroPhenotype?: Record<string, string>;
   mutationRate: number;
-  /** Ver `SexExpression`. Default BOTH — só tipo, não consultado na resolução ainda. */
+  /**
+   * Ver `SexExpression`. Default BOTH. SEX_LIMITED_M/SEX_LIMITED_F são
+   * consultados por `expressPhenotype()` (ADR-0017, quando `sex` é passado):
+   * no sexo NÃO indicado, o fenótipo sai como o do alelo mais recessivo de
+   * `dominanceRank`, independente do genótipo (o indivíduo continua
+   * portando/transmitindo o alelo normalmente). SEX_INFLUENCED ainda não é
+   * consultado (fora de escopo da ADR-0017).
+   */
   sexExpression?: SexExpression;
 }
 

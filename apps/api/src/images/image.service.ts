@@ -4,8 +4,7 @@
  * status APPROVED (DoD §10). Sem FAL_KEY, opera em modo procedural (sem custo).
  */
 import { Injectable } from "@nestjs/common";
-import { sha256, hashGenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
-import { CURRENT_ART_VERSION } from "@genbreedai/shared";
+import { computeCacheKey, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { buildPrompt } from "./prompt";
 import { resolveProvider } from "./provider";
@@ -18,9 +17,17 @@ import { ForbiddenException } from "@nestjs/common";
 
 export interface ImageResult { cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string; }
 
+/**
+ * Chave GRAVADA (`s.cacheKey`) tem prioridade sempre — só recalcula (ADR-0017,
+ * fórmula ÚNICA via `computeCacheKey`, nunca reimplementada aqui) pra
+ * espécimes "preview" não persistidos (ver preview.controller.ts). Passa
+ * `s.sex` pro cálculo — sem isso, `leao` e `leao-femea` cairiam na MESMA
+ * chave e a leoa herdaria o retrato COM juba do macho (achado que originou
+ * esta correção).
+ */
 function cacheKeyOf(s: StoredSpecimen): string {
-  const packId = s.pack === "canine" ? CANINE_PACK.id : FELINE_PACK.id;
-  return s.cacheKey ?? sha256(hashGenotype(s.genotype) + "|" + packId + "|" + CURRENT_ART_VERSION);
+  const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
+  return s.cacheKey ?? computeCacheKey(s.genotype, pack, s.sex ?? undefined);
 }
 
 @Injectable()

@@ -6,6 +6,7 @@
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
 import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, DOG_BREEDS } from "@genbreedai/shared";
+import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
 /** Pelagem FELINA a partir do fenótipo. */
@@ -24,8 +25,14 @@ function coatFeline(loci: Record<string, string>): string {
   else if (loci.P === "pintas") coat = `${base} coat with round solid black spots`;
   else coat = `${base} plain uniform coat`;
   if (loci.C === "pontos") coat += ", with darker pointed extremities (face, ears, paws)";
-  if (loci.Ma === "juba completa") coat += ", the male has a full thick lion-like mane around the head and neck";
-  else if (loci.Ma === "juba parcial") coat += ", the male has a partial sparse mane (ligre-like), shorter than a lion's";
+  // Descritor de juba SÓ quando o fenótipo diz juba (ADR-0017) — Ma agora é
+  // sex-limited no motor (fêmea nunca expressa, mesmo Ma/Ma), então "sem
+  // juba" já cobre o caso feminino sem precisar de um branch "the male";
+  // nada é dito quando ausente (silêncio, não "no mane" — ver buildPrompt
+  // pra correção específica da leoa, que precisa negar a juba explicitamente
+  // por causa do descritor estático de SPECIES_INFO).
+  if (loci.Ma === "juba completa") coat += ", a full thick lion-like mane around the head and neck";
+  else if (loci.Ma === "juba parcial") coat += ", a partial sparse mane (ligre-like), shorter than a lion's";
   if (loci.Fl === "pelo longo") coat += ", long thick fluffy fur";
   else if (loci.Fl === "pelo curto") coat += ", short sleek fur";
   return coat;
@@ -122,16 +129,31 @@ export function numericSeed(cacheKey: string): number {
   return h % 2147483647;
 }
 
+/**
+ * Correção pontual (ADR-0017) do descritor ESTÁTICO de leão em SPECIES_INFO
+ * (packages/shared/src/species.ts) — hoje fixo pro macho ("adult male
+ * African lion ... full thick brown mane"), sem variante por sexo (nenhuma
+ * espécie tem). Fêmea (leoa) não tem juba (Ma agora é sex-limited no motor)
+ * — corrigido AQUI, local ao prompt, sem mudar `speciesInfo()`/SPECIES_INFO
+ * (mudar a assinatura afetaria todo chamador do pacote, fora de escopo desta
+ * ADR). Só se aplica a panthera-leo fêmea; qualquer outra espécie/sexo usa o
+ * descritor cadastrado sem alteração.
+ */
+function lionessAwareDescriptor(species: string, sex: Sex | null | undefined, descriptor: string): string {
+  if (species !== "panthera-leo" || sex !== "F") return descriptor;
+  return "adult lioness, no mane, powerful muscular body, tawny golden fur, unmistakably a lioness";
+}
+
 /** Traços legíveis (usado no card/roundtrip). */
 export function traitVector(s: StoredSpecimen): string[] {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
-  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack);
+  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack, s.sex ?? undefined);
   return [coatFromPhenotype(phen.loci, s.pack)];
 }
 
 export function buildPrompt(s: StoredSpecimen): string {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
-  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack);
+  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack, s.sex ?? undefined);
   const coat = coatFromPhenotype(phen.loci, s.pack);
   const isHybrid = s.species.includes("×");
   const q = s.genotype.qtl ?? {};
@@ -168,7 +190,8 @@ export function buildPrompt(s: StoredSpecimen): string {
     } else if (s.pack === "canine") {
       subject = `a ${physiqueAdj} mixed-breed dog${morphClause}, with ${coat}`;
     } else {
-      subject = `a ${physiqueAdj} ${info.common} (${info.scientific})${morphClause}: ${info.descriptor}, with ${coat}`;
+      const descriptor = lionessAwareDescriptor(s.species, s.sex, info.descriptor);
+      subject = `a ${physiqueAdj} ${info.common} (${info.scientific})${morphClause}: ${descriptor}, with ${coat}`;
     }
   }
 

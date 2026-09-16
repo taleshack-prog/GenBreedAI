@@ -37,8 +37,12 @@ export const FELINE_PACK: SpeciesPack = {
     S: { name: "S", alleles: ["S", "s"], dominance: "COMPLETE", dominanceRank: ["S", "s"],
       phenotypeByAllele: { S: "bicolor", s: "sólido" }, mutationRate: µ },
     // Juba (poligênico simplificado, dominância INCOMPLETA): Ma/Ma completa, Ma/ma parcial (lígre), ma/ma sem juba.
+    // SEX_LIMITED_M (ADR-0017): juba é caractere sexual secundário dependente
+    // de testosterona — só se EXPRESSA em machos. Fêmeas continuam portando e
+    // transmitindo Ma/ma normalmente (o genótipo não muda, só a expressão).
     Ma: { name: "Ma", alleles: ["Ma", "ma"], dominance: "INCOMPLETE", dominanceRank: ["Ma", "ma"],
-      phenotypeByAllele: { Ma: "juba completa", ma: "sem juba" }, heteroPhenotype: { "Ma|ma": "juba parcial" }, mutationRate: µ },
+      phenotypeByAllele: { Ma: "juba completa", ma: "sem juba" }, heteroPhenotype: { "Ma|ma": "juba parcial" },
+      mutationRate: µ, sexExpression: "SEX_LIMITED_M" },
     // Comprimento do pelo (FGF5): longo dominante sobre curto.
     Fl: { name: "Fl", alleles: ["Fl^l", "Fl^s"], dominance: "COMPLETE", dominanceRank: ["Fl^l", "Fl^s"],
       phenotypeByAllele: { "Fl^l": "pelo longo", "Fl^s": "pelo curto" }, mutationRate: µ },

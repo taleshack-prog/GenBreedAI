@@ -39,6 +39,7 @@ export {
   materializeCross,
   validateBreedingConstraints,
   hashGenotype,
+  computeCacheKey,
   hybridClass,
   SexMismatchError,
   SterileParentError,

@@ -7,7 +7,7 @@
  *   3. Epistasia (ex.: Harlequin H sobre Merle M).
  */
 
-import type { Genotype, Phenotype } from "@genbreedai/shared";
+import type { Genotype, Phenotype, Sex } from "@genbreedai/shared";
 import type { LocusDef, PigmentOverrideRule, SpeciesPack } from "./types";
 import { baseAllele, isMutant } from "./gamete";
 
@@ -108,10 +108,16 @@ function resolvePigmentOverride(
 
 /**
  * Expressa o fenótipo completo de um zigoto sob um data pack.
+ *
+ * `sex` (ADR-0017, OPCIONAL): sexo do zigoto, só usado pra resolver loci
+ * LIMITADOS AO SEXO (`LocusDef.sexExpression`). Ausente = nenhuma
+ * limitação por sexo é aplicada (comportamento IDÊNTICO ao de antes desta
+ * ADR — todos os 4 golden tests continuam chamando sem o 3º argumento).
  */
 export function expressPhenotype(
   zygote: Genotype,
   pack: SpeciesPack,
+  sex?: Sex,
 ): Phenotype {
   // 1. Letalidade — qualquer combo letal inviabiliza o embrião.
   let viable = true;
@@ -134,6 +140,22 @@ export function expressPhenotype(
       continue;
     }
     loci[locusName] = expressLocus(def, pair[0], pair[1]);
+    // Loci LIMITADOS AO SEXO (ADR-0017) — expressos só no sexo indicado; no
+    // OUTRO sexo, o fenótipo sai sempre como o do alelo MAIS RECESSIVO de
+    // `dominanceRank` (o "estado desligado"), INDEPENDENTE do genótipo real —
+    // o indivíduo continua PORTANDO e TRANSMITINDO o(s) alelo(s) normalmente,
+    // só não EXPRESSA. Ex.: Ma (juba) SEX_LIMITED_M no pack felino — fêmea
+    // Ma/Ma nunca tem juba, mas transmite Ma aos filhos macho (ver testes).
+    // SEX_INFLUENCED não é implementado aqui (fora de escopo desta ADR).
+    if (sex !== undefined && def.sexExpression) {
+      const suppressed =
+        (def.sexExpression === "SEX_LIMITED_M" && sex === "F") ||
+        (def.sexExpression === "SEX_LIMITED_F" && sex === "M");
+      if (suppressed) {
+        const offAllele = def.dominanceRank[def.dominanceRank.length - 1]!;
+        loci[locusName] = def.phenotypeByAllele[offAllele] ?? offAllele;
+      }
+    }
   }
 
   // 2b. Loci ligados ao X (ADR-0013) — hemizigoto (macho) ou mosaico (fêmea

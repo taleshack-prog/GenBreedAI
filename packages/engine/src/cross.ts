@@ -180,6 +180,31 @@ export function hybridClass(parentA: ParentInput, parentB: ParentInput, pack: Sp
   return explicit ? "DOCUMENTED_FERTILE_FEMALE" : "UNDOCUMENTED";
 }
 
+/**
+ * cacheKey determinístico (ADR-0017) — ÚNICA implementação: nenhum outro
+ * lugar do código (API incluída — `apps/api/src/images/image.service.ts`)
+ * recalcula esta fórmula por conta própria; todos chamam esta função.
+ *
+ * `sex` OPCIONAL: sexo entra na chave SOMENTE se este `genotype` tiver algum
+ * locus SEX_LIMITED cujo fenótipo REALMENTE difira entre os sexos (ex.: leão
+ * Ma/Ma — macho tem juba, fêmea não). Comparação FEITA (não um mero "o pack
+ * tem algum locus SEX_LIMITED"): reexpressa o MESMO genótipo com o sexo
+ * oposto e compara `phenotype.loci` — se idêntico (ex.: onça ma/ma, nunca
+ * expressa juba em nenhum sexo) OU se `sex` não foi informado, o resultado é
+ * BYTE-IDÊNTICO à fórmula antiga (sem sufixo de sexo) — gêmeos sem diferença
+ * visual reusam a mesma imagem. `expressPhenotype()` é pura (não consome
+ * RNG), então esta chamada extra nunca perturba nenhum stream de sorteio.
+ */
+export function computeCacheKey(genotype: Genotype, pack: SpeciesPack, sex?: Sex): string {
+  const base = hashGenotype(genotype) + "|" + pack.id + "|" + CURRENT_ART_VERSION;
+  if (sex === undefined) return sha256(base);
+  const oppositeSex: Sex = sex === "M" ? "F" : "M";
+  const phenotype = expressPhenotype(genotype, pack, sex);
+  const oppositePhenotype = expressPhenotype(genotype, pack, oppositeSex);
+  const sexAffectsAppearance = JSON.stringify(phenotype.loci) !== JSON.stringify(oppositePhenotype.loci);
+  return sha256(base + (sexAffectsAppearance ? "|" + sex : ""));
+}
+
 /** Gera o genótipo canônico em string (ordenado) para hash de cache/proveniência. */
 export function hashGenotype(genotype: Genotype): string {
   const loci = Object.keys(genotype.loci)
@@ -238,7 +263,7 @@ function finalizeSpecimen(
   const { sex, xLoci } = combineXGametes(sireX, damX, Object.keys(ctx.pack.xLoci));
   const zygoteWithX: Genotype = { ...zygote, xLoci };
 
-  const phenotype = expressPhenotype(zygoteWithX, ctx.pack);
+  const phenotype = expressPhenotype(zygoteWithX, ctx.pack, sex);
 
   // Efeito materno (ADR-0014) — PROIBIDO gravar em genotype.qtl; só no phenotype.
   const maternalCfg = ctx.pack.maternalEffect?.porte;
@@ -260,7 +285,8 @@ function finalizeSpecimen(
   const generationsUnderSelection = ctx.generationsUnderSelection ?? generation;
   const fixation = fixationIndex({ genotype: zygote, targetLoci, fPedigree, generationsUnderSelection });
   const aura = mapFixationToAura(fixation.index);
-  const cacheKey = sha256(hashGenotype(zygote) + "|" + ctx.pack.id + "|" + CURRENT_ART_VERSION);
+  // ADR-0017: fórmula ÚNICA de cacheKey — ver computeCacheKey() acima.
+  const cacheKey = computeCacheKey(zygote, ctx.pack, sex);
   return {
     specimen: { genotype: zygoteWithX, phenotype, fPedigree: Number(fPedigree.toFixed(6)), fertility, fixationIndex: fixation.index, aura, generation, method, sex },
     cacheKey,
