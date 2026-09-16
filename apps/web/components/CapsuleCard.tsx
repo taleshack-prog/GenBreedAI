@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getImage, generateImage, type ApiSpecimen } from "../lib/api";
+import { getImage, generateImage, ApiError, type ApiSpecimen } from "../lib/api";
 import { displayName, displaySci } from "../lib/display";
 import { SexBadge } from "./SexBadge";
 
@@ -35,17 +35,32 @@ export function CapsuleCard({
 
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const [genLoading, setGenLoading] = useState(false);
+  const [genError, setGenError] = useState<{ message: string; status?: number } | null>(null);
   const router = useRouter();
 
   async function genImage(e: React.MouseEvent, force: boolean) {
     e.stopPropagation();
     if (!specimen) return;
     setGenLoading(true);
-    try { const r = await generateImage(specimen.id, force); if (r.imageUrl) setFetchedUrl(r.imageUrl + "?t=" + Date.now()); }
-    catch { /* modo procedural / sem chave */ } finally { setGenLoading(false); }
+    setGenError(null);
+    try {
+      const r = await generateImage(specimen.id, force);
+      if (r.imageUrl) setFetchedUrl(r.imageUrl + "?t=" + Date.now());
+      // Sem imageUrl (modo procedural, sem FAL_KEY) NÃO é erro — mantém o
+      // card procedural em silêncio, sem "gerado" nem mensagem nenhuma.
+    } catch (err) {
+      setGenError(
+        err instanceof ApiError
+          ? { message: err.message, status: err.status }
+          : { message: "Não foi possível gerar o retrato. Tente de novo." },
+      );
+    } finally {
+      setGenLoading(false);
+    }
   }
   useEffect(() => {
     let alive = true;
+    setGenError(null); // troca de espécime (ex.: outro progenitor) — erro antigo não vale mais.
     if (specimen && !specimen.imageUrl) {
       getImage(specimen.id).then((r) => { if (alive && r?.imageUrl) setFetchedUrl(r.imageUrl); }).catch(() => {});
     }
@@ -139,6 +154,20 @@ export function CapsuleCard({
           <div className="pointer-events-none absolute inset-y-0 left-2 w-2 rounded-full bg-white/15 blur-[2px]" />
         </div>
       </div>
+
+      {/* Erro de geração de retrato — junto ao retrato, não silencioso. */}
+      {genError && (
+        <div className="mt-2 rounded-lg border border-crit/40 bg-crit/10 px-2 py-1.5 text-center text-[0.65rem] text-crit">
+          <p>{genError.message}</p>
+          {genError.status === 403 && (
+            <span role="button" tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); router.push("/app/profile"); }}
+              className="mt-0.5 inline-block cursor-pointer underline">
+              Ver créditos
+            </span>
+          )}
+        </div>
+      )}
 
       {/* METADADOS (§5.2) */}
       {specimen ? (<>

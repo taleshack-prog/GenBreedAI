@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { previewImage, freezeOption, type OffspringOption } from "../lib/api";
+import { useRouter } from "next/navigation";
+import { previewImage, freezeOption, ApiError, type OffspringOption } from "../lib/api";
+
+/** Não-ApiError (rede/parse) → mensagem genérica; ApiError → message/status da API. */
+function classifyError(err: unknown): { message: string; status?: number } {
+  return err instanceof ApiError ? { message: err.message, status: err.status } : { message: "Não foi possível gerar o retrato. Tente de novo." };
+}
 
 function AuraMini({ n }: { n: number }) {
   return <span className="text-star text-sm">{"★".repeat(n)}<span className="text-white/20">{"★".repeat(5 - n)}</span></span>;
@@ -13,6 +19,20 @@ function SterileBadge({ title }: { title?: string }) {
     <span title={title} className="ml-1 inline-block shrink-0 rounded-md border border-crit/40 bg-crit/10 px-1.5 py-0.5 font-display text-[0.55rem] normal-case text-crit">
       Estéril
     </span>
+  );
+}
+
+/** Erro de geração de retrato, junto ao retrato — mesmos tokens de CapsuleCard.tsx. */
+function GenErrorBox({ error, onGoToProfile }: { error: { message: string; status?: number }; onGoToProfile: (e: React.MouseEvent) => void }) {
+  return (
+    <div className="mt-1 rounded border border-crit/40 bg-crit/10 px-1 py-1 text-center text-[0.55rem] text-crit">
+      <p>{error.message}</p>
+      {error.status === 403 && (
+        <span role="button" tabIndex={0} onClick={onGoToProfile} className="inline-block cursor-pointer underline">
+          Ver créditos
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -117,11 +137,16 @@ export function PhenotypeSelector({
   describeMode?: boolean;
   onFrozen?: (msg: string) => void;
 }) {
+  const router = useRouter();
   const [freezing, setFreezing] = useState<string | null>(null);
   // Chave: o.key (opção não-dimórfica) ou `${o.key}:M`/`${o.key}:F` (dimórfica —
   // um retrato POR SEXO, gerado independentemente).
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
+  // Erro da última geração/preview, por chave (mesmo esquema de `previews`) —
+  // mostrado junto ao retrato daquela chave, não como toast solto.
+  const [errors, setErrors] = useState<Record<string, { message: string; status?: number }>>({});
+  function goToProfile(e: React.MouseEvent) { e.stopPropagation(); router.push("/app/profile"); }
 
   async function freeze(o: OffspringOption, e: React.MouseEvent) {
     e.stopPropagation();
@@ -140,10 +165,14 @@ export function PhenotypeSelector({
     e.stopPropagation();
     const previewKey = sex ? `${o.key}:${sex}` : o.key;
     setLoading(previewKey);
+    setErrors((p) => { if (!(previewKey in p)) return p; const n = { ...p }; delete n[previewKey]; return n; });
     try {
       const r = await previewImage({ ...crossInput, choiceKey: o.key, force: true, ...(sex ? { sex } : {}) });
       if (r.imageUrl) setPreviews((p) => ({ ...p, [previewKey]: r.imageUrl! + "?t=" + Date.now() }));
-    } catch (err) { onFrozen?.((err as Error).message); } finally { setLoading(null); }
+      // Sem imageUrl (modo procedural) NÃO é erro — sem "gerado", sem mensagem.
+    } catch (err) {
+      setErrors((p) => ({ ...p, [previewKey]: classifyError(err) }));
+    } finally { setLoading(null); }
   }
   async function choose(o: OffspringOption) {
     if (!canChoose) return;
@@ -155,10 +184,13 @@ export function PhenotypeSelector({
     if (o.sexDimorphic) return;
     if (!previews[o.key]) {
       setLoading(o.key);
+      setErrors((p) => { if (!(o.key in p)) return p; const n = { ...p }; delete n[o.key]; return n; });
       try {
         const r = await previewImage({ ...crossInput, choiceKey: o.key });
         if (r.imageUrl) setPreviews((p) => ({ ...p, [o.key]: r.imageUrl! }));
-      } catch (err) { onFrozen?.((err as Error).message); } finally { setLoading(null); }
+      } catch (err) {
+        setErrors((p) => ({ ...p, [o.key]: classifyError(err) }));
+      } finally { setLoading(null); }
     }
   }
 
@@ -241,6 +273,7 @@ export function PhenotypeSelector({
                           )}
                         </div>
                         <div className="truncate text-center text-[0.6rem] text-ink" title={label}>{label}</div>
+                        {errors[previewKey] && <GenErrorBox error={errors[previewKey]!} onGoToProfile={goToProfile} />}
                       </div>
                     );
                   })}
@@ -293,6 +326,7 @@ export function PhenotypeSelector({
                 <span>{phenoSummary(o.phenotype.loci)}</span>
                 {o.maleSterile && <SterileBadge title="Machos desta cruza nascem estéreis (ADR-0018)." />}
               </div>
+              {errors[o.key] && <GenErrorBox error={errors[o.key]!} onGoToProfile={goToProfile} />}
               {o.variants > 1 && <div className="text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
               {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
               {canChoose && (

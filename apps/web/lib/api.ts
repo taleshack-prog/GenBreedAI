@@ -72,9 +72,32 @@ function demoHeaders(): Record<string, string> {
   return base;
 }
 
+/**
+ * Erro de resposta não-2xx da API — SEMPRE lançado (nunca devolvido como se
+ * fosse sucesso). `status` = HTTP status; `message` = `body.message` da API
+ * quando presente, senão um fallback específico da função. Quem chama decide
+ * a UI (ex.: status===403 de imagem → link "Ver créditos").
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+/** Monta o ApiError de uma resposta não-2xx, lendo `{message}` do corpo quando houver. */
+async function apiErrorFrom(res: Response, fallback: string): Promise<ApiError> {
+  const body = await res.json().catch(() => null);
+  const message = body && typeof body === "object" && typeof (body as { message?: unknown }).message === "string"
+    ? (body as { message: string }).message
+    : fallback;
+  return new ApiError(res.status, message);
+}
+
 export async function listSpecimens(): Promise<ApiSpecimen[]> {
   const res = await fetch("/api/v1/specimens", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error(`Falha ao listar espécimes (${res.status}).`);
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao listar espécimes (${res.status}).`);
   return res.json();
 }
 
@@ -90,23 +113,27 @@ export async function postCross(input: {
     headers: demoHeaders(),
     body: JSON.stringify(input),
   });
-  if (res.status === 429) throw new Error("Cota diária de cruzamentos esgotada para este tier.");
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.message ?? `Cruzamento falhou (${res.status}).`);
+    const fallback = res.status === 429 ? "Cota diária de cruzamentos esgotada para este tier." : `Cruzamento falhou (${res.status}).`;
+    throw await apiErrorFrom(res, fallback);
   }
   return res.json();
 }
 
 export interface ImageResult { cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string; }
+/**
+ * Checagem silenciosa de cache (usada em polling — CapsuleCard). Não-2xx
+ * SEMPRE lança ApiError (mesma regra de toda função aqui); quem só quer "sem
+ * imagem ainda" trata com `.catch(() => {})`, como já faz o único chamador.
+ */
 export async function getImage(id: string): Promise<ImageResult | null> {
   const res = await fetch(`/api/v1/specimens/${id}/image`, { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) return null;
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao consultar imagem (${res.status}).`);
   return res.json();
 }
 export async function generateImage(id: string, force = false): Promise<ImageResult> {
   const res = await fetch(`/api/v1/specimens/${id}/image`, { method: "POST", headers: demoHeaders(), body: JSON.stringify({ force }) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? `Falha ao gerar (${res.status}).`);
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao gerar (${res.status}).`);
   return res.json();
 }
 
@@ -124,7 +151,7 @@ export interface OffspringOption {
 export interface OptionsResponse { canChoose: boolean; maxOptions: number; options: OffspringOption[]; }
 export async function getCrossOptions(input: { sireId: string; damId: string; method: string }): Promise<OptionsResponse> {
   const res = await fetch("/api/v1/cross/options", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw new Error(`Falha ao obter opções (${res.status}).`);
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao obter opções (${res.status}).`);
   return res.json();
 }
 
@@ -136,7 +163,7 @@ export async function getCrossOptions(input: { sireId: string; damId: string; me
  */
 export async function previewImage(input: { sireId: string; damId: string; method: string; choiceKey: string; force?: boolean; sex?: "M" | "F" }): Promise<ImageResult> {
   const res = await fetch("/api/v1/cross/preview", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw new Error(`Falha ao gerar preview (${res.status}).`);
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao gerar preview (${res.status}).`);
   return res.json();
 }
 
@@ -152,61 +179,61 @@ export interface GenomeResponse {
 }
 export async function getGenome(id: string): Promise<GenomeResponse> {
   const res = await fetch(`/api/v1/specimens/${id}/genome`, { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error(`Falha ao carregar genoma (${res.status}).`);
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao carregar genoma (${res.status}).`);
   return res.json();
 }
 
 export interface Wallet { catalisadores: number; biomassa: number; lastDaily?: string | null; lastWeekly?: string | null; imageCredits?: number; }
 export async function getWallet(): Promise<Wallet> {
   const res = await fetch("/api/v1/wallet", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar carteira.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar carteira.");
   return res.json();
 }
 export async function freezeOption(input: { sireId: string; damId: string; method: string; choiceKey: string }): Promise<{ specimen: ApiSpecimen; wallet: Wallet }> {
   const res = await fetch("/api/v1/gene-bank/freeze-option", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Falha ao congelar.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao congelar.");
   return res.json();
 }
 export async function freezeSpecimen(id: string): Promise<{ specimen: ApiSpecimen; wallet: Wallet }> {
   const res = await fetch(`/api/v1/gene-bank/freeze/${id}`, { method: "POST", headers: demoHeaders(), body: "{}" });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Falha ao congelar.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao congelar.");
   return res.json();
 }
 export async function thawSpecimen(id: string): Promise<{ specimen: ApiSpecimen; wallet: Wallet }> {
   const res = await fetch(`/api/v1/gene-bank/thaw/${id}`, { method: "POST", headers: demoHeaders(), body: "{}" });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Falha ao descongelar.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao descongelar.");
   return res.json();
 }
 
 export interface SynthesizeResult { specimen: ApiSpecimen; frozen: ApiSpecimen[]; frozenCount: number; skipped: number; wallet: Wallet; }
 export async function synthesizeAndFreeze(input: { sireId: string; damId: string; method: string; choiceKey?: string; freezeKeys: string[] }): Promise<SynthesizeResult> {
   const res = await fetch("/api/v1/gene-bank/synthesize", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Falha ao sintetizar.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao sintetizar.");
   return res.json();
 }
 
 export async function claimDaily(): Promise<{ claimed: boolean; gain?: { catalisadores: number; biomassa: number }; wallet: Wallet }> {
   const res = await fetch("/api/v1/wallet/daily", { method: "POST", headers: demoHeaders(), body: "{}" });
-  if (!res.ok) throw new Error("Falha ao coletar diário.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao coletar diário.");
   return res.json();
 }
 
 export interface ImageQuota { limit: number; used: number; remaining: number; }
 export async function getImageQuota(): Promise<ImageQuota> {
   const res = await fetch("/api/v1/image-quota", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar cota de imagens.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar cota de imagens.");
   return res.json();
 }
 
 export interface Referral { code: string; clicks: number; installs: number; d1: number; d7: number; conversions: number; creditsEarned: number; }
 export async function getReferral(): Promise<Referral> {
   const res = await fetch("/api/v1/referral", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar indicação.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar indicação.");
   return res.json();
 }
 export async function claimWeekly(): Promise<{ claimed: boolean; wallet: Wallet }> {
   const res = await fetch("/api/v1/wallet/weekly", { method: "POST", headers: demoHeaders(), body: "{}" });
-  if (!res.ok) throw new Error("Falha ao coletar bônus semanal.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao coletar bônus semanal.");
   return res.json();
 }
 export async function recordReferralClick(code: string): Promise<void> {
@@ -220,7 +247,7 @@ export function referralUrl(code: string): string {
 export interface CreditPack { id: string; credits: number; priceBRL: number; label: string; }
 export async function getCreditPacks(): Promise<CreditPack[]> {
   const res = await fetch("/api/v1/billing/packs", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar pacotes.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar pacotes.");
   return res.json();
 }
 export interface CheckoutIntent { id: string; status: string; amountBRL: number; packId: string; checkoutUrl?: string; }
@@ -236,14 +263,14 @@ export type BuyCreditsResult =
  */
 export async function buyCredits(packId: string): Promise<BuyCreditsResult> {
   const co = await fetch("/api/v1/billing/checkout", { method: "POST", headers: demoHeaders(), body: JSON.stringify({ packId }) });
-  if (!co.ok) throw new Error("Falha no checkout.");
+  if (!co.ok) throw await apiErrorFrom(co, "Falha no checkout.");
   const intent: CheckoutIntent = await co.json();
   if (intent.checkoutUrl) {
     window.location.href = intent.checkoutUrl;
     return { redirected: true };
   }
   const cf = await fetch("/api/v1/billing/confirm", { method: "POST", headers: demoHeaders(), body: JSON.stringify({ intentId: intent.id }) });
-  if (!cf.ok) throw new Error("Falha ao confirmar pagamento.");
+  if (!cf.ok) throw await apiErrorFrom(cf, "Falha ao confirmar pagamento.");
   const r = await cf.json();
   return { redirected: false, ...r };
 }
@@ -252,7 +279,7 @@ export interface SubscriptionInfo { tier: Tier; interval: "MONTH" | "YEAR"; stat
 /** Assinatura mais recente do usuário (qualquer status), ou null se nunca assinou. */
 export async function getSubscription(): Promise<SubscriptionInfo | null> {
   const res = await fetch("/api/v1/billing/subscription", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar assinatura.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar assinatura.");
   return res.json();
 }
 /**
@@ -275,7 +302,7 @@ export async function subscribeToPlan(tier: Exclude<Tier, "FREE">, interval: "mo
     method: "POST", headers: demoHeaders(),
     body: JSON.stringify({ tier, interval: interval === "year" ? "YEAR" : "MONTH" }),
   });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body?.message ?? "Falha ao iniciar assinatura."); }
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao iniciar assinatura.");
   return res.json();
 }
 
@@ -287,13 +314,13 @@ export interface MyTier { tier: Tier; dailyCrosses: number; monthlyImages: numbe
  */
 export async function getMyTier(): Promise<MyTier> {
   const res = await fetch("/api/v1/me/tier", { headers: demoHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error("Falha ao carregar tier.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar tier.");
   return res.json();
 }
 
 export interface CrossClassification { method: string; kinship: number; reason: string; inbreedingRisk: boolean; }
 export async function classifyCross(input: { sireId: string; damId: string }): Promise<CrossClassification> {
   const res = await fetch("/api/v1/cross/classify", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw new Error("Falha ao classificar cruzamento.");
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao classificar cruzamento.");
   return res.json();
 }
