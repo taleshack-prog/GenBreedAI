@@ -44,7 +44,8 @@ export default function RevealPage() {
   const dam = useMemo(() => (specimen ? all.find((s) => s.id === specimen.damId) ?? null : null), [all, specimen]);
 
   if (err) return <main className="mx-auto max-w-xl px-4 pb-28 pt-10"><div className="rounded-card border border-crit/40 bg-crit/10 p-4 text-sm text-crit">{err}</div></main>;
-  if (!specimen) return <main className="mx-auto max-w-xl px-4 pb-28 pt-10 text-center text-ink-muted">Carregando híbrido…</main>;
+  // A espécie ainda não é conhecida aqui (specimen null) — sem como saber se é "híbrido" ou "filhote".
+  if (!specimen) return <main className="mx-auto max-w-xl px-4 pb-28 pt-10 text-center text-ink-muted">Carregando…</main>;
 
   const rarity = rarityOf(specimen.aura);
   const phen = phenotypeOf(specimen);
@@ -107,7 +108,7 @@ export default function RevealPage() {
         {imgMsg && <p className="text-center text-xs text-ink-muted">{imgMsg}</p>}
         <button
           onClick={() => {
-            const txt = `Revelei um híbrido ${rarity.label} em GenBreedAI: ${specimen.species}!`;
+            const txt = `Revelei um ${revealTitleWord(specimen.species).toLowerCase()} ${rarity.label} em GenBreedAI: ${specimen.species}!`;
             if (navigator.share) navigator.share({ title: "GenBreedAI", text: txt }).catch(() => {});
             else alert("Exportação de clipe (15s) chega com o pipeline de mídia. Texto copiado para compartilhar: " + txt);
           }}

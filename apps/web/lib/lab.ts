@@ -54,7 +54,9 @@ export function topHybrids(sire: ApiSpecimen, dam: ApiSpecimen, n = 3): Hybrid[]
     combos = next.sort((x, y) => y.prob - x.prob).slice(0, 24);
   }
   const qtl = sire.genotype.qtl;
-  return combos.slice(0, n).map((c, i) => ({ genotype: { loci: c.loci, qtl }, prob: c.prob, label: `Híbrido ${i + 1}` }));
+  // "Opção" (neutro) — prévia de combinação de genótipo, não depende de a
+  // cruza ser interespecífica ou não (achado do relatório de "híbrido" fixo).
+  return combos.slice(0, n).map((c, i) => ({ genotype: { loci: c.loci, qtl }, prob: c.prob, label: `Opção ${i + 1}` }));
 }
 export function compatibility(sire: ApiSpecimen, dam: ApiSpecimen): number {
   const shared = Object.keys(sire.genotype.loci).filter((l) => dam.genotype.loci[l]);

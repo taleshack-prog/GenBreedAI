@@ -4,6 +4,7 @@ import Link from "next/link";
 import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
+import { normalizeBiologicalSpecies } from "@genbreedai/shared";
 
 const TIER_NAME: Record<Tier, string> = {
   FREE: "FREEBREEDER",
@@ -73,7 +74,12 @@ export default function ProfilePage() {
   }
   useEffect(() => { listSpecimens().then(setItems).catch(() => {}); }, []);
   const total = items.length;
-  const hybrids = items.filter((s) => s.method !== "FOUNDER" && s.sireId !== null).length;
+  // "Filhotes": todo espécime que não é fundador (nasceu de um cruzamento).
+  // "Híbridos": SÓ entre os filhotes, os de espécie normalizada com "×" (2+
+  // componentes biológicos) — achado em produção: antes, "Híbridos" contava
+  // qualquer filhote (até gato×gata doméstico virava "12 híbridos").
+  const filhotes = items.filter((s) => s.method !== "FOUNDER");
+  const hybrids = filhotes.filter((s) => normalizeBiologicalSpecies(s.species).includes("×")).length;
   const stat = (label: string, value: string | number) => (
     <div className="rounded-card border border-cyan/20 bg-bg-800 p-4 text-center">
       <div className="font-display text-2xl font-bold text-cyan">{value}</div>
@@ -180,8 +186,12 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3">
+      {/* 4 cards agora (Espécimes/Filhotes/Híbridos/Streak) — não cabem bem
+          em 3 colunas iguais; 2×2 mantém o mesmo estilo de card sem espremer
+          rótulo/número em telas estreitas (360px). */}
+      <div className="grid grid-cols-2 gap-3">
         {stat("Espécimes", total)}
+        {stat("Filhotes", filhotes.length)}
         {stat("Híbridos", hybrids)}
         {stat("Streak", "0")}
       </div>

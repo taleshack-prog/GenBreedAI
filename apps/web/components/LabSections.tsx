@@ -72,14 +72,14 @@ export function InbreedingGauge({ f }: { f: number }) {
 
 const QTL_ABBR: Record<string,string> = { porte:"POR", vigor:"VIG", beleza:"BEL", temperamento:"TMP", rosetas:"ROS" };
 
-/** Prévia dos 3 híbridos mais prováveis, com setas por atributo (mockup Image 2). */
+/** Prévia das 3 opções mais prováveis, com setas por atributo (mockup Image 2). */
 export function HybridPreview({ sire, dam }: { sire: ApiSpecimen; dam: ApiSpecimen }) {
   const hybrids = topHybrids(sire, dam, 3);
   const mid: Record<string, number> = {};
   for (const k of Object.keys(sire.genotype.qtl)) mid[k] = ((sire.genotype.qtl[k] ?? 0) + (dam.genotype.qtl[k] ?? 0)) / 2;
   return (
     <div>
-      <h3 className="mb-3 font-display text-xs font-bold uppercase text-cyan">Prévia dos 3 híbridos mais prováveis</h3>
+      <h3 className="mb-3 font-display text-xs font-bold uppercase text-cyan">Prévia das 3 opções mais prováveis</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {hybrids.map((h, i) => <HybridCard key={i} h={h} idx={i + 1} family={familyOf(sire.pack)} mid={mid} />)}
       </div>
