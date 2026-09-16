@@ -5,7 +5,7 @@
  *
  * A troca é automática por ambiente: sem R2_* → disco; com R2_* → bucket.
  */
-import { mkdir, writeFile, access, rm } from "node:fs/promises";
+import { mkdir, writeFile, stat as fsStat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
@@ -31,27 +31,52 @@ function client(): S3Client {
 }
 const objKey = (cacheKey: string) => `generated/${cacheKey}.png`;
 
-export function publicUrl(cacheKey: string): string {
-  if (useR2) return `${R2.publicUrl!.replace(/\/$/, "")}/${objKey(cacheKey)}`;
-  return `/assets/generated/${cacheKey}.png`;
+/**
+ * URL pública do objeto. `version` (epoch em SEGUNDOS — HeadObject.LastModified
+ * no R2, mtime em disco local) vira `?v=<version>` — cache-busting sem mudar
+ * o endereço do arquivo (a chave/nome continua só `cacheKey`). Sem `version`,
+ * URL igual a antes (retrocompatível — ex.: link antigo já salvo em algum lugar).
+ */
+export function publicUrl(cacheKey: string, version?: number): string {
+  const suffix = version !== undefined ? `?v=${version}` : "";
+  if (useR2) return `${R2.publicUrl!.replace(/\/$/, "")}/${objKey(cacheKey)}${suffix}`;
+  return `/assets/generated/${cacheKey}.png${suffix}`;
 }
 
-export async function exists(cacheKey: string): Promise<boolean> {
+/**
+ * Versão do objeto gravado (pra cache-busting, ver `publicUrl`) — `null` se
+ * o objeto não existe. R2: `HeadObjectCommand.LastModified` (Date) truncado
+ * pra segundos. Disco local: `mtime` do arquivo, idem.
+ */
+export async function stat(cacheKey: string): Promise<{ version: number } | null> {
   if (useR2) {
-    try { await client().send(new HeadObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) })); return true; }
-    catch { return false; }
+    try {
+      const res = await client().send(new HeadObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) }));
+      return { version: Math.floor((res.LastModified?.getTime() ?? Date.now()) / 1000) };
+    } catch { return null; }
   }
-  try { await access(join(DIR, `${cacheKey}.png`)); return true; } catch { return false; }
+  try {
+    const s = await fsStat(join(DIR, `${cacheKey}.png`));
+    return { version: Math.floor(s.mtimeMs / 1000) };
+  } catch { return null; }
+}
+
+/** Wrapper booleano de `stat()` — mantido pelos chamadores que só precisam saber se existe. */
+export async function exists(cacheKey: string): Promise<boolean> {
+  return (await stat(cacheKey)) !== null;
 }
 
 export async function store(cacheKey: string, buffer: Buffer): Promise<string> {
+  // Versão = data da GRAVAÇÃO (não um HEAD/stat extra depois de escrever) —
+  // determinística, monotônica a cada `store()`, evita um round-trip a mais.
+  const version = Math.floor(Date.now() / 1000);
   if (useR2) {
     await client().send(new PutObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey), Body: buffer, ContentType: "image/png" }));
-    return publicUrl(cacheKey);
+    return publicUrl(cacheKey, version);
   }
   await mkdir(DIR, { recursive: true });
   await writeFile(join(DIR, `${cacheKey}.png`), buffer);
-  return publicUrl(cacheKey);
+  return publicUrl(cacheKey, version);
 }
 
 export async function remove(cacheKey: string): Promise<void> {

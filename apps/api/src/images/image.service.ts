@@ -9,7 +9,7 @@ import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.
 import { buildPrompt } from "./prompt";
 import { resolveProvider } from "./provider";
 import { moderate } from "./moderation";
-import { exists, store, publicUrl, remove } from "./storage";
+import { stat, store, publicUrl, remove } from "./storage";
 import { ImageJobRepository, type ImageJob } from "./image-job.repository";
 import { ImageQuotaService, modelForTier } from "../economy/image-quota.service";
 import { WalletService } from "../economy/wallet.service";
@@ -38,7 +38,11 @@ export class ImageService {
     const s = await this.repo.get(specimenId);
     if (!s) return null;
     const cacheKey = cacheKeyOf(s);
-    if (await exists(cacheKey)) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey), model: "cache", cached: true, prompt: buildPrompt(s) };
+    const st = await stat(cacheKey);
+    // Cache-busting: `?v=<versão do objeto>` (ver storage.ts) — sem isso,
+    // navegador/CDN continuam servindo uma imagem regenerada anterior no
+    // MESMO endereço (mesma cacheKey).
+    if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), model: "cache", cached: true, prompt: buildPrompt(s) };
     const job = this.jobs.get(cacheKey);
     return { cacheKey, status: job?.status ?? "NONE", imageUrl: job?.imageUrl ?? null, model: job?.model ?? "procedural", cached: false, prompt: buildPrompt(s) };
   }
@@ -55,7 +59,10 @@ export class ImageService {
     const prompt = buildPrompt(s);
     if (force) await remove(cacheKey);
     // Rever imagem já gerada é GRÁTIS (não consome cota).
-    if (!force && await exists(cacheKey)) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey), model: "cache", cached: true, prompt };
+    if (!force) {
+      const st = await stat(cacheKey);
+      if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), model: "cache", cached: true, prompt };
+    }
 
     // Gerar NOVA imagem REAL (fal) consome a cota mensal do tier. Procedural é grátis.
     const willUseFal = !!process.env.FAL_KEY;
