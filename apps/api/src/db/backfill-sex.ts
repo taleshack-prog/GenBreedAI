@@ -76,8 +76,20 @@
  * regra não muda esse caso, só cobre o que o motor não cobria antes da
  * ADR-0018 (BC1/F2/... em diante).
  *
- * Uso: pnpm --filter @genbreedai/api db:backfill-sex          (dry-run)
- *      pnpm --filter @genbreedai/api db:backfill-sex --apply  (grava)
+ * === TRAVA DE GRAVAÇÃO — --confirm-host ===
+ * Motivo: uma gravação anterior neste banco não teve origem identificada
+ * (nenhuma execução deste script, nem de outro comando, foi registrada por
+ * quem a fez). Pra reduzir o risco de `--apply` disparar contra o host
+ * errado (ex.: variável de ambiente apontando pro banco de produção sem
+ * querer), `--apply` só grava se TAMBÉM vier `--confirm-host=<host>`, com
+ * `<host>` EXATAMENTE igual ao host de `DATABASE_URL` (ex.:
+ * `--confirm-host=ep-withered-boat-aydha3cc-pooler.c-5.us-east-2.aws.neon.tech`).
+ * Sem a flag, ou com um host diferente do real: imprime o host real e sai
+ * com código 1 ANTES de qualquer leitura/escrita no banco — nunca chega a
+ * abrir conexão. DRY-RUN nunca precisa da flag (nunca grava).
+ *
+ * Uso: pnpm --filter @genbreedai/api db:backfill-sex                                      (dry-run, sem flag)
+ *      pnpm --filter @genbreedai/api db:backfill-sex --apply --confirm-host=<host-real>    (grava)
  */
 import "dotenv/config";
 import { eq, isNull } from "drizzle-orm";
@@ -135,6 +147,33 @@ async function main() {
   const apply = process.argv.includes("--apply");
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL ausente (veja .env.example).");
+
+  const host = (() => { try { return new URL(url).host; } catch { return "(host inválido)"; } })();
+  // Primeira coisa impressa em QUALQUER modo — sem exceção, mesmo quando a
+  // trava abaixo vai abortar.
+  // eslint-disable-next-line no-console
+  console.log(`HOST: ${host}`);
+  // eslint-disable-next-line no-console
+  console.log(`MODO: ${apply ? "APPLY" : "DRY-RUN"}`);
+
+  // TRAVA DE GRAVAÇÃO (ver cabeçalho) — só se aplica quando --apply está
+  // presente; DRY-RUN nunca escreve, então nunca precisa da flag. Checado
+  // ANTES de abrir qualquer conexão com o banco (createDb abaixo).
+  if (apply) {
+    const confirmArg = process.argv.find((a) => a.startsWith("--confirm-host="));
+    const confirmHost = confirmArg?.slice("--confirm-host=".length);
+    if (confirmHost !== host) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[db:backfill-sex] ABORTADO — trava de gravação: --apply exige --confirm-host=<host> IGUAL ao host real " +
+        `de DATABASE_URL.\nHost real: ${host}\n` +
+        (confirmHost ? `--confirm-host recebido: ${confirmHost} (não bate)\n` : "--confirm-host não informado.\n") +
+        `Rode de novo com: --apply --confirm-host=${host}`,
+      );
+      process.exit(1);
+    }
+  }
+
   const { db, pool } = createDb(url);
 
   const allRows = await db.select().from(specimens);
@@ -301,6 +340,12 @@ async function main() {
   if (sexPlans.length === 0 && fertilityPlans.length === 0) {
     // eslint-disable-next-line no-console
     console.log("Nada a gravar (0 linhas elegíveis).");
+    // eslint-disable-next-line no-console
+    console.log("GRAVADAS: 0 linhas (sexo)");
+    // eslint-disable-next-line no-console
+    console.log("GRAVADAS: 0 linhas (cache_key)");
+    // eslint-disable-next-line no-console
+    console.log("GRAVADAS: 0 linhas (fertilidade)");
     await pool.end();
     return;
   }
@@ -325,6 +370,13 @@ async function main() {
     // eslint-disable-next-line no-console
     console.log("Gravado e verificado: 0 linhas com sex IS NULL restantes.");
   });
+
+  // eslint-disable-next-line no-console
+  console.log(`GRAVADAS: ${sexPlans.length} linhas (sexo)`);
+  // eslint-disable-next-line no-console
+  console.log(`GRAVADAS: ${cacheKeyPlans.size} linhas (cache_key)`);
+  // eslint-disable-next-line no-console
+  console.log(`GRAVADAS: ${fertilityPlans.length} linhas (fertilidade)`);
 
   await pool.end();
 }
