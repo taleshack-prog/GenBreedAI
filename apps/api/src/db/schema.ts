@@ -14,7 +14,8 @@ import {
   numeric,
   pgTable,
   text,
-  timestamp, primaryKey, boolean } from "drizzle-orm/pg-core";
+  timestamp, primaryKey, boolean, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { Genotype, Phenotype } from "@genbreedai/shared";
 
 /** Usuários (TDD §3). Campos sensíveis de auth ficam na integração Auth.js. */
@@ -30,7 +31,18 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** Espécimes (TDD §3). Genótipo/fenótipo em JSONB; proveniência e linhagem. */
+/**
+ * Espécimes (TDD §3). Genótipo/fenótipo em JSONB; proveniência e linhagem.
+ *
+ * `sex`/`fertility`/`haldaneStatus` (ADR-0015, sexo/fertilidade/Haldane):
+ * colunas ADITIVAS e ANULÁVEIS — nenhum registro legado (pré-ADR-0015) tem
+ * esses dados, então ficam NULL até uma migração de dados EXPLÍCITA (dry-run
+ * primeiro) os preencher; nenhuma linha existente é alterada por esta
+ * migração de schema. `genotype` (JSONB) já carrega sexo cromossômico via
+ * `xLoci` quando aplicável — estas colunas são metadados de PARENTAL
+ * (resultado do gate de fertilidade/Haldane no momento do cruzamento), não
+ * duplicam o genótipo.
+ */
 export const specimens = pgTable("specimens", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id").notNull(),
@@ -48,8 +60,15 @@ export const specimens = pgTable("specimens", {
   cacheKey: text("cache_key"),
   provenanceHash: text("provenance_hash"),
   status: text("status").notNull().default("ALIVE"), // "ALIVE" | "FROZEN"
+  sex: text("sex"), // "M" | "F" | null — legado fica NULL até migração de dados explícita
+  fertility: doublePrecision("fertility"), // 0–100 | null — idem
+  haldaneStatus: text("haldane_status"), // "NONE" | "STERILE" | "REDUCED" | null — idem
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  sexCheck: check("specimens_sex_check", sql`${t.sex} IS NULL OR ${t.sex} IN ('M','F')`),
+  fertilityCheck: check("specimens_fertility_check", sql`${t.fertility} IS NULL OR (${t.fertility} >= 0 AND ${t.fertility} <= 100)`),
+  haldaneStatusCheck: check("specimens_haldane_status_check", sql`${t.haldaneStatus} IS NULL OR ${t.haldaneStatus} IN ('NONE','STERILE','REDUCED')`),
+}));
 
 /** Cruzamentos (TDD §3): registro de operação do motor + proveniência. */
 export const crosses = pgTable("crosses", {
