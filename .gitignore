@@ -11,3 +11,4 @@ coverage/
 package.json.real
 *.tsbuildinfo
 apps/web/public/assets/generated/
+.neon
