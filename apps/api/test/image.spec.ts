@@ -65,4 +65,20 @@ describe("Pipeline de imagem (TDD §5)", () => {
     expect(liver).toContain("tan points");
   });
 
+  it("leoa (leao-femea): prompt nunca menciona juba/'Leão'/macho; leão: prompt menciona juba", async () => {
+    const leaoFemea = (await repo.get("leao-femea"))!;
+    const leao = (await repo.get("leao"))!;
+    const pFemea = buildPrompt(leaoFemea);
+    const pMacho = buildPrompt(leao);
+    expect(pFemea).not.toContain("mane");
+    expect(pFemea).not.toContain("Leão");
+    // \bmale\b (limite de palavra) — não "male " literal: "female " CONTÉM
+    // "male " como substring ("fe" + "male "), e a fêmea precisa dizer
+    // "female" no prompt; \b evita esse falso positivo.
+    expect(pFemea).not.toMatch(/\bmale\b/i);
+    expect(pFemea).toContain("Leoa");
+    expect(pFemea).toContain("female");
+    expect(pMacho).toContain("mane");
+  });
+
 });

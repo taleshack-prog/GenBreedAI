@@ -130,18 +130,27 @@ export function numericSeed(cacheKey: string): number {
 }
 
 /**
- * Correção pontual (ADR-0017) do descritor ESTÁTICO de leão em SPECIES_INFO
- * (packages/shared/src/species.ts) — hoje fixo pro macho ("adult male
- * African lion ... full thick brown mane"), sem variante por sexo (nenhuma
- * espécie tem). Fêmea (leoa) não tem juba (Ma agora é sex-limited no motor)
- * — corrigido AQUI, local ao prompt, sem mudar `speciesInfo()`/SPECIES_INFO
- * (mudar a assinatura afetaria todo chamador do pacote, fora de escopo desta
- * ADR). Só se aplica a panthera-leo fêmea; qualquer outra espécie/sexo usa o
- * descritor cadastrado sem alteração.
+ * Correção pontual (ADR-0017) do cadastro ESTÁTICO de leão em SPECIES_INFO
+ * (packages/shared/src/species.ts) — `common`/`descriptor` são fixos pro
+ * macho ("Leão"/"adult male African lion ... full thick brown mane"), sem
+ * variante por sexo (nenhuma espécie tem). Corrigido AQUI, local ao prompt,
+ * sem mudar `speciesInfo()`/SPECIES_INFO (mudaria a assinatura pra todo
+ * chamador do pacote, fora de escopo). Só se aplica a panthera-leo fêmea;
+ * qualquer outra espécie/sexo usa o cadastro sem alteração.
+ *
+ * IMPORTANTE: o descritor abaixo é só de termos POSITIVOS — nunca usa
+ * "mane"/"no mane"/"male" em nenhuma forma. Negar a juba ("no mane") ainda
+ * arrisca o gerador de imagem "ler" a palavra-chave "mane" e desenhá-la
+ * mesmo negada; descrever positivamente a cabeça/pescoço sem juba evita
+ * essa palavra por completo.
  */
-function lionessAwareDescriptor(species: string, sex: Sex | null | undefined, descriptor: string): string {
-  if (species !== "panthera-leo" || sex !== "F") return descriptor;
-  return "adult lioness, no mane, powerful muscular body, tawny golden fur, unmistakably a lioness";
+function lionessOverride(species: string, sex: Sex | null | undefined): { name: string; descriptor: string; physiqueAdj: string } | null {
+  if (species !== "panthera-leo" || sex !== "F") return null;
+  return {
+    name: "Leoa",
+    descriptor: "adult female African lioness, sleek smooth rounded head, short tawny fur on head and neck, lean muscular body",
+    physiqueAdj: "large, athletic",
+  };
 }
 
 /** Traços legíveis (usado no card/roundtrip). */
@@ -190,8 +199,12 @@ export function buildPrompt(s: StoredSpecimen): string {
     } else if (s.pack === "canine") {
       subject = `a ${physiqueAdj} mixed-breed dog${morphClause}, with ${coat}`;
     } else {
-      const descriptor = lionessAwareDescriptor(s.species, s.sex, info.descriptor);
-      subject = `a ${physiqueAdj} ${info.common} (${info.scientific})${morphClause}: ${descriptor}, with ${coat}`;
+      const override = lionessOverride(s.species, s.sex);
+      const commonName = override ? override.name : info.common;
+      const sciLabel = override ? `${info.scientific}, female` : info.scientific;
+      const descriptor = override ? override.descriptor : info.descriptor;
+      const adj = override ? override.physiqueAdj : physiqueAdj;
+      subject = `a ${adj} ${commonName} (${sciLabel})${morphClause}: ${descriptor}, with ${coat}`;
     }
   }
 

@@ -374,6 +374,15 @@ export interface OffspringOption {
   key: string;
   /** Quantos genótipos distintos produzem ESTE mesmo fenótipo (portadores). */
   variants: number;
+  /**
+   * O sexo da prole (sorteado só na síntese — `materializeCross()`, via a
+   * seed) MUDA a aparência deste genótipo? `computeCacheKey(genotype, pack,
+   * "M") !== computeCacheKey(genotype, pack, "F")` — mesma checagem de
+   * dimorfismo do ADR-0017/0018, sem RNG novo.
+   */
+  sexDimorphic: boolean;
+  /** Só presente quando `sexDimorphic` — fenótipo pra cada sexo (ex.: juba/sem juba). */
+  phenotypeBySex?: { M: import("@genbreedai/shared").Phenotype; F: import("@genbreedai/shared").Phenotype };
 }
 
 /**
@@ -435,10 +444,19 @@ export function enumerateOffspring(
       phenotype = { ...phenotype, porteAdulto, porteNascimento };
     }
 
+    // Sexo é sorteado SÓ na síntese (materializeCross → finalizeSpecimen, a
+    // partir da seed) — aqui só detectamos SE ele mudaria a aparência deste
+    // genótipo (ADR-0017/0018), sem sortear nada. Nenhum RNG novo.
+    const sexDimorphic = computeCacheKey(genotype, ctx.pack, "M") !== computeCacheKey(genotype, ctx.pack, "F");
+    const phenotypeBySex = sexDimorphic
+      ? { M: expressPhenotype(genotype, ctx.pack, "M"), F: expressPhenotype(genotype, ctx.pack, "F") }
+      : undefined;
+
     return {
       genotype, prob: g.prob, phenotype,
       fixationIndex: fixation.index, aura: mapFixationToAura(fixation.index),
       key: hashGenotype(genotype), variants: g.variants,
+      sexDimorphic, phenotypeBySex,
     };
   });
 }

@@ -84,7 +84,11 @@ function canChoose(tier: Tier): boolean { return tier === "SENIOR" || tier === "
 export interface CrossResponse { specimen: StoredSpecimen; cacheKey: string; engine: CrossResult["specimen"]; }
 export interface OptionsResponse {
   canChoose: boolean; maxOptions: number;
-  options: Array<{ key: string; prob: number; fixationIndex: number; aura: number; variants: number; phenotype: OffspringOption["phenotype"]; genotype: Genotype }>;
+  options: Array<{
+    key: string; prob: number; fixationIndex: number; aura: number; variants: number;
+    phenotype: OffspringOption["phenotype"]; genotype: Genotype;
+    sexDimorphic: boolean; phenotypeBySex?: OffspringOption["phenotypeBySex"];
+  }>;
 }
 
 @Injectable()
@@ -139,7 +143,11 @@ export class CrossService {
     const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
     return {
       canChoose: canChoose(tier), maxOptions: optionCount(tier),
-      options: opts.map((o) => ({ key: o.key, prob: o.prob, fixationIndex: o.fixationIndex, aura: o.aura, variants: o.variants, phenotype: o.phenotype, genotype: o.genotype })),
+      options: opts.map((o) => ({
+        key: o.key, prob: o.prob, fixationIndex: o.fixationIndex, aura: o.aura, variants: o.variants,
+        phenotype: o.phenotype, genotype: o.genotype,
+        sexDimorphic: o.sexDimorphic, phenotypeBySex: o.phenotypeBySex,
+      })),
     };
   }
 

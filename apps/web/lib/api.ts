@@ -108,7 +108,15 @@ export async function generateImage(id: string, force = false): Promise<ImageRes
   return res.json();
 }
 
-export interface OffspringOption { key: string; prob: number; fixationIndex: number; aura: number; variants: number; phenotype: { loci: Record<string, string>; qtl: Record<string, number>; viable: boolean; epistasis: string[]; hasMutation: boolean }; genotype: Genotype; }
+type ApiPhenotype = { loci: Record<string, string>; qtl: Record<string, number>; viable: boolean; epistasis: string[]; hasMutation: boolean };
+export interface OffspringOption {
+  key: string; prob: number; fixationIndex: number; aura: number; variants: number;
+  phenotype: ApiPhenotype; genotype: Genotype;
+  /** O sexo (sorteado só na síntese) muda a aparência deste genótipo? (ADR-0017/0018) */
+  sexDimorphic: boolean;
+  /** Só presente quando sexDimorphic — fenótipo por sexo (ex.: juba/sem juba). */
+  phenotypeBySex?: { M: ApiPhenotype; F: ApiPhenotype };
+}
 export interface OptionsResponse { canChoose: boolean; maxOptions: number; options: OffspringOption[]; }
 export async function getCrossOptions(input: { sireId: string; damId: string; method: string }): Promise<OptionsResponse> {
   const res = await fetch("/api/v1/cross/options", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
@@ -116,7 +124,13 @@ export async function getCrossOptions(input: { sireId: string; damId: string; me
   return res.json();
 }
 
-export async function previewImage(input: { sireId: string; damId: string; method: string; choiceKey: string; force?: boolean }): Promise<ImageResult> {
+/**
+ * `sex` OPCIONAL — só pra pedir o retrato de UM dos lados de uma opção
+ * sex-dimórfica (preview.controller.ts repassa pro fenótipo do retrato).
+ * NUNCA usado na síntese de verdade (postCross/synthesizeAndFreeze não têm
+ * esse campo) — o sexo real continua sorteado pela seed só ao sintetizar.
+ */
+export async function previewImage(input: { sireId: string; damId: string; method: string; choiceKey: string; force?: boolean; sex?: "M" | "F" }): Promise<ImageResult> {
   const res = await fetch("/api/v1/cross/preview", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
   if (!res.ok) throw new Error(`Falha ao gerar preview (${res.status}).`);
   return res.json();

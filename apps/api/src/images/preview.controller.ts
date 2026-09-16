@@ -16,13 +16,18 @@ export class PreviewController {
 
   @Post()
   @UseGuards(AuthGuard)
-  async preview(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto & { force?: boolean }) {
+  async preview(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto & { force?: boolean; sex?: "M" | "F" }) {
     const tier = await this.tierService.resolve(user.id, user.tier);
     const { pack, species, genotype } = await this.cross.resolveChoice(tier, dto);
+    // Sexo OPCIONAL (Problema 2): só pra RETRATO de uma opção sex-dimórfica
+    // (juba/sem juba) — nunca decide sexo de verdade, que continua sorteado
+    // pela seed só na síntese (materializeCross/finalizeSpecimen). Validado
+    // aqui (nunca confia em input não tipado): só "M"/"F" aceitos, senão null.
+    const sex = dto.sex === "M" || dto.sex === "F" ? dto.sex : null;
     return this.images.generateForSpecimen(
       { id: "preview", ownerId: user.id, pack: pack as "feline" | "canine", species, genotype,
         generation: 0, sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura: 0, cacheKey: null,
-        sex: null, fertility: null, haldaneStatus: null },
+        sex, fertility: null, haldaneStatus: null },
       tier, dto.force === true,
     );
   }

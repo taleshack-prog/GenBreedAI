@@ -79,6 +79,21 @@ function richChips(o: { phenotype: { loci: Record<string, string> }; genotype: {
 }
 
 /**
+ * Rótulo do traço que difere entre os sexos numa opção sex-dimórfica (ADR-0017):
+ * olha os loci de `phen` que têm um valor DIFERENTE em `other` e devolve os
+ * descritores desse lado (ex.: "Juba completa" pro M, "Sem juba" pro F).
+ * Genérico — não fixa "Ma"/"juba" no código, funciona pra qualquer locus
+ * sex-limited futuro.
+ */
+function sexDiffLabel(phen?: { loci: Record<string, string> }, other?: { loci: Record<string, string> }): string {
+  if (!phen || !other) return "";
+  const diffs = Object.keys(phen.loci)
+    .filter((k) => phen.loci[k] !== other.loci[k])
+    .map((k) => cap(phen.loci[k]!));
+  return diffs.join(" · ");
+}
+
+/**
  * Seletor de fenótipo. Senior/PhD escolhem; ao selecionar, GERA o retrato IA
  * daquela opção (preview) — o jogador vê antes de sintetizar. A foto fica
  * cacheada e reaproveitada na síntese. Free/Junior: só-leitura.
@@ -94,6 +109,8 @@ export function PhenotypeSelector({
   onFrozen?: (msg: string) => void;
 }) {
   const [freezing, setFreezing] = useState<string | null>(null);
+  // Chave: o.key (opção não-dimórfica) ou `${o.key}:M`/`${o.key}:F` (dimórfica —
+  // um retrato POR SEXO, gerado independentemente).
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -105,12 +122,18 @@ export function PhenotypeSelector({
       onFrozen?.("Fenótipo congelado no Gene Bank (−20 catalisadores). Descongele depois para usar.");
     } catch (err) { onFrozen?.((err as Error).message); } finally { setFreezing(null); }
   }
-  async function regen(o: OffspringOption, e: React.MouseEvent) {
+  /**
+   * `sex` OPCIONAL — só afeta QUAL retrato é pedido (opção dimórfica, ADR-0017).
+   * Nunca decide o sexo de verdade: isso continua sorteado pela seed só na
+   * síntese (materializeCross). Mesma regra de cota de sempre (previewImage).
+   */
+  async function regen(o: OffspringOption, e: React.MouseEvent, sex?: "M" | "F") {
     e.stopPropagation();
-    setLoading(o.key);
+    const previewKey = sex ? `${o.key}:${sex}` : o.key;
+    setLoading(previewKey);
     try {
-      const r = await previewImage({ ...crossInput, choiceKey: o.key, force: true });
-      if (r.imageUrl) setPreviews((p) => ({ ...p, [o.key]: r.imageUrl! + "?t=" + Date.now() }));
+      const r = await previewImage({ ...crossInput, choiceKey: o.key, force: true, ...(sex ? { sex } : {}) });
+      if (r.imageUrl) setPreviews((p) => ({ ...p, [previewKey]: r.imageUrl! + "?t=" + Date.now() }));
     } catch (err) { onFrozen?.((err as Error).message); } finally { setLoading(null); }
   }
   async function choose(o: OffspringOption) {
@@ -118,6 +141,9 @@ export function PhenotypeSelector({
     if (selectedKey === o.key) { onSelect(null); return; }
     onSelect(o.key);
     if (describeMode) return; // Free: decide pela descrição; imagem só ao sintetizar
+    // Dimórfica: retrato só ao clicar em CADA lado (♂/♀), não auto-gera aqui
+    // — não dá pra saber qual dos dois mostrar antes de o jogador escolher.
+    if (o.sexDimorphic) return;
     if (!previews[o.key]) {
       setLoading(o.key);
       try {
@@ -146,12 +172,13 @@ export function PhenotypeSelector({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {options.map((o) => {
           const sel = canChoose && selectedKey === o.key;
+          const dimorphic = o.sexDimorphic && !describeMode;
           return (
+          <div key={o.key}>
             <button
-              key={o.key}
               onClick={() => choose(o)}
               disabled={!canChoose}
-              className={`rounded-lg border bg-bg-900/60 p-3 text-left transition ${sel ? "border-cyan ring-2 ring-cyan" : "border-white/10"} ${canChoose ? "hover:border-cyan/60" : "cursor-default"}`}
+              className={`w-full rounded-lg border bg-bg-900/60 p-3 text-left transition ${sel ? "border-cyan ring-2 ring-cyan" : "border-white/10"} ${canChoose ? "hover:border-cyan/60" : "cursor-default"}`}
             >
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-xs text-purple">{(o.prob * 100).toFixed(1)}%</span>
@@ -163,6 +190,37 @@ export function PhenotypeSelector({
                     {richChips(o).map((c, i) => (
                       <span key={i} className="rounded-full border border-cyan/30 bg-cyan/5 px-2 py-0.5 text-[0.6rem] text-cyan">{c}</span>
                     ))}
+                  </div>
+                ) : dimorphic ? (
+                  // Sex-dimórfica (ADR-0017): dois retratos lado a lado, um
+                  // por sexo — o sexo real só é sorteado na síntese; aqui só
+                  // mostramos os dois desfechos possíveis, cada um gerado só
+                  // ao clicar nele (mesma cota de sempre).
+                  <div className="flex h-full w-full gap-1">
+                    {(["M", "F"] as const).map((sex) => {
+                      const previewKey = `${o.key}:${sex}`;
+                      return (
+                        <div key={sex} className="relative flex-1 overflow-hidden rounded bg-bg-800">
+                          <span className="absolute left-0.5 top-0.5 z-10 rounded bg-bg-900/80 px-1 py-0.5 font-mono text-[0.55rem] text-cyan">
+                            {sex === "M" ? "♂ 50%" : "♀ 50%"}
+                          </span>
+                          {previews[previewKey] ? (
+                            <>
+                              <img src={previews[previewKey]} alt={sex === "M" ? "retrato macho" : "retrato fêmea"} className="h-full w-full object-cover" />
+                              <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
+                                className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
+                            </>
+                          ) : loading === previewKey ? (
+                            <span className="absolute inset-0 grid animate-pulse place-items-center font-mono text-[0.5rem] uppercase text-cyan">gerando…</span>
+                          ) : (
+                            <span role="button" tabIndex={0} onClick={(e) => regen(o, e, sex)}
+                              className="absolute inset-0 grid cursor-pointer place-items-center px-1 text-center font-mono text-[0.55rem] text-cyan underline">
+                              {sex === "M" ? "♂" : "♀"} ver retrato
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : previews[o.key] ? (
                   <>
@@ -176,7 +234,14 @@ export function PhenotypeSelector({
                   <span className="px-2 text-center font-display text-sm font-bold text-ink">{phenoSummary(o.phenotype.loci)}</span>
                 )}
               </div>
-              <div className="text-center text-[0.7rem] text-ink">{phenoSummary(o.phenotype.loci)}</div>
+              {dimorphic ? (
+                <div className="flex justify-center gap-3 text-center text-[0.6rem] text-ink">
+                  <span>♂ {sexDiffLabel(o.phenotypeBySex?.M, o.phenotypeBySex?.F) || phenoSummary(o.phenotypeBySex?.M?.loci ?? o.phenotype.loci)}</span>
+                  <span>♀ {sexDiffLabel(o.phenotypeBySex?.F, o.phenotypeBySex?.M) || phenoSummary(o.phenotypeBySex?.F?.loci ?? o.phenotype.loci)}</span>
+                </div>
+              ) : (
+                <div className="text-center text-[0.7rem] text-ink">{phenoSummary(o.phenotype.loci)}</div>
+              )}
               {o.variants > 1 && <div className="text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
               {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
               {canChoose && (
@@ -186,6 +251,8 @@ export function PhenotypeSelector({
                 </span>
               )}
             </button>
+            {dimorphic && <p className="mt-1 text-center text-[0.55rem] text-ink-muted">O sexo é sorteado na síntese.</p>}
+          </div>
           );
         })}
       </div>
