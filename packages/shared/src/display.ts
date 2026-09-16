@@ -14,7 +14,7 @@
  * batem em nenhuma tabela e caem no nome genérico da espécie.
  */
 import { breedInfo, dogBreedInfo } from "./breeds";
-import { speciesInfo } from "./species";
+import { speciesInfo, normalizeBiologicalSpecies } from "./species";
 
 /**
  * Nomes de exibição dos fundadores de felinos SELVAGENS (fora de Felis catus
@@ -60,4 +60,16 @@ export function resolveScientificName(id: string, species: string): string {
   if (breedInfo(base)) return "Felis catus";
   if (dogBreedInfo(base)) return "Canis familiaris";
   return speciesInfo(species).scientific;
+}
+
+/**
+ * Palavra do título da tela de revelação (/app/reveal/[id]): "Híbrido" só
+ * quando a ESPÉCIE tiver mais de um componente biológico
+ * (normalizeBiologicalSpecies devolve "×") — ex.: tigre × leão. Dois
+ * fundadores da MESMA espécie sem parentesco (ex.: gato × gata domésticos)
+ * não são híbrido nenhum: "Filhote" (achado em produção — o título fixo
+ * "Híbrido Revelado" aparecia pra qualquer cruzamento, até intraespécie).
+ */
+export function revealTitleWord(species: string): "Híbrido" | "Filhote" {
+  return normalizeBiologicalSpecies(species).includes("×") ? "Híbrido" : "Filhote";
 }

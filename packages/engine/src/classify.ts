@@ -9,7 +9,11 @@
  *  - Pais são irmãos completos (mesmos pais) → F2 (irmãos F1) ou INBREED (endogamia).
  *  - Parentesco alto (F ≥ 0.25) → INBREED.
  *  - Parentesco brando com ancestral-alvo recorrente → LINE (linebreeding).
- *  - Mesma espécie, sem parentesco (F ≈ 0) → OUTCROSS.
+ *  - Mesma espécie, sem parentesco ENTRE os pais, mas pelo menos um pai já
+ *    vem de linha com endogamia própria (F_pedigree > 0) e o filhote reduziria
+ *    esse F → OUTCROSS ("sangue novo" pra resgatar a linha).
+ *  - Mesma espécie, sem parentesco e SEM endogamia em nenhum dos pais (ex.:
+ *    dois fundadores) → F1 (não há linha nenhuma pra "resgatar").
  *  - Fallback por geração (ambos F1 → F2; ambos F2 → F3).
  */
 import type { BreedingMethod } from "@genbreedai/shared";
@@ -23,6 +27,9 @@ export interface ClassifyInput {
   damSpecies: string;
   sireGeneration: number;
   damGeneration: number;
+  /** F_pedigree PRÓPRIO de cada pai (não o do filhote) — decide OUTCROSS vs F1 quando não há parentesco ENTRE os pais (regra 7). */
+  sireFPedigree: number;
+  damFPedigree: number;
   pedigree: Pedigree;
 }
 
@@ -58,7 +65,7 @@ function fullSiblings(ped: Pedigree, a: string, b: string): boolean {
 }
 
 export function classifyCross(input: ClassifyInput): CrossClassification {
-  const { sireId, damId, sireSpecies, damSpecies, sireGeneration, damGeneration, pedigree } = input;
+  const { sireId, damId, sireSpecies, damSpecies, sireGeneration, damGeneration, sireFPedigree, damFPedigree, pedigree } = input;
   const f = kinship(pedigree, sireId, damId);
   const inbreedingRisk = f >= 0.125;
 
@@ -102,10 +109,19 @@ export function classifyCross(input: ClassifyInput): CrossClassification {
       reason: `Descendentes aparentados distantes: geração ${method}.` };
   }
 
-  // 7) Mesma espécie, sem parentesco → outcross (sangue novo).
+  // 7) Mesma espécie, sem parentesco ENTRE os pais. Só é "outcross de resgate"
+  // se pelo menos um pai já vem de linha com endogamia PRÓPRIA (F_pedigree >
+  // 0) e o filhote (F=f, ~0 nesta branch) reduz esse F. Dois fundadores sem
+  // parentesco (F_pedigree=0 nos dois) não estão "resgatando" linha nenhuma —
+  // é o primeiro cruzamento: F1.
   if (sireSpecies === damSpecies) {
-    return { method: "OUTCROSS", kinship: f, inbreedingRisk: false,
-      reason: "Mesma espécie, sem parentesco: sangue novo (outcross/outbreeding)." };
+    const maxParentF = Math.max(sireFPedigree, damFPedigree);
+    if (maxParentF > 0 && f < maxParentF) {
+      return { method: "OUTCROSS", kinship: f, inbreedingRisk: false,
+        reason: `Sangue novo numa linha com endogamia (pai/mãe com F=${maxParentF.toFixed(3)}): outcross reduz o F do filhote.` };
+    }
+    return { method: "F1", kinship: f, inbreedingRisk: false,
+      reason: "Mesma espécie, pais sem parentesco nem endogamia própria: primeiro cruzamento (F1)." };
   }
 
   // 8) Fallback.

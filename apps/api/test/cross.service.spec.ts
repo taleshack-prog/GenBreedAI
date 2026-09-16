@@ -158,3 +158,42 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
     expect(back.specimen.species.split("×").length).toBe(new Set(back.specimen.species.split("×")).size); // sem duplicatas
   });
 });
+
+describe("classify() — correção do achado em produção (/app/reveal/[id]: 'Híbrido revelado' + 'Outcross de resgate' pra 2 fundadores sem parentesco)", () => {
+  let repo: InMemorySpecimenRepository;
+  let svc: CrossService;
+  beforeEach(() => { repo = new InMemorySpecimenRepository(); svc = new CrossService(repo, new WalletService(new InMemoryWalletRepository())); });
+
+  it("gato fundador × gata fundadora, SEM parentesco (F=0 nos dois) → F1, NÃO OUTCROSS", async () => {
+    const c = await svc.classify({ sireId: "gato-tabby", damId: "gato-siames" });
+    expect(c.method).toBe("F1");
+    expect(c.kinship).toBe(0);
+  });
+
+  it("pai/mãe com endogamia PRÓPRIA (F_pedigree>0, via F2 de irmãos) × fundador fresco sem parentesco → OUTCROSS de resgate", async () => {
+    // Dois F1 da MESMA ninhada (gato-tabby×gato-siames) são irmãos completos;
+    // cruzá-los dá F2 com F_pedigree=0.25 (endogamia leve, mesma regra do
+    // motor testada em vários outros arquivos deste repo).
+    let sibA!: Awaited<ReturnType<typeof svc.execute>>;
+    await firstSeedWithSex(async (seed) => {
+      const r = await svc.execute("demo", "SENIOR", { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed });
+      sibA = r;
+      return { specimen: { sex: r.engine.sex } };
+    }, "M", "cx-siba");
+    let sibB!: Awaited<ReturnType<typeof svc.execute>>;
+    await firstSeedWithSex(async (seed) => {
+      const r = await svc.execute("demo", "SENIOR", { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed });
+      sibB = r;
+      return { specimen: { sex: r.engine.sex } };
+    }, "F", "cx-sibb");
+    const f2 = await svc.execute("demo", "SENIOR", { sireId: sibA.specimen.id, damId: sibB.specimen.id, method: "F2", seed: "cx-f2" });
+    expect(f2.engine.fPedigree).toBe(0.25);
+
+    // "gato-branco" é fundador (species felis-catus, F_pedigree=0), sem
+    // qualquer parentesco com a linha acima — cruzar com ele reduz o F da
+    // prole (de 0.25 pra ~0): outcross de resgate de verdade.
+    const c = await svc.classify({ sireId: f2.specimen.id, damId: "gato-branco" });
+    expect(c.method).toBe("OUTCROSS");
+    expect(c.kinship).toBeLessThan(0.25);
+  });
+});

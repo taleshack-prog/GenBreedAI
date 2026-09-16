@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ForbiddenException } from "@nestjs/common";
-import { normalizeBiologicalSpecies, speciesInfo, resolveDisplayName, resolveScientificName, WILD_FELINE_FOUNDER_NAMES } from "@genbreedai/shared";
+import { normalizeBiologicalSpecies, speciesInfo, resolveDisplayName, resolveScientificName, WILD_FELINE_FOUNDER_NAMES, revealTitleWord } from "@genbreedai/shared";
 import { familyVisibleAtTier, specimenVisibleAtTier, assertTierAllows } from "../src/common/tier-access";
 import { isInterspecific } from "../src/cross/cross.service";
 import type { StoredSpecimen } from "../src/specimens/in-memory.repository";
@@ -195,5 +195,24 @@ describe("speciesInfo — nome científico de híbrido (species com '×') dedupl
     const sci = speciesInfo("panthera-uncia×panthera-tigris-albino").scientific;
     expect(sci).toContain("×");
     expect(sci).toBe("Panthera uncia × Panthera tigris (albino)");
+  });
+});
+
+// Título da tela de revelação (/app/reveal/[id], apps/web/app/app/reveal/[id]/
+// page.tsx) — web não tem infra de teste própria, testado aqui via
+// revealTitleWord (@genbreedai/shared), a função que o título usa de verdade.
+describe("revealTitleWord — 'Híbrido Revelado' só quando a espécie é multi-componente", () => {
+  it("gato × gata fundadores (mesma espécie, felis-catus) → 'Filhote'", () => {
+    expect(revealTitleWord("felis-catus")).toBe("Filhote");
+  });
+
+  it("tigre × leoa (panthera-tigris×panthera-leo, 2 componentes biológicos) → 'Híbrido'", () => {
+    expect(revealTitleWord("panthera-tigris×panthera-leo")).toBe("Híbrido");
+  });
+
+  it("morfo de cor não conta como híbrido (mesma biologicalSpecies) — tigre-branco × tigre-albino → 'Filhote'", () => {
+    // panthera-tigris-branco e panthera-tigris-albino normalizam pra MESMA
+    // biologicalSpecies (panthera-tigris) — não é híbrido, é a mesma espécie.
+    expect(revealTitleWord("panthera-tigris-branco×panthera-tigris-albino")).toBe("Filhote");
   });
 });

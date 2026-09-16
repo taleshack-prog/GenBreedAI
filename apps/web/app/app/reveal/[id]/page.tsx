@@ -8,6 +8,7 @@ import { CapsuleCard } from "../../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../../components/Genome";
 import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../../lib/reveal";
 import { displayName } from "../../../../lib/display";
+import { revealTitleWord } from "@genbreedai/shared";
 import { SexBadge } from "../../../../components/SexBadge";
 
 const QTL_LABEL: Record<string,string> = { porte:"Porte", vigor:"Vigor", beleza:"Beleza", temperamento:"Temperamento", rosetas:"Rosetas" };
@@ -62,9 +63,11 @@ export default function RevealPage() {
         </div>
       </div>
 
-      {/* Título */}
+      {/* Título — "Híbrido" só quando a espécie tem mais de 1 componente
+          biológico (ex.: tigre×leão); mesma espécie sem parentesco (ex.:
+          gato×gata domésticos) não é híbrido nenhum. */}
       <h1 className="reveal mb-5 text-center font-display text-3xl font-black uppercase leading-tight">
-        <span className="text-ink">Híbrido </span>
+        <span className="text-ink">{revealTitleWord(specimen.species)} </span>
         <span style={{ color: "#00F0FF", textShadow: "0 0 16px #00F0FF88" }}>Revelado!</span>
       </h1>
 

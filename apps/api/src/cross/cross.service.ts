@@ -175,6 +175,7 @@ export class CrossService {
       sireId: sire.id, damId: dam.id,
       sireSpecies: sire.species, damSpecies: dam.species,
       sireGeneration: sire.generation, damGeneration: dam.generation,
+      sireFPedigree: sire.fPedigree, damFPedigree: dam.fPedigree,
       pedigree,
     });
   }
