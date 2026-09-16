@@ -48,10 +48,17 @@ describe("Pumajaguar BC1 (TDD §4.5; sexo/fertilidade — ADR-0015 item 5)", () 
     expect(r.specimen.fixationIndex).toBeCloseTo(expectedIF, 6); // motor arredonda a 6 casas
     expect(r.specimen.fixationIndex).toBe(0.857143);
   });
-  it("BC1 sob depressão (F=0.25); sem Haldane (não é F1); determinístico", () => {
+  it("BC1 (F=0.25), prole macho na seed pj-01 → estéril (ADR-0018); determinístico", () => {
     const r = cross(negra, delta, "BC1", "pj-01", ctx);
-    expect(r.specimen.fertility.haldaneStatus).toBe("NONE");
-    expect(r.specimen.fertility.haldaneSterile).toBe(false);
+    // Premissa (ADR-0018): a prole desse BC1, sob a seed "pj-01", é MACHO —
+    // e sua ascendência mistura mais de uma espécie biológica (negra =
+    // "panthera-onca", 1 componente; delta = "puma×panthera-onca", 2
+    // componentes — união = 2), então é estéril em QUALQUER método, não só
+    // F1. Consequência direta e aprovada da regra (não é bug).
+    expect(r.specimen.sex).toBe("M");
+    expect(r.specimen.fertility.haldaneStatus).toBe("STERILE");
+    expect(r.specimen.fertility.haldaneSterile).toBe(true);
+    expect(r.specimen.fertility.score).toBe(0);
     expect(r.specimen.fertility.inviabilityRisk).toBe(0);
     expect(cross(negra, delta, "BC1", "pj-01", ctx)).toEqual(r);
   });

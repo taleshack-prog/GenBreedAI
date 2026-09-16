@@ -279,7 +279,26 @@ function finalizeSpecimen(
   const fPedigree = wrightF(ctx.pedigree, parentA.id, parentB.id);
   // Haldane por sexo (ADR-0015): `sex` é o do ZIGOTO (já resolvido acima, via
   // combineXGametes), `hybridClass` vem SEMPRE dos PAIS — nunca do `method`.
-  const fertility = fertilityScore(method, fPedigree, { sex, hybridClass: hybridClass(parentA, parentB, ctx.pack), rng });
+  let fertility = fertilityScore(method, fPedigree, { sex, hybridClass: hybridClass(parentA, parentB, ctx.pack), rng });
+  // ADR-0018: macho cuja ASCENDÊNCIA mistura mais de uma espécie biológica é
+  // estéril, em QUALQUER método (estende Haldane além do F1 — fertilityScore
+  // acima só cobre o F1). Componentes = união de parentA.species.split("×")
+  // e parentB.species.split("×"), deduplicada — `species` já chega
+  // normalizado pelo CHAMADOR (o motor não consulta catálogo). Aplicado
+  // DEPOIS do cálculo acima, sem consumir rng extra (mesma ordem de
+  // sorteios de antes desta ADR). Fêmeas e intraespécie (1 componente):
+  // sem mudança.
+  const biologicalComponents = new Set([...parentA.species.split("×"), ...parentB.species.split("×")]);
+  if (sex === "M" && biologicalComponents.size > 1) {
+    fertility = {
+      ...fertility,
+      score: 0,
+      haldaneStatus: "STERILE",
+      // @deprecated (ADR-0015) — mantido em sincronia com haldaneStatus, ver JSDoc do campo em @genbreedai/shared.
+      haldaneSterile: true,
+      notes: [...fertility.notes, "Macho híbrido estéril (Regra de Haldane estendida além do F1 — ADR-0018)."],
+    };
+  }
   const generation = Math.max(parentA.generation, parentB.generation) + 1;
   const targetLoci = ctx.targetLoci ?? Object.keys(zygote.loci);
   const generationsUnderSelection = ctx.generationsUnderSelection ?? generation;

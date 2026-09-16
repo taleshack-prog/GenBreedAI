@@ -55,29 +55,26 @@
  *     script INTEIRO aborta (antes da transação), listando os ids afetados.
  *   - Fundadores: fertility e haldane_status continuam NULL, sempre.
  *
- * === REGRA PROVISÓRIA — machos híbridos além do F1 (SEM ADR ainda) ===
- * Motivo: o motor (fertilityScore) só implementa a Regra de Haldane no ramo
- * F1 (ADR-0015) — BC1/F2/LINE/INBREED/OUTCROSS sempre caem no `base`
- * genérico do método, mesmo quando o espécime É um híbrido interespecífico
- * macho (ex.: um BC1 cujo PRÓPRIO species normalizado ainda tem mais de um
- * componente). Evidência biológica (Savannah, Felis catus × Leptailurus
- * serval): machos híbridos ficam estéreis por VÁRIAS gerações após o F1, não
- * só nele — a lacuna do motor deixaria esses machos com fertilidade > 0
- * indevidamente. Até existir uma ADR formal cobrindo esterilidade de machos
- * híbridos além do F1, este backfill aplica um AJUSTE PONTUAL, só na leitura
- * dos dados legados: depois de calcular a fertilidade com o motor (acima),
- * se `sex === "M"` E o species normalizado do PRÓPRIO espécime (não dos
- * pais) — `engineSpeciesOf(pack, species)` — tiver mais de 1 componente
- * separado por "×", força `fertility = 0` e `haldaneStatus = "STERILE"`,
+ * === Machos híbridos além do F1 — ADR-0018 ===
+ * Regra: macho cuja ascendência mistura mais de uma espécie biológica é
+ * estéril, em qualquer method (F1, BC1, F2, LINE, INBREED, OUTCROSS...).
+ * Documentada e MOTIVADA em docs/adr/0018-esterilidade-macho-hibrido.md
+ * (motivo: o motor só implementava Haldane no ramo F1, ADR-0015, deixando
+ * BC1/F2/... indevidamente férteis pra machos híbridos; evidência biológica
+ * Savannah — Felis catus × Leptailurus serval — machos estéreis por várias
+ * gerações após o F1, GRADE baixo). O motor (packages/engine/src/cross.ts,
+ * finalizeSpecimen) já implementa a MESMA regra desde a ADR-0018 — este
+ * backfill deixa de ser um remendo provisório sem ADR e passa a ser a
+ * aplicação da regra JÁ FORMALIZADA sobre os dados legados que o motor não
+ * viu nascer. Lógica abaixo inalterada por esta atualização de comentário:
+ * depois de calcular a fertilidade com o motor (acima), se `sex === "M"` E
+ * o species normalizado do PRÓPRIO espécime (não dos pais) —
+ * `engineSpeciesOf(pack, species)` — tiver mais de 1 componente separado
+ * por "×", força `fertility = 0` e `haldaneStatus = "STERILE"`,
  * independente do `method`. Fêmeas híbridas mantêm o valor calculado pelo
- * motor (Haldane já as trata como REDUCED, nunca STERILE, e não há
- * evidência de esterilidade multi-geracional em fêmeas aqui). F1 macho
- * interespecífico já sai STERILE pelo motor sozinho — esta regra não muda
- * esse caso, só cobre o que o motor ainda não cobre (BC1/F2/... em diante).
- * IMPORTANTE: isto é um remendo NO BACKFILL, não no motor — o motor
- * (packages/engine/src/fertility.ts) PRECISA da mesma regra antes de
- * qualquer merge, senão todo NOVO cruzamento (fora deste backfill) continua
- * gerando machos híbridos BC1/F2/... indevidamente férteis.
+ * motor. F1 macho interespecífico já sai STERILE pelo motor sozinho — esta
+ * regra não muda esse caso, só cobre o que o motor não cobria antes da
+ * ADR-0018 (BC1/F2/... em diante).
  *
  * Uso: pnpm --filter @genbreedai/api db:backfill-sex          (dry-run)
  *      pnpm --filter @genbreedai/api db:backfill-sex --apply  (grava)
