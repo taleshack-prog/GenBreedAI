@@ -357,12 +357,14 @@ $$\text{provenanceHash} = \text{SHA-256}(\text{genotypeJSON} + \text{pedigreeTre
 
 A matriz de monetização é estruturada para monetizar capacidade de processamento, amplitude de conteúdo taxonômico e ferramentas de visualização analítica, blindando o ecossistema contra dinâmicas de Pay-to-Win.
 
+> Cota de imagens IA/mês: o código (`apps/api/src/common/tiers.ts`, `TIER_POLICIES`) é a referência desde 16/09/2026 — a coluna abaixo foi corrigida pra bater com ele.
+
 | **Tier de Acesso** | **Pool Taxonômico Disponível** | **Cota de Cruzamentos** | **Imagens IA / Mês** | **Ferramentas Analíticas e Recursos** | **Preço Mensal** |
 | --- | --- | --- | --- | --- | --- |
-| Freebreeder | Felinos Base (Apenas Intraespécie) | 1 cruzamento / dia (+1 evento semanal de hibridação) | 1 imagem premium / mês | Visualizador de genoma básico, streak diário, renderização procedural ilimitada. | `R$ 0,00` |
-| Junior Breeder | + Híbridos Interespecíficos de Felinos | 3 cruzamentos / dia | 6 imagens premium / mês | Bio-filtros de alelos, árvore genealógica de 3 gerações, remoção de anúncios. | `R$ 19,90` |
-| Senior Breeder | + Caninos e Raças Selecionadas | 5 cruzamentos / dia | 10 imagens premium / mês | Mapeamento cromossômico completo, árvore genealógica de 7 gerações, simulador preditivo de Punnett avançado. | `R$ 39,90` |
-| PhD Breeder | + Grandes Animais (Bovinos, Equinos, Suínos, Ovinos) | 10 cruzamentos / dia | 20 imagens premium / mês | Acesso ao Mercado (compra/venda), exportação 4K, ferramentas de seleção por QTL, auditoria de linhagem completa. | `R$ 89,90` |
+| Freebreeder | Gatos domésticos — Felis catus (DOMESTIC_CAT), apenas intraespécie (ADR-0016) | 1 cruzamento / dia (+1 evento semanal de hibridação) | 0 imagens premium / mês | Visualizador de genoma básico, streak diário, renderização procedural ilimitada. | `R$ 0,00` |
+| Junior Breeder | + Felinos selvagens (WILD_FELINE — onça, leão, tigre, serval etc.) e cruzamentos interespecíficos entre felinos (ADR-0016) | 3 cruzamentos / dia | 10 imagens premium / mês | Bio-filtros de alelos, árvore genealógica de 3 gerações, remoção de anúncios. | `R$ 19,90` |
+| Senior Breeder | + Caninos (DOG) — todas as raças do catálogo atual (ADR-0016) | 5 cruzamentos / dia | 20 imagens premium / mês | Mapeamento cromossômico completo, árvore genealógica de 7 gerações, simulador preditivo de Punnett avançado. | `R$ 39,90` |
+| PhD Breeder | Mesmo pool do Senior — "grandes animais" (bovinos, equinos, suínos, ovinos) ainda não têm fundador nem poolGroup cadastrado no catálogo (ADR-0016); nenhuma espécie adicional além do Senior por ora | 10 cruzamentos / dia | 30 imagens premium / mês | Acesso ao Mercado (compra/venda), exportação 4K, ferramentas de seleção por QTL, auditoria de linhagem completa. | `R$ 89,90` |
 
 ### SEÇÃO 7 — SISTEMAS SOCIAIS E ECONOMIA
 
