@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ForbiddenException } from "@nestjs/common";
+import { normalizeBiologicalSpecies } from "@genbreedai/shared";
 import { familyVisibleAtTier, specimenVisibleAtTier, assertTierAllows } from "../src/common/tier-access";
 import { isInterspecific } from "../src/cross/cross.service";
 import type { StoredSpecimen } from "../src/specimens/in-memory.repository";
@@ -110,5 +111,26 @@ describe("isInterspecific (cross.service) — nunca por slug cru", () => {
 
   it("panthera-leo × panthera-tigris → true (espécies biológicas distintas)", () => {
     expect(isInterspecific(specimen("feline", "panthera-leo"), specimen("feline", "panthera-tigris"))).toBe(true);
+  });
+});
+
+// @genbreedai/shared não tem infraestrutura de teste própria (sem vitest nas
+// devDependencies, sem script "test" — só "typecheck", ver package.json) —
+// teste colocado aqui, em apps/api/test/, conforme instruído.
+describe("normalizeBiologicalSpecies (@genbreedai/shared)", () => {
+  it("colapsa morfo de cor na espécie selvagem", () => {
+    expect(normalizeBiologicalSpecies("panthera-tigris-branco")).toBe("panthera-tigris");
+  });
+
+  it("híbrido composto: decompõe por '×', normaliza cada componente, deduplica e reordena", () => {
+    expect(normalizeBiologicalSpecies("panthera-uncia×panthera-tigris-albino")).toBe("panthera-tigris×panthera-uncia");
+  });
+
+  it("espécie já canônica permanece igual", () => {
+    expect(normalizeBiologicalSpecies("felis-catus")).toBe("felis-catus");
+  });
+
+  it("slug fora do catálogo (ex.: raça canina só em DOG_BREEDS) permanece como está", () => {
+    expect(normalizeBiologicalSpecies("collie")).toBe("collie");
   });
 });

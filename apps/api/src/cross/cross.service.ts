@@ -6,9 +6,9 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   cross as crossEngine, enumerateOffspring, materializeCross,
-  CANINE_PACK, FELINE_PACK, type OffspringOption,
+  CANINE_PACK, FELINE_PACK, SexMismatchError, SterileParentError, type OffspringOption,
 } from "@genbreedai/engine";
-import { biologicalSpecies } from "@genbreedai/shared";
+import { biologicalSpecies, normalizeBiologicalSpecies } from "@genbreedai/shared";
 import type { BreedingMethod, Genotype, CrossResult, Tier } from "@genbreedai/shared";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { assertTierAllows, specimenVisibleAtTier } from "../common/tier-access";
@@ -22,14 +22,25 @@ function combineSpecies(a: string, b: string) { if (a === b) return a; return [.
 
 /**
  * Componentes biológicos de um `species` (possivelmente híbrido, unido por
- * "×" via `combineSpecies`) — cada componente já normalizado via
- * `biologicalSpecies()`. Usado por `isInterspecific` pra nunca comparar slug
- * cru (achado crítico pós-commit 7c89ca0: comparar `sire.species !==
- * dam.species` cru marcava incorretamente raças caninas entre si, e morfos
- * de cor felinos como tigre-de-bengala×tigre-branco, como interespecíficos).
+ * "×" via `combineSpecies`) — cada componente já normalizado. Usado por
+ * `isInterspecific` pra nunca comparar slug cru (achado crítico pós-commit
+ * 7c89ca0: comparar `sire.species !== dam.species` cru marcava
+ * incorretamente raças caninas entre si, e morfos de cor felinos como
+ * tigre-de-bengala×tigre-branco, como interespecíficos).
+ *
+ * Canino: mantém o colapso INCONDICIONAL via `biologicalSpecies(pack, c)`
+ * (sempre "canis-familiaris", MESMO pra raça fora de `SPECIES_INFO`) — NÃO
+ * dá pra trocar por `normalizeBiologicalSpecies()` sozinho aqui, porque essa
+ * função só normaliza pelo catálogo (`SPECIES_INFO`) e a maioria das raças
+ * caninas só existe em `DOG_BREEDS`; usar só `normalizeBiologicalSpecies()`
+ * deixaria duas raças caninas não-cadastradas (ex. "collie" × "dogo-
+ * argentino") com strings DIFERENTES, marcando-as como interespecíficas.
+ * Felino (e demais packs): usa `normalizeBiologicalSpecies()` — mesma tabela
+ * de `biologicalSpecies()`, já cobrindo morfo + decomposição de híbrido "×".
  */
 function biologicalComponents(pack: string, species: string): Set<string> {
-  return new Set(species.split("×").map((c) => biologicalSpecies(pack, c)));
+  if (pack === "canine") return new Set(species.split("×").map((c) => biologicalSpecies(pack, c)));
+  return new Set(normalizeBiologicalSpecies(species).split("×"));
 }
 
 /**
@@ -51,6 +62,16 @@ export function isInterspecific(sire: StoredSpecimen, dam: StoredSpecimen): bool
   const [sireSpecies] = sireComponents;
   const [damSpecies] = damComponents;
   return sireSpecies !== damSpecies;
+}
+
+/**
+ * `species` normalizado pronto pra virar `ParentInput.species` do motor
+ * (ADR-0015) — reusa `biologicalComponents` (mesma fonte de verdade do gate
+ * acima) e rejunta por "×", preservando o colapso incondicional canino e a
+ * normalização por catálogo/morfo felina.
+ */
+function engineSpecies(pack: string, species: string): string {
+  return [...biologicalComponents(pack, species)].sort().join("×");
 }
 
 const PACK_BY_FAMILY: Record<string, typeof CANINE_PACK> = { feline: FELINE_PACK, canine: CANINE_PACK };
@@ -87,10 +108,26 @@ export class CrossService {
     if (sire.pack !== dam.pack) throw new BadRequestException(`Famílias distintas (${sire.pack} × ${dam.pack}).`);
     const pack = PACK_BY_FAMILY[sire.pack];
     if (!pack) throw new BadRequestException(`Família sem pack: ${sire.pack}.`);
+    // Sexo é OBRIGATÓRIO pro motor (ParentInput.sex — ADR-0013/0015): espécime
+    // legado sem migração de dados (sex=null) não pode ser sire nem dam. Nunca
+    // inventa sexo. Checado ANTES de montar a/b — o motor nem chega a ser chamado.
+    if (sire.sex === null || dam.sex === null) {
+      throw new BadRequestException("Espécime sem sexo definido; aguarde a migração de dados.");
+    }
     const interspecific = isInterspecific(sire, dam);
     const pedigree = await this.repo.buildPedigree([sire.id, dam.id]);
-    const a = { id: sire.id, genotype: sire.genotype, generation: sire.generation };
-    const b = { id: dam.id, genotype: dam.genotype, generation: dam.generation };
+    const a = {
+      id: sire.id, genotype: sire.genotype, generation: sire.generation,
+      sex: sire.sex, species: engineSpecies(sire.pack, sire.species),
+      fertility: sire.fertility ?? undefined,
+    };
+    const b = {
+      id: dam.id, genotype: dam.genotype, generation: dam.generation,
+      sex: dam.sex, species: engineSpecies(dam.pack, dam.species),
+      fertility: dam.fertility ?? undefined,
+      // Porte adulto da MÃE (ADR-0014) — só importa no papel de dam (parentB).
+      adultPorte: dam.phenotype?.porteAdulto,
+    };
     const ctx = { pack, pedigree, interspecific, targetLoci: dto.targetLoci, generationsUnderSelection: dto.generationsUnderSelection };
     return { sire, dam, a, b, ctx, interspecific };
   }
@@ -148,7 +185,14 @@ export class CrossService {
       }
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
-      throw new BadRequestException("GENÓTIPO INCOMPATÍVEL: rode `pnpm --filter @genbreedai/api db:reset`. Detalhe: " + (e as Error).message);
+      // Mensagens de erro pro CLIENTE nunca revelam detalhe interno/comando
+      // de operação (perigoso em produção — vazava "rode db:reset"). Detalhe
+      // completo só no log do servidor.
+      if (e instanceof SexMismatchError) throw new BadRequestException("Cruzamento exige pai macho e mãe fêmea.");
+      if (e instanceof SterileParentError) throw new BadRequestException("Espécime estéril não pode reproduzir.");
+      // eslint-disable-next-line no-console
+      console.error("[CrossService.computeResult] erro do motor:", e);
+      throw new BadRequestException("Genótipo incompatível com o pack atual.");
     }
     return { result, sire, dam, species: combineSpecies(sire.species, dam.species), pack: sire.pack };
   }
@@ -161,6 +205,10 @@ export class CrossService {
       sireId: sire.id, damId: dam.id, method: dto.method,
       fPedigree: result.specimen.fPedigree, fixationIndex: result.specimen.fixationIndex,
       aura: result.specimen.aura, cacheKey: result.cacheKey, status: "ALIVE",
+      sex: result.specimen.sex,
+      fertility: result.specimen.fertility.score,
+      haldaneStatus: result.specimen.fertility.haldaneStatus,
+      phenotype: result.specimen.phenotype,
     });
     await this.wallet.rewardForCross(ownerId, result.specimen.aura).catch(() => {}); // fonte: fixação
     return { specimen: stored, cacheKey: result.cacheKey, engine: result.specimen };

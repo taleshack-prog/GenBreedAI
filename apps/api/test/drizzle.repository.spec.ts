@@ -8,8 +8,9 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../src/db/schema";
 import { specimens } from "../src/db/schema";
 import { DrizzleSpecimenRepository } from "../src/specimens/drizzle.repository";
-import { founderSeeds } from "../src/specimens/in-memory.repository";
+import { founderSeeds, FOUNDER_SEX } from "../src/specimens/in-memory.repository";
 import { CrossService } from "../src/cross/cross.service";
+import { firstSeedWithSex } from "./helpers/seed-for-sex";
 
 async function makeDb() {
   const db = drizzle(new PGlite(), { schema });
@@ -19,6 +20,10 @@ async function makeDb() {
       id: f.id, ownerId: f.ownerId, pack: f.pack, species: f.species, genotype: f.genotype,
       phenotype: null, generation: f.generation, sireId: f.sireId, damId: f.damId, method: f.method,
       fPedigree: f.fPedigree, fixationIndex: f.fixationIndex, aura: f.aura, cacheKey: f.cacheKey, provenanceHash: null,
+      // Sexo EXPLÍCITO (mesma tabela literal de in-memory.repository.ts, não
+      // duplicada) — sem isso, a coluna fica NULL no PGlite e o motor rejeita
+      // ("Espécime sem sexo definido") em qualquer cruzamento.
+      sex: FOUNDER_SEX[f.id]!,
     });
   }
   return db;
@@ -43,8 +48,18 @@ describe("DrizzleSpecimenRepository (Postgres real via PGlite)", () => {
   });
 
   it("retrocruzamento persiste com F_pedigree = 0.25", async () => {
-    const f1 = await service.execute("o2", "JUNIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", seed: "db-2" });
-    const bc = await service.execute("o2", "JUNIOR", { sireId: f1.specimen.id, damId: "onca-pintada", method: "BC1", seed: "db-3" });
+    // onca-pintada×onca-negra é SAME_SPECIES (sem Haldane), mas o sexo do
+    // filho é sorteado — usado como SIRE abaixo, precisa ser Macho.
+    // firstSeedWithSex acha a seed certa em vez de fixar "db-2" à mão.
+    // Retrocruza à MÃE real (onca-negra, Fêmea) — onca-pintada (Macho, era o
+    // pai do f1) não pode ser dam.
+    let f1!: Awaited<ReturnType<typeof service.execute>>;
+    await firstSeedWithSex(async (seed) => {
+      const r = await service.execute("o2", "JUNIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", seed });
+      f1 = r;
+      return { specimen: { sex: r.engine.sex } };
+    }, "M", "db-2");
+    const bc = await service.execute("o2", "JUNIOR", { sireId: f1.specimen.id, damId: "onca-negra", method: "BC1", seed: "db-3" });
     expect(bc.engine.fPedigree).toBe(0.25);
     const saved = await repo.get(bc.specimen.id);
     expect(saved?.fPedigree).toBe(0.25);

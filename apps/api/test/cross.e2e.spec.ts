@@ -1,5 +1,5 @@
 /** Testes e2e do endpoint POST /api/v1/cross (modelo v2). */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { buildApp } from "../src/main";
 
@@ -9,6 +9,13 @@ const post = (body: Record<string, unknown>, headers: Record<string, string> = {
 const AUTH_FREE = { "x-user-id": "user-free", "x-user-tier": "FREE" };
 const AUTH_PHD = { "x-user-id": "user-phd", "x-user-tier": "PHD" };
 const CROSS = { sireId: "onca-pintada", damId: "onca-negra", method: "F1" };
+
+let savedQuotaUnlimited: string | undefined;
+beforeEach(() => { savedQuotaUnlimited = process.env.CROSS_QUOTA_UNLIMITED; delete process.env.CROSS_QUOTA_UNLIMITED; });
+afterEach(() => {
+  if (savedQuotaUnlimited === undefined) delete process.env.CROSS_QUOTA_UNLIMITED;
+  else process.env.CROSS_QUOTA_UNLIMITED = savedQuotaUnlimited;
+});
 
 beforeAll(async () => { process.env.NODE_ENV = "test"; process.env.AUTH_DEV_HEADERS = "true"; delete process.env.DATABASE_URL; app = await buildApp(); await app.init(); await app.getHttpAdapter().getInstance().ready(); });
 afterAll(async () => { await app.close(); });
@@ -24,8 +31,12 @@ describe("POST /api/v1/cross", () => {
   it("401: sem autenticação", async () => { expect((await post(CROSS, {})).statusCode).toBe(401); });
   it("400: método inválido", async () => { expect((await post({ sireId: "onca-pintada", damId: "onca-negra", method: "XYZ" }, AUTH_PHD)).statusCode).toBe(400); });
   it("429: FREE estoura cota (1/dia) na 2ª", async () => {
-    expect((await post(CROSS, AUTH_FREE)).statusCode).toBe(201);
-    expect((await post(CROSS, AUTH_FREE)).statusCode).toBe(429);
+    // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016), não onca-pintada/
+    // onca-negra (WILD_FELINE, fora do pool FREE — dava 404 na 1ª chamada,
+    // não 201). Tier e asserções inalterados.
+    const FREE_CROSS = { sireId: "gato-tabby", damId: "gato-siames", method: "F1" };
+    expect((await post(FREE_CROSS, AUTH_FREE)).statusCode).toBe(201);
+    expect((await post(FREE_CROSS, AUTH_FREE)).statusCode).toBe(429);
   });
   it("GET /specimens lista fundadores", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/specimens", headers: { "x-user-id": "demo", "x-user-tier": "PHD" } });
@@ -34,7 +45,10 @@ describe("POST /api/v1/cross", () => {
     expect(ids).toEqual(expect.arrayContaining(["onca-pintada","onca-negra","puma","tigre-bengala","gato-tabby","boerboel"]));
   });
   it("ANTI-P2W: FREE e PHD → mesmo resultado genético", async () => {
-    const fixed = { ...CROSS, seed: "e2e-fixed" };
+    // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016): CROSS (onca-pintada/
+    // onca-negra) é WILD_FELINE, fora do pool FREE — FREE receberia 404, não
+    // o cacheKey esperado. Asserção inalterada.
+    const fixed = { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed: "e2e-fixed" };
     const phd = (await post(fixed, { "x-user-id": "p1", "x-user-tier": "PHD" })).json();
     const free = (await post(fixed, { "x-user-id": "f1", "x-user-tier": "FREE" })).json();
     expect(free.cacheKey).toBe(phd.cacheKey);

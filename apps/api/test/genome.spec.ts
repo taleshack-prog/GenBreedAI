@@ -29,7 +29,7 @@ describe("Genoma detalhado (TDD §1.3/§8)", () => {
   });
 
   it("origem dos alelos: rastreia de onde vem cada alelo na linhagem", async () => {
-    const f1 = await cross.execute("demo", "JUNIOR", { sireId: "onca-pintada", damId: "leao", method: "F1", seed: "s" });
+    const f1 = await cross.execute("demo", "JUNIOR", { sireId: "onca-pintada", damId: "leao-femea", method: "F1", seed: "s" });
     const g = await genome.get(f1.specimen.id, "PHD");
     const pSource = g.alleleSources.find((x) => x.locus === "P" && x.allele === "P^r");
     expect(pSource?.sources.some((s) => s.includes("onca-pintada"))).toBe(true);

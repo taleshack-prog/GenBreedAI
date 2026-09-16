@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { CrossService } from "../src/cross/cross.service";
 import { InMemorySpecimenRepository } from "../src/specimens/in-memory.repository";
 import { wrightF } from "@genbreedai/engine";
+import { firstSeedWithSex } from "./helpers/seed-for-sex";
 
 describe("CrossService (TDD B/K/M + gate por tier)", () => {
   let repo: InMemorySpecimenRepository;
@@ -31,12 +32,14 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
   });
 
   it("FREE é BLOQUEADO no interespecífico selvagem (Puma×Panthera) → 404 (pool, não mais 403 'interespecífico')", async () => {
-    await expect(svc.execute("demo", "FREE", { sireId: "puma", damId: "onca-pintada", method: "F1" }))
+    // onca-pintada-2 no lugar de onca-pintada: mesma espécie/pool (WILD_FELINE),
+    // evita reusar onca-pintada (Macho, ver FOUNDER_SEX) como dam.
+    await expect(svc.execute("demo", "FREE", { sireId: "puma", damId: "onca-pintada-2", method: "F1" }))
       .rejects.toThrow(/não encontrado/i);
   });
 
   it("JUNIOR libera interespecífico felino (Pumajaguar F1)", async () => {
-    const r = await svc.execute("demo", "JUNIOR", { sireId: "puma", damId: "onca-pintada", method: "F1" });
+    const r = await svc.execute("demo", "JUNIOR", { sireId: "puma", damId: "onca-pintada-2", method: "F1" });
     expect(r.engine.phenotype.viable).toBe(true);
     expect(r.specimen.species).toContain("×");
   });
@@ -62,16 +65,28 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
   });
 
   it("retrocruzamento → F_pedigree = 0.25", async () => {
-    const f1 = await svc.execute("demo", "JUNIOR", { sireId: "puma", damId: "onca-pintada", method: "F1", seed: "s1" });
-    const bc = await svc.execute("demo", "JUNIOR", { sireId: f1.specimen.id, damId: "onca-pintada", method: "BC1", seed: "s2" });
+    // F1 (puma×onca-pintada-2) é interespecífico — Regra de Haldane torna F1
+    // MACHO interespecífico sempre estéril (não pode sirar nada depois).
+    // Solução: a F1 precisa ser FÊMEA, e o retrocruzamento é ao PAI (puma de
+    // novo como sire, f1 como dam) — não à mãe como antes. F_pedigree=0.25
+    // continua valendo (retrocruzamento ao progenitor é simétrico — ver 1º
+    // teste do arco Pumajaguar no motor). firstSeedWithSex acha a seed que dá
+    // filha, em vez de fixar isso à mão.
+    let f1!: Awaited<ReturnType<typeof svc.execute>>;
+    await firstSeedWithSex(async (seed) => {
+      const r = await svc.execute("demo", "JUNIOR", { sireId: "puma", damId: "onca-pintada-2", method: "F1", seed });
+      f1 = r;
+      return { specimen: { sex: r.engine.sex } };
+    }, "F", "s1");
+    const bc = await svc.execute("demo", "JUNIOR", { sireId: "puma", damId: f1.specimen.id, method: "BC1", seed: "s2" });
     expect(bc.engine.fPedigree).toBe(0.25);
     const ped = await repo.buildPedigree([f1.specimen.id, "onca-negra-1"]);
-    expect(wrightF(ped, f1.specimen.id, "onca-pintada")).toBe(0.25);
+    expect(wrightF(ped, f1.specimen.id, "puma")).toBe(0.25);
   });
 
   it("ANTI-P2W: mesma entrada → resultado idêntico entre tiers permitidos", async () => {
-    const a = await svc.execute("u", "JUNIOR", { sireId: "puma", damId: "onca-pintada", method: "F1", seed: "fix" });
-    const b = await svc.execute("u", "PHD", { sireId: "puma", damId: "onca-pintada", method: "F1", seed: "fix" });
+    const a = await svc.execute("u", "JUNIOR", { sireId: "puma", damId: "onca-pintada-2", method: "F1", seed: "fix" });
+    const b = await svc.execute("u", "PHD", { sireId: "puma", damId: "onca-pintada-2", method: "F1", seed: "fix" });
     expect(a.cacheKey).toBe(b.cacheKey);
     expect(a.engine.fixationIndex).toBe(b.engine.fixationIndex);
   });
@@ -127,9 +142,19 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
     expect(info.common).toContain("Serval");
     expect(info.common).toContain("Onça-pintada");
     expect(info.common).toContain("Tigre-albino");     // antes sumia
-    // combineSpecies dedupe: cruzar hibrido com um ancestral não repete
-    const r = await svc.execute("demo", "PHD", { sireId: "onca-pintada", damId: "puma", method: "F1", seed: "z" });
-    const back = await svc.execute("demo", "PHD", { sireId: r.specimen.id, damId: "onca-pintada", method: "BC1", seed: "z2" });
+    // combineSpecies dedupe: cruzar híbrido com um ancestral não repete.
+    // F1 (puma×onca-pintada-2, interespecífico) precisa ser FÊMEA — mesmo
+    // motivo do teste de retrocruzamento acima (Haldane: macho interespecífico
+    // é sempre estéril). O BC1 introduz uma TERCEIRA espécie (serval, macho,
+    // já citada no speciesInfo acima) como sire, com a F1 fêmea como dam —
+    // exercita de verdade "não some o 3º ancestral" no dedupe.
+    let f1!: Awaited<ReturnType<typeof svc.execute>>;
+    await firstSeedWithSex(async (seed) => {
+      const r = await svc.execute("demo", "PHD", { sireId: "puma", damId: "onca-pintada-2", method: "F1", seed });
+      f1 = r;
+      return { specimen: { sex: r.engine.sex } };
+    }, "F", "z");
+    const back = await svc.execute("demo", "PHD", { sireId: "serval", damId: f1.specimen.id, method: "BC1", seed: "z2" });
     expect(back.specimen.species.split("×").length).toBe(new Set(back.specimen.species.split("×")).size); // sem duplicatas
   });
 });

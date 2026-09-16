@@ -4,6 +4,7 @@ import { CrossService } from "../src/cross/cross.service";
 import { GeneBankService } from "../src/gene-bank/gene-bank.service";
 import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
+import { firstSeedWithSex } from "./helpers/seed-for-sex";
 
 describe("Criopreservação (Gene Bank)", () => {
   let repo: InMemorySpecimenRepository; let cross: CrossService; let wallet: WalletService; let gb: GeneBankService;
@@ -18,14 +19,24 @@ describe("Criopreservação (Gene Bank)", () => {
 
   it("espécime CONGELADO não pode cruzar até descongelar", async () => {
     const opts = await cross.options("SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
-    const frozen = await gb.freezeOption("demo", "SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", choiceKey: opts.options[0]!.key });
-    await expect(cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-pintada", method: "BC1" }))
+    // onca-pintada×onca-negra é SAME_SPECIES (sem Haldane) — mas o sexo do
+    // filho ainda é sorteado por RNG, e ele é usado como SIRE logo abaixo
+    // (precisa ser Macho). firstSeedWithSex acha a seed certa em vez de fixar
+    // à mão. Retrocruza à MÃE real (onca-negra, Fêmea) — não a onca-pintada
+    // (Macho: era o PAI do próprio frozen; usá-lo como dam violaria o gate de
+    // sexo do motor).
+    let frozen!: Awaited<ReturnType<typeof gb.freezeOption>>;
+    await firstSeedWithSex(async (seed) => {
+      frozen = await gb.freezeOption("demo", "SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", choiceKey: opts.options[0]!.key, seed });
+      return { specimen: { sex: frozen.specimen.sex! } };
+    }, "M", "frozen-sire");
+    await expect(cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-negra", method: "BC1" }))
       .rejects.toThrow(/congelado/);
     // descongela → agora cruza
     const thawed = await gb.thaw("demo", "SENIOR", frozen.specimen.id);
     expect(thawed.specimen.status).toBe("ALIVE");
     expect(thawed.wallet.biomassa).toBe(125480 - 10000);
-    const r = await cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-pintada", method: "BC1" });
+    const r = await cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-negra", method: "BC1" });
     expect(r.specimen.id).toBeTruthy();
   });
 

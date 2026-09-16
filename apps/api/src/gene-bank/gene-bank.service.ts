@@ -31,6 +31,10 @@ export class GeneBankService {
       sireId: sire.id, damId: dam.id, method: dto.method,
       fPedigree: result.specimen.fPedigree, fixationIndex: result.specimen.fixationIndex,
       aura: result.specimen.aura, cacheKey: result.cacheKey, status: "FROZEN",
+      sex: result.specimen.sex,
+      fertility: result.specimen.fertility.score,
+      haldaneStatus: result.specimen.fertility.haldaneStatus,
+      phenotype: result.specimen.phenotype,
     });
     return { specimen: stored, wallet: await this.wallet.get(owner) };
   }

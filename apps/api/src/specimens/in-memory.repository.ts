@@ -45,6 +45,67 @@ export abstract class SpecimenRepository {
   abstract buildPedigree(ids: string[]): Promise<Pedigree>;
 }
 
+/**
+ * Sexo EXPLÍCITO de cada fundador — tabela LITERAL (id → "M"|"F"), sem hash
+ * nem regra implícita em runtime; todo fundador tem entrada, nenhum null
+ * (ADR-0013/0015 exigem sexo pra cruzar). Critério usado pra preencher esta
+ * tabela (decisão fixada aqui, não recalculada em runtime):
+ *   - Explícitos: Machos onca-pintada/puma/gato-tabby/tigre-bengala/boerboel;
+ *     Fêmeas onca-negra/gato-siames/tigre-branco/braco-alemao (correção de
+ *     conflito sire/dam encontrado nos testes de apps/api/test/).
+ *   - onca-pintada-2: Fêmea — override explícito (evita reusar onca-pintada,
+ *     agora Macho, como dam nos testes puma×onca-pintada; ver correção da
+ *     branch atual — NÃO seguiu a alternância por ordem de declaração, que
+ *     daria Macho como 3º da espécie "panthera-onca").
+ *   - Demais fundadores: alterna M/F na ORDEM DE DECLARAÇÃO abaixo dentro de
+ *     cada `species` (campo do catálogo, ex.: as 6 cores de "dogue-alemao"
+ *     formam um grupo só); espécie com um único fundador → Macho.
+ */
+const BASE_FOUNDER_SEX: Record<string, "M" | "F"> = {
+  // Panthera onca — onca-pintada(M)/onca-negra(F) explícitos; onca-pintada-2 = F (override, ver acima).
+  "onca-pintada": "M", "onca-negra": "F", "onca-pintada-2": "F",
+  puma: "M",
+  leao: "M",
+  "tigre-bengala": "M", "tigre-branco": "F", "tigre-albino": "M",
+  leopardo: "M", jaguatirica: "M", guepardo: "M", serval: "M",
+  "leopardo-das-neves": "M", lince: "M", caracal: "M",
+  // Felis catus — 12 fundadores, alterna M/F na ordem de declaração (gato-tabby/gato-siames explícitos).
+  "gato-tabby": "M", "gato-siames": "F", "gato-preto": "M", "gato-branco": "F",
+  "gato-maine-coon": "M", "gato-persa": "F", "gato-bengala": "M", "gato-birmania": "F",
+  "gato-sphynx": "M", "gato-mau-egipcio": "F", "gato-abissinio": "M", "gato-ragdoll": "F",
+  boerboel: "M", "braco-alemao": "F", dobermann: "M",
+  // Dogue Alemão — 6 cores, mesma espécie (campo `species`), alterna M/F.
+  "dogue-dourado": "M", "dogue-tigrado": "F", "dogue-preto": "M",
+  "dogue-azul": "F", "dogue-arlequim": "M", "dogue-manto": "F",
+  // Demais raças caninas: 1 fundador por `species` → Macho.
+  "pastor-alemao": "M", rottweiler: "M", "sao-bernardo": "M", "dogo-argentino": "M",
+  "mastim-ingles": "M", collie: "M", "border-collie": "M", "bulldog-frances": "M", greyhound: "M",
+  "presa-canaria": "M", "cane-corso": "M", "mastim-napolitano": "M", "bull-mastiff": "M",
+  kangal: "M", alabai: "M", "pastor-caucaso": "M", "mastim-tibetano": "M", cimarron: "M",
+  "terra-nova": "M", "pastor-belga-malinois": "M", "pastor-belga-groenendael": "M",
+  "pastor-serra-estrela": "M", "pastor-pampeano": "M", "old-english-sheepdog": "M",
+  "australian-shepherd": "M", "blue-heeler": "M", "pastor-shetland": "M", "pit-bull": "M",
+  "terrier-brasileiro": "M", "terrier-anao-branco": "M", "bulldog-ingles": "M",
+  "bulldog-americano": "M", "buldogue-campeiro": "M", "spitz-alemao": "M",
+  "irish-wolfhound": "M", whippet: "M", saluki: "M", "afghan-hound": "M",
+};
+
+/**
+ * Sexo por id — cobre os 74 fundadores-base (`BASE_FOUNDER_SEX` acima) E os
+ * respectivos GÊMEOS de sexo oposto ("todo fundador tem casal", ver
+ * `founderSeeds()`). Os gêmeos NÃO são digitados aqui um a um — são
+ * DERIVADOS por código a partir de `BASE_FOUNDER_SEX`: id `${baseId}-femea`
+ * (se o base é Macho) ou `${baseId}-macho` (se o base é Fêmea), sexo oposto
+ * ao do fundador-base.
+ */
+export const FOUNDER_SEX: Record<string, "M" | "F"> = Object.fromEntries(
+  Object.entries(BASE_FOUNDER_SEX).flatMap(([id, sex]) => {
+    const twinId = sex === "M" ? `${id}-femea` : `${id}-macho`;
+    const twinSex: "M" | "F" = sex === "M" ? "F" : "M";
+    return [[id, sex] as const, [twinId, twinSex] as const];
+  }),
+);
+
 /** Fundadores — CATÁLOGO FELINO (Free intraespécie) + caninos (Senior). TDD §6 + felinos-genetica.md */
 export function founderSeeds(): StoredSpecimen[] {
   // Genótipo felino: A(melanismo) P(padrão) B(cor) C(albino) D(diluição) W(branco) S(manchas).
@@ -74,13 +135,15 @@ export function founderSeeds(): StoredSpecimen[] {
   const S = (id: string, species: string, pack: PackId, genotype: Genotype, aura: number): StoredSpecimen => ({
     id, ownerId: "demo", pack, species, genotype, generation: 0,
     sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura, cacheKey: null,
-    // Fundadores são anteriores ao ADR-0015 — sexo/fertilidade/Haldane NÃO
-    // atribuídos agora; ficam NULL até uma migração de dados explícita
-    // (dry-run primeiro), igual à regra do schema (ver db/schema.ts).
-    sex: null, fertility: null, haldaneStatus: null,
+    // Sexo EXPLÍCITO por tabela literal (FOUNDER_SEX, abaixo) — nenhum
+    // fundador fica null; o motor exige sexo pra cruzar (ADR-0013/0015).
+    // fertility/haldaneStatus continuam null: não são calculados para
+    // fundador (não nasceram de um cruzamento) — só a migração de dados real
+    // (dry-run primeiro) preencheria isso, se algum dia fizer sentido.
+    sex: FOUNDER_SEX[id]!, fertility: null, haldaneStatus: null,
   });
   const R = (x: [string,string]) => x; // helper de legibilidade
-  return [
+  const base: StoredSpecimen[] = [
     // ── ONÇAS (Panthera onca) ── rosetas; melanismo segrega intraespécie
     S("onca-pintada", "panthera-onca", "feline", { loci: { A:["a","a"], P:["P^r","P^r"], B:["B","B"], C:["C","c^b"], D:["D","D"], W:["w","w"], S:["s","s"], Ma:["ma","ma"], Bd:["Bd^a","Bd^a"], He:["He^b","He^b"], Ec:["Ec^n","Ec^n"], Fl:["Fl^s","Fl^s"], Hr:["Hr","Hr"] }, qtl: { porte: 0.78, vigor: 0.75, beleza: 0.5, rosetas: 0.85 } }, 3),
     S("onca-negra", "panthera-onca", "feline", fel(["A","a"], R(["P^r","P^r"]), ["C","C"], ["w","w"], { porte: 0.78, vigor: 0.75, rosetas: 0.8, beleza: 0.7 }, ["ma","ma"], ["Bd^a","Bd^a"], ["He^b","He^b"], ["Ec^n","Ec^n"]), 4),
@@ -169,6 +232,28 @@ export function founderSeeds(): StoredSpecimen[] {
     S("saluki", "saluki", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.7 }), 4),
     S("afghan-hound", "afghan-hound", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.6, vigor:0.65 }), 5),
   ];
+  // DECISÃO: "todo fundador tem casal" — gera, POR CÓDIGO (não 74 entradas
+  // literais novas), um gêmeo de sexo OPOSTO pra cada fundador-base: mesmo
+  // pack/species/generation/method/aura e demais campos; genotype em CÓPIA
+  // PROFUNDA (structuredClone — nunca compartilha os arrays de alelos com o
+  // original); fertility/haldaneStatus null (mesma regra de fundador, não
+  // nasceu de cruzamento). id = `${id}-femea` (base Macho) / `${id}-macho`
+  // (base Fêmea).
+  const twins: StoredSpecimen[] = base.map((f) => {
+    const twinId = f.sex === "M" ? `${f.id}-femea` : `${f.id}-macho`;
+    if (base.some((b) => b.id === twinId)) {
+      throw new Error(`founderSeeds: id de gêmeo "${twinId}" colide com um fundador já existente.`);
+    }
+    return {
+      ...f,
+      id: twinId,
+      genotype: structuredClone(f.genotype),
+      sex: f.sex === "M" ? "F" : "M",
+      fertility: null,
+      haldaneStatus: null,
+    };
+  });
+  return [...base, ...twins];
 }
 
 @Injectable()

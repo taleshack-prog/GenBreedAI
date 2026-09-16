@@ -129,3 +129,32 @@ export function biologicalSpecies(pack: "feline" | "canine" | string, slug: stri
   if (pack === "canine") return "canis-familiaris";
   return SPECIES_INFO[slug]?.biologicalSpecies ?? slug;
 }
+
+/**
+ * Normaliza um slug — simples OU híbrido composto por "×" (ex.: gravado por
+ * `combineSpecies()` em apps/api) — para a(s) `biologicalSpecies` canônica(s),
+ * pronta pra virar `ParentInput.species` do motor (ADR-0015): o motor NÃO
+ * conhece `SPECIES_INFO`, exige o dado JÁ normalizado. Decompõe por "×",
+ * resolve CADA componente pela mesma tabela usada por `biologicalSpecies()`
+ * (morfos de cor colapsam na espécie selvagem — ex.: panthera-tigris-branco/
+ * -albino → panthera-tigris), deduplica e reordena (alfabético — resultado
+ * estável, independente de quem é sire/dam) e rejunta com "×".
+ *
+ * SEM `pack`: esta função só normaliza pelo CATÁLOGO (`SPECIES_INFO`), não
+ * pela família. Componente fora do catálogo (a maioria das raças caninas,
+ * cadastradas só em `DOG_BREEDS`) permanece como está — mesma regra
+ * defensiva de `biologicalSpecies()` (nunca inventa espécie). Isso é
+ * DIFERENTE do colapso incondicional "canino ⇒ sempre canis-familiaris" que
+ * `biologicalSpecies("canine", slug)` faz: quem precisar desse colapso
+ * incondicional (ex. o gate de tier em cross.service.ts) continua chamando
+ * `biologicalSpecies(pack, slug)` diretamente pra raças caninas — ver
+ * `biologicalComponents()` em cross.service.ts.
+ *
+ * Ex.: "panthera-tigris-branco" → "panthera-tigris";
+ *      "panthera-uncia×panthera-tigris-albino" → "panthera-tigris×panthera-uncia";
+ *      "felis-catus" → "felis-catus"; "collie" (fora do catálogo) → "collie".
+ */
+export function normalizeBiologicalSpecies(species: string): string {
+  const components = species.split("×").map((c) => SPECIES_INFO[c]?.biologicalSpecies ?? c);
+  return [...new Set(components)].sort().join("×");
+}
