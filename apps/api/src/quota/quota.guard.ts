@@ -33,6 +33,7 @@ export class QuotaGuard implements CanActivate {
     const tier = await this.tier.resolve(user.id, user.tier);
     const limit = tierPolicy(tier).dailyCrosses;
 
+    // Reserva atômica (tryConsume é síncrono). Estorno em caso de falha: CrossController.
     if (!this.quota.tryConsume(user.id, limit)) {
       throw new HttpException(
         {

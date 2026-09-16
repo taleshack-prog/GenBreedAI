@@ -50,6 +50,20 @@ export class QuotaService {
     return true;
   }
 
+  /**
+   * Estorna 1 cruzamento reservado por `tryConsume` (ex.: falha após a
+   * reserva do QuotaGuard — ver CrossController). Só decrementa se existir
+   * um contador para o usuário, do dia atual, com count > 0; caso contrário
+   * não faz nada (nunca fica negativo, nunca cria contador novo). No-op se
+   * CROSS_QUOTA_UNLIMITED === "true" (nada foi de fato reservado nesse modo).
+   */
+  release(userId: string): void {
+    if (process.env.CROSS_QUOTA_UNLIMITED === "true") return;
+    const c = this.counters.get(userId);
+    if (!c || c.day !== this.today() || c.count <= 0) return;
+    c.count -= 1;
+  }
+
   /** Uso apenas em testes: zera todos os contadores. */
   resetAll(): void {
     this.counters.clear();
