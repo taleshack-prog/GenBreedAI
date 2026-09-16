@@ -14,6 +14,7 @@
     "db:migrate": "node --import=@swc-node/register/esm-register src/db/migrate.ts",
     "db:seed": "node --import=@swc-node/register/esm-register src/db/seed.ts",
     "db:reset": "node --import=@swc-node/register/esm-register src/db/reset.ts",
+    "db:backfill-sex": "node --import=@swc-node/register/esm-register src/db/backfill-sex.ts",
     "images:seed": "node --import=@swc-node/register/esm-register src/images/seed-portraits.ts",
     "start:prod": "node --import=@swc-node/register/esm-register src/main.ts"
   },

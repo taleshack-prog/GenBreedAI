@@ -20,6 +20,7 @@ async function main() {
         sireId: f.sireId, damId: f.damId, method: f.method, fPedigree: f.fPedigree,
         fixationIndex: f.fixationIndex, aura: f.aura, cacheKey: f.cacheKey,
         provenanceHash: f.provenanceHash ?? null,
+        sex: f.sex, fertility: f.fertility, haldaneStatus: f.haldaneStatus,
       })
       .onConflictDoNothing({ target: specimens.id });
   }

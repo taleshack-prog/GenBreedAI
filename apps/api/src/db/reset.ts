@@ -12,6 +12,29 @@ import { founderSeeds } from "../specimens/in-memory.repository";
 async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL ausente (veja .env.example).");
+
+  // TRAVA DE SEGURANÇA — ANTES de qualquer DELETE. Este script apaga TODOS os
+  // espécimes e cruzamentos. Exige as DUAS condições:
+  //   a) ALLOW_DB_RESET === "yes-destroy-all-data" (confirmação explícita);
+  //   b) host de DATABASE_URL NÃO é Neon (neon.tech), OU
+  //      ALLOW_DB_RESET_REMOTE === "yes" (override explícito pra remoto).
+  const host = (() => { try { return new URL(url).host; } catch { return "(host inválido)"; } })();
+  // eslint-disable-next-line no-console
+  console.log(`[db:reset] Host alvo: ${host}`);
+  const isNeon = host.includes("neon.tech");
+  const confirmedDestroy = process.env.ALLOW_DB_RESET === "yes-destroy-all-data";
+  const remoteAllowed = !isNeon || process.env.ALLOW_DB_RESET_REMOTE === "yes";
+  if (!confirmedDestroy || !remoteAllowed) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[db:reset] ABORTADO — este script apaga TODOS os espécimes e cruzamentos.\n" +
+      `Host alvo: ${host}\n` +
+      (!confirmedDestroy ? "Defina ALLOW_DB_RESET=yes-destroy-all-data para confirmar.\n" : "") +
+      (isNeon && !remoteAllowed ? "Host parece ser Neon (neon.tech) — defina também ALLOW_DB_RESET_REMOTE=yes para confirmar reset REMOTO.\n" : ""),
+    );
+    process.exit(1);
+  }
+
   const { db, pool } = createDb(url);
   // Garante o schema novo (idempotente) antes de semear.
   await db.execute(sql`ALTER TABLE specimens ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'ALIVE'`);
