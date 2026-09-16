@@ -55,6 +55,30 @@
  *     script INTEIRO aborta (antes da transação), listando os ids afetados.
  *   - Fundadores: fertility e haldane_status continuam NULL, sempre.
  *
+ * === REGRA PROVISÓRIA — machos híbridos além do F1 (SEM ADR ainda) ===
+ * Motivo: o motor (fertilityScore) só implementa a Regra de Haldane no ramo
+ * F1 (ADR-0015) — BC1/F2/LINE/INBREED/OUTCROSS sempre caem no `base`
+ * genérico do método, mesmo quando o espécime É um híbrido interespecífico
+ * macho (ex.: um BC1 cujo PRÓPRIO species normalizado ainda tem mais de um
+ * componente). Evidência biológica (Savannah, Felis catus × Leptailurus
+ * serval): machos híbridos ficam estéreis por VÁRIAS gerações após o F1, não
+ * só nele — a lacuna do motor deixaria esses machos com fertilidade > 0
+ * indevidamente. Até existir uma ADR formal cobrindo esterilidade de machos
+ * híbridos além do F1, este backfill aplica um AJUSTE PONTUAL, só na leitura
+ * dos dados legados: depois de calcular a fertilidade com o motor (acima),
+ * se `sex === "M"` E o species normalizado do PRÓPRIO espécime (não dos
+ * pais) — `engineSpeciesOf(pack, species)` — tiver mais de 1 componente
+ * separado por "×", força `fertility = 0` e `haldaneStatus = "STERILE"`,
+ * independente do `method`. Fêmeas híbridas mantêm o valor calculado pelo
+ * motor (Haldane já as trata como REDUCED, nunca STERILE, e não há
+ * evidência de esterilidade multi-geracional em fêmeas aqui). F1 macho
+ * interespecífico já sai STERILE pelo motor sozinho — esta regra não muda
+ * esse caso, só cobre o que o motor ainda não cobre (BC1/F2/... em diante).
+ * IMPORTANTE: isto é um remendo NO BACKFILL, não no motor — o motor
+ * (packages/engine/src/fertility.ts) PRECISA da mesma regra antes de
+ * qualquer merge, senão todo NOVO cruzamento (fora deste backfill) continua
+ * gerando machos híbridos BC1/F2/... indevidamente férteis.
+ *
  * Uso: pnpm --filter @genbreedai/api db:backfill-sex          (dry-run)
  *      pnpm --filter @genbreedai/api db:backfill-sex --apply  (grava)
  */
@@ -107,6 +131,7 @@ interface FertilityPlan {
   id: string;
   fertility: number;
   haldaneStatus: "NONE" | "STERILE" | "REDUCED";
+  provisionalRuleApplied: boolean;
 }
 
 async function main() {
@@ -188,7 +213,17 @@ async function main() {
     const hClass = hybridClass({ species: sireSpecies } as ParentInput, { species: damSpecies } as ParentInput, pack);
     const rng = createPrng(`backfill:${row.id}`);
     const result = fertilityScore(row.method as BreedingMethod, row.fPedigree, { sex: effectiveSex, hybridClass: hClass, rng });
-    fertilityPlans.push({ id: row.id, fertility: result.score, haldaneStatus: result.haldaneStatus });
+    // REGRA PROVISÓRIA (ver cabeçalho) — macho cujo PRÓPRIO species
+    // normalizado é multi-componente (híbrido), em QUALQUER method: o motor
+    // só cobre isso no F1; até existir ADR, força estéril aqui.
+    const ownSpeciesNormalized = engineSpeciesOf(row.pack, row.species);
+    const provisionalRuleApplied = effectiveSex === "M" && ownSpeciesNormalized.split("×").length > 1;
+    fertilityPlans.push({
+      id: row.id,
+      fertility: provisionalRuleApplied ? 0 : result.score,
+      haldaneStatus: provisionalRuleApplied ? "STERILE" : result.haldaneStatus,
+      provisionalRuleApplied,
+    });
   }
 
   if (fertilityMissingParent.length > 0) {
@@ -229,7 +264,7 @@ async function main() {
   console.log(`\nFertilidade calculada (não-fundadores, fertility IS NULL): ${fertilityPlans.length}`);
 
   // eslint-disable-next-line no-console
-  console.log("\nPor espécime não fundador (id·8, method, sex, regra do sexo, fertility, haldaneStatus):");
+  console.log("\nPor espécime não fundador (id·8, method, sex, regra do sexo, fertility, haldaneStatus, regra provisória aplicada):");
   const nonFounderIds = new Set<string>([
     ...sexPlans.filter((p) => byId.get(p.id)!.method !== "FOUNDER").map((p) => p.id),
     ...fertilityPlans.map((p) => p.id),
@@ -242,10 +277,17 @@ async function main() {
     const fp = fertilityById.get(id);
     const fertility = fp ? fp.fertility : (row.fertility ?? "—");
     const haldaneStatus = fp ? fp.haldaneStatus : (row.haldaneStatus ?? "—");
+    const provisional = fp ? (fp.provisionalRuleApplied ? "sim" : "não") : "não";
     // eslint-disable-next-line no-console
-    console.log(`  ${id.slice(0, 8)} · ${row.method} · sex=${sex} (${rule}) · fertility=${fertility} · haldaneStatus=${haldaneStatus}`);
+    console.log(`  ${id.slice(0, 8)} · ${row.method} · sex=${sex} (${rule}) · fertility=${fertility} · haldaneStatus=${haldaneStatus} · regra provisória: ${provisional}`);
   }
 
+  const provisionalSterilized = fertilityPlans.filter((p) => p.provisionalRuleApplied).map((p) => p.id);
+  // eslint-disable-next-line no-console
+  console.log(`\nMachos híbridos esterilizados pela regra provisória (pendente ADR): ${provisionalSterilized.join(", ") || "(nenhum)"}`);
+
+  // Inclui tanto STERILE do motor (F1 macho interespecífico) quanto os
+  // esterilizados pela regra provisória acima — ambos têm fertility===0.
   const sterileHistoricalParents = fertilityPlans
     .filter((p) => p.fertility === 0 && (sireIdsReferenced.has(p.id) || damIdsReferenced.has(p.id)))
     .map((p) => p.id);
