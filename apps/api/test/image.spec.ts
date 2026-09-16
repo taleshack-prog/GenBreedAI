@@ -30,7 +30,10 @@ describe("Pipeline de imagem (TDD §5)", () => {
   });
 
   it("sem FAL_KEY → modo procedural (APPROVED, sem imageUrl, model=procedural)", async () => {
-    const r = await svc.generate("onca-pintada", "FREE");
+    // payerId "u1" (não é o dono "demo") + tier PHD — prova que fundador
+    // gera normalmente pra qualquer usuário (ver image-access.spec.ts pro
+    // resto da regra de acesso/cota).
+    const r = await svc.generate("onca-pintada", "u1", "PHD");
     expect(r.status).toBe("APPROVED");
     expect(r.model).toBe("procedural");
     expect(r.imageUrl).toBeNull();
@@ -38,7 +41,7 @@ describe("Pipeline de imagem (TDD §5)", () => {
   });
 
   it("getCached retorna estado sem imagem quando não há cache", async () => {
-    const r = await svc.getCached("puma");
+    const r = await svc.getCached("puma", "u1", "PHD");
     expect(r?.imageUrl).toBeNull();
   });
 

@@ -146,6 +146,11 @@ export function PhenotypeSelector({
   // Erro da última geração/preview, por chave (mesmo esquema de `previews`) —
   // mostrado junto ao retrato daquela chave, não como toast solto.
   const [errors, setErrors] = useState<Record<string, { message: string; status?: number }>>({});
+  // `r.cached` da última resposta, por chave — true quando o retrato já
+  // existia (compartilhado por genótipo+sexo, inclusive de fundador). O ↻
+  // nesse caso é escondido: a API ignora force quando já há imagem (nunca
+  // apaga um retrato compartilhado só porque este preview pediu regenerar).
+  const [cachedKeys, setCachedKeys] = useState<Record<string, boolean>>({});
   function goToProfile(e: React.MouseEvent) { e.stopPropagation(); router.push("/app/profile"); }
 
   async function freeze(o: OffspringOption, e: React.MouseEvent) {
@@ -168,7 +173,10 @@ export function PhenotypeSelector({
     setErrors((p) => { if (!(previewKey in p)) return p; const n = { ...p }; delete n[previewKey]; return n; });
     try {
       const r = await previewImage({ ...crossInput, choiceKey: o.key, force: true, ...(sex ? { sex } : {}) });
-      if (r.imageUrl) setPreviews((p) => ({ ...p, [previewKey]: r.imageUrl! + "?t=" + Date.now() }));
+      if (r.imageUrl) {
+        setPreviews((p) => ({ ...p, [previewKey]: r.imageUrl! + "?t=" + Date.now() }));
+        setCachedKeys((p) => ({ ...p, [previewKey]: r.cached }));
+      }
       // Sem imageUrl (modo procedural) NÃO é erro — sem "gerado", sem mensagem.
     } catch (err) {
       setErrors((p) => ({ ...p, [previewKey]: classifyError(err) }));
@@ -187,7 +195,10 @@ export function PhenotypeSelector({
       setErrors((p) => { if (!(o.key in p)) return p; const n = { ...p }; delete n[o.key]; return n; });
       try {
         const r = await previewImage({ ...crossInput, choiceKey: o.key });
-        if (r.imageUrl) setPreviews((p) => ({ ...p, [o.key]: r.imageUrl! }));
+        if (r.imageUrl) {
+          setPreviews((p) => ({ ...p, [o.key]: r.imageUrl! }));
+          setCachedKeys((p) => ({ ...p, [o.key]: r.cached }));
+        }
       } catch (err) {
         setErrors((p) => ({ ...p, [o.key]: classifyError(err) }));
       } finally { setLoading(null); }
@@ -260,8 +271,10 @@ export function PhenotypeSelector({
                           {previews[previewKey] ? (
                             <>
                               <img src={previews[previewKey]} alt={sex === "M" ? "retrato macho" : "retrato fêmea"} className="h-full w-full object-cover" />
-                              <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
-                                className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
+                              {!cachedKeys[previewKey] && (
+                                <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
+                                  className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
+                              )}
                             </>
                           ) : loading === previewKey ? (
                             <span className="animate-pulse font-mono text-[0.5rem] uppercase text-cyan">gerando…</span>
@@ -313,8 +326,10 @@ export function PhenotypeSelector({
                 ) : previews[o.key] ? (
                   <>
                     <img src={previews[o.key]} alt="retrato" className="h-full w-full object-cover" />
-                    <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e)}
-                      className="absolute bottom-1 right-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.7rem] text-cyan transition hover:scale-110">↻</span>
+                    {!cachedKeys[o.key] && (
+                      <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e)}
+                        className="absolute bottom-1 right-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.7rem] text-cyan transition hover:scale-110">↻</span>
+                    )}
                   </>
                 ) : loading === o.key ? (
                   <span className="animate-pulse font-mono text-[0.6rem] uppercase text-cyan">gerando retrato…</span>

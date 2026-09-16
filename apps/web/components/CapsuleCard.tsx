@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getImage, generateImage, ApiError, type ApiSpecimen } from "../lib/api";
 import { displayName, displaySci } from "../lib/display";
 import { SexBadge } from "./SexBadge";
+import { getUser } from "../lib/auth";
 
 /** BarraRaridade (Design System §6): 5 estrelas preenchidas conforme raridade. */
 function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
@@ -67,6 +68,11 @@ export function CapsuleCard({
     return () => { alive = false; };
   }, [specimen?.id, specimen?.imageUrl]);
   const aiUrl = specimen?.imageUrl ?? fetchedUrl;
+  // Regenerar (force) só o dono pode; fundador nunca (retrato compartilhado
+  // por genótipo — regenerar trocaria a foto de todo mundo com o mesmo
+  // genótipo, API rejeita com 403). Botão ↻ some nos outros casos; gerar
+  // pela 1ª vez continua liberado p/ fundador (é o próprio bug corrigido).
+  const canRegen = !!specimen && specimen.method !== "FOUNDER" && specimen.ownerId === getUser()?.id;
 
   const critico = !!specimen && specimen.fPedigree > 0.2;
   const alerta = !!specimen && !critico && specimen.fPedigree > 0.15;
@@ -124,11 +130,13 @@ export function CapsuleCard({
           {specimen && aiUrl ? (
             <>
               <img src={aiUrl} alt={specimen.species} className="absolute inset-0 h-full w-full object-contain p-1" />
-              <span role="button" tabIndex={0} title="Regenerar retrato" onClick={(e) => genImage(e, true)}
-                className="absolute bottom-1 right-1 z-20 grid h-6 w-6 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-[0.7rem] transition hover:scale-110"
-                style={{ borderColor: `${cor}66`, color: cor }}>
-                {genLoading ? "…" : "↻"}
-              </span>
+              {canRegen && (
+                <span role="button" tabIndex={0} title="Regenerar retrato" onClick={(e) => genImage(e, true)}
+                  className="absolute bottom-1 right-1 z-20 grid h-6 w-6 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-[0.7rem] transition hover:scale-110"
+                  style={{ borderColor: `${cor}66`, color: cor }}>
+                  {genLoading ? "…" : "↻"}
+                </span>
+              )}
             </>
           ) : specimen ? (
             <div className="absolute inset-0 grid place-items-center">

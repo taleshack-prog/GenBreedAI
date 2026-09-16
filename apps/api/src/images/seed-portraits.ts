@@ -19,7 +19,7 @@ async function main() {
   console.log(`Gerando ${ids.length} retratos via fal.ai (${process.env.FAL_MODEL ?? "fal-ai/flux/dev"})…`);
   for (const id of ids) {
     try {
-      const r = await svc.generate(id, "PHD", false, true); // seed ignora cota
+      const r = await svc.generate(id, "demo", "PHD", false, true); // seed ignora cota; payerId "demo" (dono dos fundadores)
       console.log(`  ${id}: ${r.imageUrl ? "OK " + r.imageUrl : r.status}`);
     } catch (e) { console.error(`  ${id}: FALHA — ${(e as Error).message}`); }
   }

@@ -17,13 +17,14 @@ export class ImageController {
   @UseGuards(AuthGuard)
   async create(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() body: { force?: boolean }) {
     const tier = await this.tier.resolve(user.id, user.tier);
-    return this.images.generate(id, tier, body?.force === true);
+    return this.images.generate(id, user.id, tier, body?.force === true);
   }
 
   @Get()
   @UseGuards(AuthGuard)
-  status(@Param("id") id: string) {
-    return this.images.getCached(id);
+  async status(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.images.getCached(id, user.id, tier);
   }
 }
 

@@ -24,11 +24,19 @@ export class PreviewController {
     // pela seed só na síntese (materializeCross/finalizeSpecimen). Validado
     // aqui (nunca confia em input não tipado): só "M"/"F" aceitos, senão null.
     const sex = dto.sex === "M" || dto.sex === "F" ? dto.sex : null;
-    return this.images.generateForSpecimen(
+    // payerId = user.id SEMPRE — preview não é espécime real (não tem dono nem
+    // é fundador de verdade; "FOUNDER" aqui é só um rótulo de espécime não
+    // persistido, sireId/damId null) e por isso nunca passa por
+    // `generate()`/`assertAccessible`. `dto.force` NÃO é repassado de
+    // propósito: `previewImage()` nunca apaga (cacheKey é só genótipo+pack+
+    // sexo, compartilhado por qualquer espécime igual, inclusive fundador —
+    // apagar aqui era o buraco original); havendo imagem, ela é sempre
+    // devolvida como está, sem custo, com ou sem force pedido pelo cliente.
+    return this.images.previewImage(
       { id: "preview", ownerId: user.id, pack: pack as "feline" | "canine", species, genotype,
         generation: 0, sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura: 0, cacheKey: null,
         sex, fertility: null, haldaneStatus: null },
-      tier, dto.force === true,
+      user.id, tier,
     );
   }
 }
