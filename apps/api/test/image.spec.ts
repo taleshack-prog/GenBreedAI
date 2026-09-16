@@ -46,7 +46,8 @@ describe("Pipeline de imagem (TDD §5)", () => {
     const { buildPrompt } = await import("../src/images/prompt");
     const dogMix = { id:"dm", ownerId:"demo", pack:"canine" as const, species:"boerboel×braco-alemao",
       genotype:{ loci:{ B:["B","b"] as [string,string] }, qtl:{} }, generation:1,
-      sireId:"boerboel", damId:"braco-alemao", method:"F1" as const, fPedigree:0, fixationIndex:0, aura:2, cacheKey:null };
+      sireId:"boerboel", damId:"braco-alemao", method:"F1" as const, fPedigree:0, fixationIndex:0, aura:2, cacheKey:null,
+      sex: null, fertility: null, haldaneStatus: null };
     const p = buildPrompt(dogMix);
     expect(p).toContain("mixed-breed domestic dog");
     expect(p).not.toContain("big cat");
@@ -55,7 +56,8 @@ describe("Pipeline de imagem (TDD §5)", () => {
   it("cães com fenótipos distintos → prompts DISTINTOS (não o mesmo cão)", async () => {
     const { buildPrompt } = await import("../src/images/prompt");
     const mk = (loci: Record<string, [string,string]>) => ({ id:"d", ownerId:"demo", pack:"canine" as const, species:"canis-familiaris",
-      genotype:{ loci, qtl:{} }, generation:1, sireId:null, damId:null, method:"FOUNDER" as const, fPedigree:0, fixationIndex:0, aura:2, cacheKey:null });
+      genotype:{ loci, qtl:{} }, generation:1, sireId:null, damId:null, method:"FOUNDER" as const, fPedigree:0, fixationIndex:0, aura:2, cacheKey:null,
+      sex: null, fertility: null, haldaneStatus: null });
     const brindle = buildPrompt(mk({ B:["B","B"], K:["K^br","K^br"], A:["A^y","A^y"], E:["E","E"] }));
     const liver = buildPrompt(mk({ B:["b","b"], K:["k^y","k^y"], A:["a^t","a^t"], E:["E","E"] }));
     expect(brindle).not.toBe(liver);

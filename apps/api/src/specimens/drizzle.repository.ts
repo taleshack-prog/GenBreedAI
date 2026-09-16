@@ -40,6 +40,9 @@ function toStored(r: Row): StoredSpecimen {
     cacheKey: r.cacheKey,
     provenanceHash: r.provenanceHash,
     status: (r.status as "ALIVE" | "FROZEN") ?? "ALIVE",
+    sex: (r.sex as StoredSpecimen["sex"]) ?? null,
+    fertility: r.fertility ?? null,
+    haldaneStatus: (r.haldaneStatus as StoredSpecimen["haldaneStatus"]) ?? null,
   };
 }
 
@@ -84,11 +87,20 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
       cacheKey: specimen.cacheKey,
       provenanceHash: specimen.provenanceHash ?? null,
       status: specimen.status ?? "ALIVE",
+      sex: specimen.sex ?? null,
+      fertility: specimen.fertility ?? null,
+      haldaneStatus: specimen.haldaneStatus ?? null,
     };
     await this.db
       .insert(specimens)
       .values(row)
-      .onConflictDoUpdate({ target: specimens.id, set: { status: row.status, cacheKey: row.cacheKey, phenotype: row.phenotype } });
+      .onConflictDoUpdate({
+        target: specimens.id,
+        set: {
+          status: row.status, cacheKey: row.cacheKey, phenotype: row.phenotype,
+          sex: row.sex, fertility: row.fertility, haldaneStatus: row.haldaneStatus,
+        },
+      });
     return { ...specimen, id };
   }
 

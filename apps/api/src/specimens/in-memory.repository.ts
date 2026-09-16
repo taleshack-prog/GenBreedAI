@@ -7,7 +7,7 @@
  */
 
 import { Injectable } from "@nestjs/common";
-import type { Genotype, Phenotype, BreedingMethod } from "@genbreedai/shared";
+import type { Genotype, Phenotype, BreedingMethod, Sex, FertilityResult } from "@genbreedai/shared";
 import type { Pedigree } from "@genbreedai/engine";
 
 export type PackId = "feline" | "canine";
@@ -29,6 +29,12 @@ export interface StoredSpecimen {
   cacheKey: string | null;
   provenanceHash?: string | null;
   status?: "ALIVE" | "FROZEN";
+  /** Sexo cromossômico (ADR-0013/0015). `null` = legado, sem dado até migração explícita. */
+  sex: Sex | null;
+  /** Fertilidade [0,100] do PARENTAL no momento do cruzamento (ADR-0015). `null` = legado. */
+  fertility: number | null;
+  /** Estado de Haldane (ADR-0015) — tipo derivado de FertilityResult, não duplicado. `null` = legado. */
+  haldaneStatus: FertilityResult["haldaneStatus"] | null;
 }
 
 export abstract class SpecimenRepository {
@@ -68,6 +74,10 @@ export function founderSeeds(): StoredSpecimen[] {
   const S = (id: string, species: string, pack: PackId, genotype: Genotype, aura: number): StoredSpecimen => ({
     id, ownerId: "demo", pack, species, genotype, generation: 0,
     sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura, cacheKey: null,
+    // Fundadores são anteriores ao ADR-0015 — sexo/fertilidade/Haldane NÃO
+    // atribuídos agora; ficam NULL até uma migração de dados explícita
+    // (dry-run primeiro), igual à regra do schema (ver db/schema.ts).
+    sex: null, fertility: null, haldaneStatus: null,
   });
   const R = (x: [string,string]) => x; // helper de legibilidade
   return [

@@ -21,7 +21,8 @@ export class PreviewController {
     const { pack, species, genotype } = await this.cross.resolveChoice(tier, dto);
     return this.images.generateForSpecimen(
       { id: "preview", ownerId: user.id, pack: pack as "feline" | "canine", species, genotype,
-        generation: 0, sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura: 0, cacheKey: null },
+        generation: 0, sireId: null, damId: null, method: "FOUNDER", fPedigree: 0, fixationIndex: 0, aura: 0, cacheKey: null,
+        sex: null, fertility: null, haldaneStatus: null },
       tier, dto.force === true,
     );
   }
