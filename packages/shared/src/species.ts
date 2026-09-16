@@ -97,9 +97,16 @@ export function speciesInfo(slug: string): SpeciesInfo {
     const prefix = allCanine ? "Cruza" : "Híbrido";
     const commons = uniq.map((c) => SPECIES_INFO[c]?.common ?? DOG_BREEDS[c]?.name ?? c.replace(/-/g, " "));
     const sciences = uniq.map((c) => SPECIES_INFO[c]?.scientific ?? (DOG_BREEDS[c] ? "Canis familiaris" : c));
+    // Dedupe os nomes CIENTÍFICOS antes de juntar — dois slugs distintos (ex.:
+    // "collie" e "dogo-argentino") já deduplicados acima por SLUG, mas raças
+    // caninas fora de SPECIES_INFO caem todas no mesmo fallback "Canis
+    // familiaris" (mesma espécie biológica), o que gerava "Canis familiaris ×
+    // Canis familiaris". Híbrido de verdade (espécies científicas distintas)
+    // continua com "×" normalmente.
+    const sciencesUniq = [...new Set(sciences)];
     return {
       common: `${prefix} ${commons.join(" × ")}`,
-      scientific: sciences.join(" × "),
+      scientific: sciencesUniq.join(" × "),
       family: infos[0]?.family ?? "FELINO",
       descriptor: `a fictional but photorealistic hybrid animal blending ${commons.join(", ")}`,
       biologicalSpecies: uniq.join("×"),

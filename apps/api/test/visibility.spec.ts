@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ForbiddenException } from "@nestjs/common";
-import { normalizeBiologicalSpecies } from "@genbreedai/shared";
+import { normalizeBiologicalSpecies, speciesInfo, resolveDisplayName, resolveScientificName, WILD_FELINE_FOUNDER_NAMES } from "@genbreedai/shared";
 import { familyVisibleAtTier, specimenVisibleAtTier, assertTierAllows } from "../src/common/tier-access";
 import { isInterspecific } from "../src/cross/cross.service";
 import type { StoredSpecimen } from "../src/specimens/in-memory.repository";
@@ -132,5 +132,68 @@ describe("normalizeBiologicalSpecies (@genbreedai/shared)", () => {
 
   it("slug fora do catálogo (ex.: raça canina só em DOG_BREEDS) permanece como está", () => {
     expect(normalizeBiologicalSpecies("collie")).toBe("collie");
+  });
+});
+
+// apps/web não tem infraestrutura de teste própria (sem vitest, ver
+// conversa anterior) — displayName/displaySci (apps/web/lib/display.ts) são
+// wrappers finos de resolveDisplayName/resolveScientificName
+// (@genbreedai/shared, packages/shared/src/display.ts), testados aqui.
+describe("resolveDisplayName/resolveScientificName (@genbreedai/shared) — nome de exibição/científico", () => {
+  it('gêmeo de fundador ("gato-persa-femea") tem o MESMO nome do fundador base ("gato-persa")', () => {
+    expect(resolveDisplayName("gato-persa-femea", "felis-catus")).toBe(resolveDisplayName("gato-persa", "felis-catus"));
+    expect(resolveDisplayName("gato-persa-femea", "felis-catus")).toBe("Persa");
+  });
+
+  it('fundador de felino selvagem por id ("onca-negra") → nome próprio, não o nome genérico da espécie', () => {
+    expect(resolveDisplayName("onca-negra", "panthera-onca")).toBe("Onça-negra");
+    // Gêmeo ("-macho") → mesmo nome do fundador base.
+    expect(resolveDisplayName("onca-negra-macho", "panthera-onca")).toBe("Onça-negra");
+  });
+
+  it("tabela completa dos 15 fundadores de felino selvagem de founderSeeds() (apps/api/src/specimens/in-memory.repository.ts)", () => {
+    expect(WILD_FELINE_FOUNDER_NAMES).toEqual({
+      "onca-pintada": "Onça-pintada",
+      "onca-negra": "Onça-negra",
+      "onca-pintada-2": "Onça-pintada II",
+      puma: "Puma (Suçuarana)",
+      leao: "Leão",
+      "tigre-bengala": "Tigre-de-Bengala",
+      "tigre-branco": "Tigre-branco",
+      "tigre-albino": "Tigre-albino",
+      leopardo: "Leopardo",
+      jaguatirica: "Jaguatirica",
+      guepardo: "Guepardo",
+      serval: "Serval",
+      "leopardo-das-neves": "Leopardo-das-neves",
+      lince: "Lince",
+      caracal: "Caracal",
+    });
+  });
+
+  it("onça-pintada, onça-negra e onça-pintada-2 (mesma espécie panthera-onca) NÃO colapsam no mesmo nome", () => {
+    const names = new Set([
+      resolveDisplayName("onca-pintada", "panthera-onca"),
+      resolveDisplayName("onca-negra", "panthera-onca"),
+      resolveDisplayName("onca-pintada-2", "panthera-onca"),
+    ]);
+    expect(names.size).toBe(3);
+  });
+
+  it("raça (Felis catus/Canis familiaris) tem prioridade sobre o fundador selvagem/espécie", () => {
+    expect(resolveScientificName("gato-persa-femea", "felis-catus")).toBe("Felis catus");
+    expect(resolveScientificName("collie-femea", "collie")).toBe("Canis familiaris");
+  });
+});
+
+describe("speciesInfo — nome científico de híbrido (species com '×') deduplicado", () => {
+  it('raças caninas SEM entrada própria em SPECIES_INFO (fallback "Canis familiaris" pras duas) → científico SEM repetição: "Canis familiaris"', () => {
+    expect(speciesInfo("collie×dogo-argentino").scientific).toBe("Canis familiaris");
+  });
+
+  it("híbrido de verdade (espécies científicas distintas) continua com '×'", () => {
+    const sci = speciesInfo("panthera-uncia×panthera-tigris-albino").scientific;
+    expect(sci).toContain("×");
+    expect(sci).toBe("Panthera uncia × Panthera tigris (albino)");
   });
 });

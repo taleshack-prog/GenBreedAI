@@ -7,7 +7,7 @@ import { listSpecimens, generateImage, type ApiSpecimen } from "../../../../lib/
 import { CapsuleCard } from "../../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../../components/Genome";
 import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../../lib/reveal";
-import { speciesInfo } from "@genbreedai/shared";
+import { displayName } from "../../../../lib/display";
 import { SexBadge } from "../../../../components/SexBadge";
 
 const QTL_LABEL: Record<string,string> = { porte:"Porte", vigor:"Vigor", beleza:"Beleza", temperamento:"Temperamento", rosetas:"Rosetas" };
@@ -19,7 +19,7 @@ function LineageMini({ s, cor }: { s: ApiSpecimen | null; cor: string }) {
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.4"><path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 6h10M7 18h10" /></svg>
       </div>
       <div className="mt-1 truncate font-display text-xs font-bold uppercase" style={{ color: cor }}>
-        {s ? speciesInfo(s.species).common : "—"}
+        {s ? displayName(s) : "—"}
         {s && <SexBadge sex={s.sex} />}
       </div>
     </div>

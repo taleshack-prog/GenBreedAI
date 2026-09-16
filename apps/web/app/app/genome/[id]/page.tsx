@@ -4,16 +4,15 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getGenome, type GenomeResponse, type LineageNode } from "../../../../lib/api";
-import { speciesInfo } from "@genbreedai/shared";
+import { displayName, displaySci } from "../../../../lib/display";
 
 function TreeNode({ node, depth = 0, cor }: { node: LineageNode | null; depth?: number; cor: string }) {
   if (!node) return null;
-  const info = speciesInfo(node.species);
   return (
     <div className="ml-3 border-l border-white/10 pl-3">
       <div className="flex items-center gap-2 py-1">
         <span className="h-2 w-2 rounded-full" style={{ background: cor }} />
-        <span className="font-display text-xs font-bold uppercase" style={{ color: cor }}>{info.common}</span>
+        <span className="font-display text-xs font-bold uppercase" style={{ color: cor }}>{displayName(node)}</span>
         <span className="font-mono text-[0.6rem] text-ink-muted">GEN {node.generation} · F {node.fPedigree.toFixed(2)} · {node.method}</span>
       </div>
       {(node.sire || node.dam) && (
@@ -35,15 +34,14 @@ export default function GenomePage() {
   if (err) return <main className="mx-auto max-w-2xl px-4 pb-28 pt-10"><div className="rounded-card border border-crit/40 bg-crit/10 p-4 text-crit">{err}</div></main>;
   if (!g) return <main className="mx-auto max-w-2xl px-4 pb-28 pt-10 text-ink-muted">Carregando genoma…</main>;
 
-  const info = speciesInfo(g.specimen.species);
   const qtl = g.specimen.genotype.qtl;
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-6">
       <header className="mb-5">
         <h1 className="font-display text-2xl font-black uppercase text-ink" style={{ textShadow: "0 0 10px rgba(0,240,255,.35)" }}>Genoma</h1>
-        <p className="font-display text-sm font-bold uppercase text-cyan">{info.common}</p>
-        <p className="text-xs italic text-ink-muted">{info.scientific} · GEN {g.specimen.generation}</p>
+        <p className="font-display text-sm font-bold uppercase text-cyan">{displayName(g.specimen)}</p>
+        <p className="text-xs italic text-ink-muted">{displaySci(g.specimen)} · GEN {g.specimen.generation}</p>
       </header>
 
       {/* Fenótipo × Genótipo por loco */}
@@ -95,7 +93,7 @@ export default function GenomePage() {
               <tbody>
                 {g.fExplain.paths.map((p, i) => (
                   <tr key={i} className="border-t border-white/5">
-                    <td className="px-2 py-1.5 text-cyan">{speciesInfo((g.lineage && findSpecies(g.lineage, p.ancestor)) || p.ancestor).common}</td>
+                    <td className="px-2 py-1.5 text-cyan">{displayName((g.lineage && findNode(g.lineage, p.ancestor)) ?? { id: p.ancestor, species: p.ancestor })}</td>
                     <td className="px-2 py-1.5 text-center font-mono">{p.n1}</td>
                     <td className="px-2 py-1.5 text-center font-mono">{p.n2}</td>
                     <td className="px-2 py-1.5 text-center font-mono">{p.fAncestor.toFixed(2)}</td>
@@ -117,7 +115,7 @@ export default function GenomePage() {
             <div key={i} className="flex flex-wrap items-baseline gap-2 text-xs">
               <span className="rounded bg-bg-900 px-1.5 py-0.5 font-mono text-cyan">{a.locus}:{a.allele}</span>
               <span className="text-ink-muted">←</span>
-              <span className="text-ink">{a.sources.map((s) => speciesInfo(s.split(" (")[0]!).common).filter((v, idx, arr) => arr.indexOf(v) === idx).join(", ")}</span>
+              <span className="text-ink">{a.sources.map((s) => displayName(parseAlleleSource(s))).filter((v, idx, arr) => arr.indexOf(v) === idx).join(", ")}</span>
             </div>
           ))}
           {g.alleleSources.every((a) => a.sources.length === 0) && <p className="text-xs text-ink-muted">Fundador — alelos originais (sem ancestrais).</p>}
@@ -137,9 +135,21 @@ export default function GenomePage() {
   );
 }
 
-/** Acha a espécie de um id na árvore (para rotular o ancestral do F). */
-function findSpecies(node: LineageNode | null, id: string): string | null {
+/** Acha o nó (id+species) de um ancestral na árvore, pra rotular via displayName. */
+function findNode(node: LineageNode | null, id: string): LineageNode | null {
   if (!node) return null;
-  if (node.id === id) return node.species;
-  return findSpecies(node.sire, id) ?? findSpecies(node.dam, id);
+  if (node.id === id) return node;
+  return findNode(node.sire, id) ?? findNode(node.dam, id);
+}
+
+/**
+ * `alleleSources` chega como `"${species} (${id})"` (genome.service.ts,
+ * traceAlleles) — extrai os dois pra poder usar displayName (que precisa do
+ * id, não só da espécie, pra achar raça/fundador selvagem). Sem match (formato
+ * inesperado), usa a string inteira como id E espécie — mesmo fallback de
+ * sempre (speciesInfo devolve o próprio slug quando não cadastrado).
+ */
+function parseAlleleSource(s: string): { id: string; species: string } {
+  const m = /^(.*) \(([^()]+)\)$/.exec(s);
+  return m ? { species: m[1]!, id: m[2]! } : { id: s, species: s };
 }
