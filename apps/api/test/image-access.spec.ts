@@ -7,6 +7,9 @@
  * dono pode, fundador nunca (retrato compartilhado por genótipo).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { computeCacheKey, FELINE_PACK } from "@genbreedai/engine";
 import { InMemorySpecimenRepository, type StoredSpecimen } from "../src/specimens/in-memory.repository";
@@ -37,6 +40,12 @@ function cacheKeyOf(s: StoredSpecimen): string {
   return s.cacheKey ?? computeCacheKey(s.genotype, FELINE_PACK, s.sex ?? undefined);
 }
 
+// Pasta temporária própria (IMAGE_STORAGE_DIR) — nunca
+// apps/web/public/assets/generated, que tem arquivos reais.
+const R2_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"] as const;
+let imgTmpDir: string;
+let savedEnv: Record<string, string | undefined>;
+
 describe("Acesso a retrato de espécime — dono/fundador/pool, cota do payerId (correção ownerId='demo')", () => {
   let repo: InMemorySpecimenRepository;
   let quota: ImageQuotaService;
@@ -46,20 +55,30 @@ describe("Acesso a retrato de espécime — dono/fundador/pool, cota do payerId 
     delete process.env.FAL_KEY;
     delete process.env.DATABASE_URL;
     delete process.env.IMAGE_QUOTA_UNLIMITED;
+    imgTmpDir = await mkdtemp(join(tmpdir(), "genbreedai-images-"));
+    savedEnv = { IMAGE_STORAGE_DIR: process.env.IMAGE_STORAGE_DIR };
+    for (const k of R2_VARS) savedEnv[k] = process.env[k];
+    process.env.IMAGE_STORAGE_DIR = imgTmpDir;
+    for (const k of R2_VARS) delete process.env[k];
     repo = new InMemorySpecimenRepository();
     quota = new ImageQuotaService();
     svc = new ImageService(repo, new ImageJobRepository(), quota, new WalletService(new InMemoryWalletRepository()));
     await repo.save(othersSpecimen());
     // Limpa qualquer arquivo de retrato deixado por uma rodada anterior —
-    // sem isso, `stat(cacheKey)` acharia "cache" e os testes nem chegariam
-    // a checar acesso/cota (mesma cautela de storage.spec.ts).
+    // pasta nova a cada teste (acima), então isto é só uma segunda camada de
+    // segurança, não a defesa principal (essa é a pasta temporária).
     for (const id of ["gato-branco", "gato-tabby", "gato-siames", "onca-pintada"]) {
       const s = (await repo.get(id))!;
       await remove(cacheKeyOf(s));
     }
     await remove(cacheKeyOf(othersSpecimen()));
   });
-  afterEach(() => { vi.unstubAllGlobals(); delete process.env.FAL_KEY; });
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    delete process.env.FAL_KEY;
+    for (const [k, v] of Object.entries(savedEnv)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    await rm(imgTmpDir, { recursive: true, force: true });
+  });
 
   it("PHD gera retrato de FUNDADOR sem imagem → cobra a cota do usuário (payerId), não de 'demo'", async () => {
     process.env.FAL_KEY = "test-fake-key";

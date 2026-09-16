@@ -6,12 +6,32 @@
  * Roda em modo disco local (sem R2_*, ambiente de teste) — grava de verdade
  * em apps/web/public/assets/generated/ e limpa depois (afterEach).
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { publicUrl, store, stat, remove } from "../src/images/storage";
+
+// Pasta temporária própria (IMAGE_STORAGE_DIR) — nunca
+// apps/web/public/assets/generated, que tem arquivos reais.
+const R2_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"] as const;
+let imgTmpDir: string;
+let savedEnv: Record<string, string | undefined>;
 
 describe("storage.ts — versão do objeto (?v=)", () => {
   const cacheKey = "test-storage-spec-cache-busting";
-  afterEach(async () => { await remove(cacheKey); });
+  beforeEach(async () => {
+    imgTmpDir = await mkdtemp(join(tmpdir(), "genbreedai-images-"));
+    savedEnv = { IMAGE_STORAGE_DIR: process.env.IMAGE_STORAGE_DIR };
+    for (const k of R2_VARS) savedEnv[k] = process.env[k];
+    process.env.IMAGE_STORAGE_DIR = imgTmpDir;
+    for (const k of R2_VARS) delete process.env[k];
+  });
+  afterEach(async () => {
+    await remove(cacheKey);
+    for (const [k, v] of Object.entries(savedEnv)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    await rm(imgTmpDir, { recursive: true, force: true });
+  });
 
   it("publicUrl com versão contém '?v='", () => {
     const url = publicUrl(cacheKey, 1700000000);

@@ -9,7 +9,18 @@ import { mkdir, writeFile, stat as fsStat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
-const DIR = join(process.cwd(), "..", "web", "public", "assets", "generated");
+/**
+ * Pasta local (sem R2) — padrão apps/web/public/assets/generated (dev sem R2:
+ * grava ali, o Next serve como estático). `IMAGE_STORAGE_DIR`, quando
+ * definida, sobrepõe o padrão — usado pelos testes (cada um aponta pra uma
+ * pasta temporária própria, `fs.mkdtemp`, pra nunca tocar a pasta real, que
+ * tem arquivos de verdade). Lida a CADA chamada (função, não uma constante
+ * fixada no import) — sem isso, um teste que troca a env em `beforeEach`
+ * não teria efeito, porque o módulo só é importado uma vez por processo.
+ */
+function dir(): string {
+  return process.env.IMAGE_STORAGE_DIR || join(process.cwd(), "..", "web", "public", "assets", "generated");
+}
 
 // ── R2 (opcional) ──
 const R2 = {
@@ -56,7 +67,7 @@ export async function stat(cacheKey: string): Promise<{ version: number } | null
     } catch { return null; }
   }
   try {
-    const s = await fsStat(join(DIR, `${cacheKey}.png`));
+    const s = await fsStat(join(dir(), `${cacheKey}.png`));
     return { version: Math.floor(s.mtimeMs / 1000) };
   } catch { return null; }
 }
@@ -74,8 +85,8 @@ export async function store(cacheKey: string, buffer: Buffer): Promise<string> {
     await client().send(new PutObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey), Body: buffer, ContentType: "image/png" }));
     return publicUrl(cacheKey, version);
   }
-  await mkdir(DIR, { recursive: true });
-  await writeFile(join(DIR, `${cacheKey}.png`), buffer);
+  await mkdir(dir(), { recursive: true });
+  await writeFile(join(dir(), `${cacheKey}.png`), buffer);
   return publicUrl(cacheKey, version);
 }
 
@@ -84,5 +95,5 @@ export async function remove(cacheKey: string): Promise<void> {
     try { await client().send(new DeleteObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) })); } catch { /* já não existe */ }
     return;
   }
-  try { await rm(join(DIR, `${cacheKey}.png`)); } catch { /* já não existe */ }
+  try { await rm(join(dir(), `${cacheKey}.png`)); } catch { /* já não existe */ }
 }

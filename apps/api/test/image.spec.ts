@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { InMemorySpecimenRepository } from "../src/specimens/in-memory.repository";
 import { ImageJobRepository } from "../src/images/image-job.repository";
 import { ImageQuotaService } from "../src/economy/image-quota.service";
@@ -7,10 +10,31 @@ import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { ImageService } from "../src/images/image.service";
 import { buildPrompt, traitVector } from "../src/images/prompt";
 
+// storage.ts local (sem R2) grava/lê em IMAGE_STORAGE_DIR — em teste, SEMPRE
+// uma pasta temporária própria (nunca apps/web/public/assets/generated, que
+// tem arquivos reais: em paralelo ou não, dois testes/arquivos usando a
+// mesma pasta real colidem entre si e com esse conteúdo já existente).
+const R2_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"] as const;
+let imgTmpDir: string;
+let savedEnv: Record<string, string | undefined>;
+
 describe("Pipeline de imagem (TDD §5)", () => {
   let repo: InMemorySpecimenRepository;
   let svc: ImageService;
-  beforeEach(() => { delete process.env.FAL_KEY; repo = new InMemorySpecimenRepository(); svc = new ImageService(repo, new ImageJobRepository(), new ImageQuotaService(), new WalletService(new InMemoryWalletRepository())); });
+  beforeEach(async () => {
+    delete process.env.FAL_KEY;
+    imgTmpDir = await mkdtemp(join(tmpdir(), "genbreedai-images-"));
+    savedEnv = { IMAGE_STORAGE_DIR: process.env.IMAGE_STORAGE_DIR };
+    for (const k of R2_VARS) savedEnv[k] = process.env[k];
+    process.env.IMAGE_STORAGE_DIR = imgTmpDir;
+    for (const k of R2_VARS) delete process.env[k];
+    repo = new InMemorySpecimenRepository();
+    svc = new ImageService(repo, new ImageJobRepository(), new ImageQuotaService(), new WalletService(new InMemoryWalletRepository()));
+  });
+  afterEach(async () => {
+    for (const [k, v] of Object.entries(savedEnv)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    await rm(imgTmpDir, { recursive: true, force: true });
+  });
 
   it("prompt é determinístico e descreve a espécie/traços", async () => {
     const onca = (await repo.get("onca-pintada"))!;

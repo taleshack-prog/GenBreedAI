@@ -12,6 +12,9 @@
  * caminho de preview o alcança.
  */
 import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computeCacheKey, FELINE_PACK } from "@genbreedai/engine";
 import { InMemorySpecimenRepository, type StoredSpecimen } from "../src/specimens/in-memory.repository";
 import { ImageJobRepository } from "../src/images/image-job.repository";
@@ -46,16 +49,27 @@ const SPEC_1 = previewSpecimen();
 const SPEC_2 = previewSpecimen({ id: "preview-2", genotype: { loci: { ...AUTOSOMAL, P: ["P^r", "P^r"] }, qtl: {} } });
 const SPEC_3 = previewSpecimen({ id: "preview-3", ownerId: "user-3", genotype: { loci: { ...AUTOSOMAL, B: ["b", "b"] }, qtl: {} } });
 
+// Pasta temporária própria (IMAGE_STORAGE_DIR) — nunca
+// apps/web/public/assets/generated, que tem arquivos reais.
+const R2_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"] as const;
+let imgTmpDir: string;
+let savedEnv: Record<string, string | undefined>;
+
 describe("Preview de cruzamento nunca apaga um retrato existente (correção do buraco force=true)", () => {
   let repo: InMemorySpecimenRepository;
   let quota: ImageQuotaService;
   let svc: ImageService;
   let removeSpy: MockInstance<typeof storage.remove>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     delete process.env.FAL_KEY;
     delete process.env.DATABASE_URL;
     delete process.env.IMAGE_QUOTA_UNLIMITED;
+    imgTmpDir = await mkdtemp(join(tmpdir(), "genbreedai-images-"));
+    savedEnv = { IMAGE_STORAGE_DIR: process.env.IMAGE_STORAGE_DIR };
+    for (const k of R2_VARS) savedEnv[k] = process.env[k];
+    process.env.IMAGE_STORAGE_DIR = imgTmpDir;
+    for (const k of R2_VARS) delete process.env[k];
     repo = new InMemorySpecimenRepository();
     quota = new ImageQuotaService();
     svc = new ImageService(repo, new ImageJobRepository(), quota, new WalletService(new InMemoryWalletRepository()));
@@ -65,8 +79,11 @@ describe("Preview de cruzamento nunca apaga um retrato existente (correção do 
     removeSpy.mockRestore();
     vi.unstubAllGlobals();
     delete process.env.FAL_KEY;
-    // Limpeza dos arquivos reais que os testes possam ter gravado em disco.
+    // Limpeza dos arquivos que os testes possam ter gravado (pertence à
+    // pasta temporária desta rodada — removida por inteiro logo abaixo).
     for (const s of [SPEC_1, SPEC_2, SPEC_3]) await storage.remove(cacheKeyOf(s));
+    for (const [k, v] of Object.entries(savedEnv)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    await rm(imgTmpDir, { recursive: true, force: true });
   });
 
   it("preview com imagem JÁ existente → não apaga (remove nunca chamado), devolve a MESMA imagem versionada, cota inalterada", async () => {
