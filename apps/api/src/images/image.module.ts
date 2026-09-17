@@ -8,13 +8,14 @@ import { SpecimensModule } from "../specimens/specimens.module";
 import { TierModule } from "../billing/tier.module";
 
 /**
- * `PreviewController` (`/cross/preview`) mudou pra `CrossModule` — ele
- * depende de `CrossService`, e este módulo depende de `ImageService`
- * (`CrossService.execute()` dispara o retrato incluído, ADR-0019); manter
- * o preview aqui formaria um ciclo `ImageModule` ⇄ `CrossModule`.
- * `SpecimenRepository` vem de `SpecimensModule` (nunca mais de `CrossModule`
- * diretamente) pelo mesmo motivo. `ImageService` é exportado pra
- * `CrossModule` poder injetá-lo em `CrossService`.
+ * `PreviewController` (`POST /api/v1/cross/preview`, antes hospedado em
+ * `CrossModule`) foi REMOVIDO (ADR-0019): nenhuma prévia de fenótipo gera
+ * imagem mais — o retrato só nasce ao sintetizar o fenótipo escolhido, já
+ * incluído no cruzamento. Este módulo continua sem importar `CrossModule`
+ * (`SpecimenRepository` vem de `SpecimensModule`; `ImageService` é
+ * exportado pra `CrossModule` poder injetá-lo em `CrossService`, que
+ * dispara esse retrato incluído) — evita o ciclo `ImageModule` ⇄
+ * `CrossModule` mesmo sem o motivo original do preview.
  *
  * `TierModule`: `ImageController`/`ImageQuotaController` resolvem o tier
  * efetivo via `TierService.resolve()` (nunca do JWT cru) — faltava esse

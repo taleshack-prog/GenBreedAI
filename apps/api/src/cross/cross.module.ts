@@ -6,22 +6,24 @@ import { ImageModule } from "../images/image.module";
 import { QuotaModule } from "../quota/quota.module";
 import { CrossController } from "./cross.controller";
 import { SpecimensController } from "../specimens/specimens.controller";
-import { PreviewController } from "../images/preview.controller";
 import { CrossService } from "./cross.service";
 
 /**
  * `SpecimenRepository` agora vem de `SpecimensModule` (não mais provido
  * aqui) — ver o comentário desse módulo sobre o ciclo que isso evitava.
- * `PreviewController` (rota `/cross/preview`) mudou de `ImageModule` pra cá:
- * ele já dependia de `CrossService`; ficar em `CrossModule` (que agora
- * também importa `ImageModule` pra ganhar `ImageService`) evita o mesmo
- * ciclo pelo lado do preview. `QuotaService` mudou pra `QuotaModule` (mesmo
- * motivo: `TierModule` também precisa dele, em `MeController`, e importar
- * `CrossModule` de dentro de `TierModule` seria outro ciclo).
+ * `ImageModule` continua importado aqui porque `CrossService` precisa de
+ * `ImageService` (retrato incluído no cruzamento, ADR-0019) — não mais por
+ * causa de `PreviewController` (rota `POST /api/v1/cross/preview`), que foi
+ * REMOVIDA: nenhuma prévia de fenótipo gera imagem mais (ADR-0019 — um PhD
+ * abrindo 12 opções consumia a cota mensal em 2 cruzamentos); o retrato só
+ * nasce ao sintetizar o fenótipo escolhido, já incluído no cruzamento.
+ * `QuotaService` mudou pra `QuotaModule` (mesmo motivo: `TierModule` também
+ * precisa dele, em `MeController`, e importar `CrossModule` de dentro de
+ * `TierModule` seria outro ciclo).
  */
 @Module({
   imports: [EconomyModule, TierModule, SpecimensModule, ImageModule, QuotaModule],
-  controllers: [CrossController, SpecimensController, PreviewController],
+  controllers: [CrossController, SpecimensController],
   providers: [CrossService],
   // Reexporta TierModule/SpecimensModule/QuotaModule: GeneBankModule/
   // GenomeModule já importam CrossModule (por causa de SpecimenRepository/

@@ -1,7 +1,7 @@
 /**
  * Modelo único FLUX.2 [pro] (fal-ai/flux-2-pro) pra todo tier. Testa o
  * PAYLOAD enviado à fal — sem chamar a rede de verdade (fetch mockado, mesmo
- * padrão já usado em image-access.spec.ts/preview-no-delete.spec.ts).
+ * padrão já usado em image-access.spec.ts/included-portrait.spec.ts).
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { FalImageProvider, resolveProvider, ProceduralImageProvider } from "../src/images/provider";

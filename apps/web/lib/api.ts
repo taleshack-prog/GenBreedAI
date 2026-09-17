@@ -165,18 +165,6 @@ export async function getCrossOptions(input: { sireId: string; damId: string; me
   return res.json();
 }
 
-/**
- * `sex` OPCIONAL — só pra pedir o retrato de UM dos lados de uma opção
- * sex-dimórfica (preview.controller.ts repassa pro fenótipo do retrato).
- * NUNCA usado na síntese de verdade (postCross/synthesizeAndFreeze não têm
- * esse campo) — o sexo real continua sorteado pela seed só ao sintetizar.
- */
-export async function previewImage(input: { sireId: string; damId: string; method: string; choiceKey: string; force?: boolean; sex?: "M" | "F" }): Promise<ImageResult> {
-  const res = await fetch("/api/v1/cross/preview", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw await apiErrorFrom(res, `Falha ao gerar preview (${res.status}).`);
-  return res.json();
-}
-
 export interface LineageNode { id: string; species: string; generation: number; method: string; genotype: Genotype; aura: number; fPedigree: number; sire: LineageNode | null; dam: LineageNode | null; }
 export interface WrightPath { ancestor: string; n1: number; n2: number; fAncestor: number; contribution: number; }
 export interface GenomeResponse {

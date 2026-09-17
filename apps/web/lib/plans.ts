@@ -21,8 +21,8 @@ export interface PlanInfo {
 export const PLANS: PlanInfo[] = [
   { id: "FREE", label: "Free", month: 0, year: null, crosses: "1 cruzamento a cada 7 dias", images: "Retrato em todo cruzamento", tools: "Sorteio de fenótipo", pool: "Gatos domésticos (Felis catus) — cruzamentos entre raças", accent: "#9E9E9E" },
   { id: "JUNIOR", label: "Junior", month: 19.9, year: 218.9, crosses: "3 cruzamentos a cada 7 dias", images: "Retrato em todo cruzamento", tools: "Sorteio de fenótipo", pool: "+ Felinos selvagens (onça, leão, tigre, serval…) e cruzamentos entre espécies", accent: "#00F0FF" },
-  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "1 por dia", images: "Retrato em todo cruzamento + 15 retratos extras/mês", tools: "Escolhe entre 6 opções de fenótipo", pool: "+ Caninos", accent: "#BF00FF", featured: true },
-  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "3 por dia", images: "Retrato em todo cruzamento + 20 retratos extras/mês", tools: "Escolhe entre 12 opções de fenótipo", pool: "Todas as espécies do catálogo (gatos, felinos selvagens e cães)", accent: "#F5C542" },
+  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "1 por dia", images: "Retrato em todo cruzamento + 15 para regenerar", tools: "Escolhe entre 6 opções de fenótipo", pool: "+ Caninos", accent: "#BF00FF", featured: true },
+  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "3 por dia", images: "Retrato em todo cruzamento + 20 para regenerar", tools: "Escolhe entre 12 opções de fenótipo", pool: "Todas as espécies do catálogo (gatos, felinos selvagens e cães)", accent: "#F5C542" },
 ];
 
 export function fmtBRL(v: number): string {

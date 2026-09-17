@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { previewImage, freezeOption, ApiError, type OffspringOption } from "../lib/api";
-
-/** Não-ApiError (rede/parse) → mensagem genérica; ApiError → message/status da API. */
-function classifyError(err: unknown): { message: string; status?: number } {
-  return err instanceof ApiError ? { message: err.message, status: err.status } : { message: "Não foi possível gerar o retrato. Tente de novo." };
-}
+import { freezeOption, type OffspringOption } from "../lib/api";
 
 function AuraMini({ n }: { n: number }) {
   return <span className="text-star text-sm">{"★".repeat(n)}<span className="text-white/20">{"★".repeat(5 - n)}</span></span>;
@@ -19,20 +13,6 @@ function SterileBadge({ title }: { title?: string }) {
     <span title={title} className="ml-1 inline-block shrink-0 rounded-md border border-crit/40 bg-crit/10 px-1.5 py-0.5 font-display text-[0.55rem] normal-case text-crit">
       Estéril
     </span>
-  );
-}
-
-/** Erro de geração de retrato, junto ao retrato — mesmos tokens de CapsuleCard.tsx. */
-function GenErrorBox({ error, onGoToProfile }: { error: { message: string; status?: number }; onGoToProfile: (e: React.MouseEvent) => void }) {
-  return (
-    <div className="mt-1 rounded border border-crit/40 bg-crit/10 px-1 py-1 text-center text-[0.55rem] text-crit">
-      <p>{error.message}</p>
-      {error.status === 403 && (
-        <span role="button" tabIndex={0} onClick={onGoToProfile} className="inline-block cursor-pointer underline">
-          Ver créditos
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -98,7 +78,7 @@ function furWord(loci: Record<string, string>): string | null {
   if (loci.Ct === "pelo áspero") return "Pelo áspero";
   return "Pelo curto";
 }
-/** Lista de chips descritivos para o Free decidir sem imagem. */
+/** Lista de chips descritivos — usada em todo card de opção (ADR-0019: nenhuma prévia gera imagem). */
 function richChips(o: { phenotype: { loci: Record<string, string> }; genotype: { qtl?: Record<string, number> } }): string[] {
   const loci = o.phenotype.loci;
   const chips: string[] = [phenoSummary(loci), porteWord(o.genotype.qtl?.porte)];
@@ -123,9 +103,11 @@ function sexDiffLabel(phen?: { loci: Record<string, string> }, other?: { loci: R
 }
 
 /**
- * Seletor de fenótipo. Senior/PhD escolhem; ao selecionar, GERA o retrato IA
- * daquela opção (preview) — o jogador vê antes de sintetizar. A foto fica
- * cacheada e reaproveitada na síntese. Free/Junior: só-leitura.
+ * Seletor de fenótipo. Senior/PhD escolhem entre as opções (por
+ * probabilidade, aura e características — sem retrato aqui); Free/Junior:
+ * só-leitura. O retrato de IA só é gerado ao SINTETIZAR o fenótipo
+ * escolhido, já incluído no cruzamento (ADR-0019) — nenhuma prévia consome
+ * cota de imagem.
  */
 export function PhenotypeSelector({
   options, canChoose, maxOptions, selectedKey, onSelect, crossInput, family, describeMode, onFrozen,
@@ -137,21 +119,7 @@ export function PhenotypeSelector({
   describeMode?: boolean;
   onFrozen?: (msg: string) => void;
 }) {
-  const router = useRouter();
   const [freezing, setFreezing] = useState<string | null>(null);
-  // Chave: o.key (opção não-dimórfica) ou `${o.key}:M`/`${o.key}:F` (dimórfica —
-  // um retrato POR SEXO, gerado independentemente).
-  const [previews, setPreviews] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState<string | null>(null);
-  // Erro da última geração/preview, por chave (mesmo esquema de `previews`) —
-  // mostrado junto ao retrato daquela chave, não como toast solto.
-  const [errors, setErrors] = useState<Record<string, { message: string; status?: number }>>({});
-  // `r.cached` da última resposta, por chave — true quando o retrato já
-  // existia (compartilhado por genótipo+sexo, inclusive de fundador). O ↻
-  // nesse caso é escondido: a API ignora force quando já há imagem (nunca
-  // apaga um retrato compartilhado só porque este preview pediu regenerar).
-  const [cachedKeys, setCachedKeys] = useState<Record<string, boolean>>({});
-  function goToProfile(e: React.MouseEvent) { e.stopPropagation(); router.push("/app/profile"); }
 
   async function freeze(o: OffspringOption, e: React.MouseEvent) {
     e.stopPropagation();
@@ -161,48 +129,13 @@ export function PhenotypeSelector({
       onFrozen?.("Fenótipo congelado no Gene Bank (−20 catalisadores). Descongele depois para usar.");
     } catch (err) { onFrozen?.((err as Error).message); } finally { setFreezing(null); }
   }
-  /**
-   * `sex` OPCIONAL — só afeta QUAL retrato é pedido (opção dimórfica, ADR-0017).
-   * Nunca decide o sexo de verdade: isso continua sorteado pela seed só na
-   * síntese (materializeCross). Mesma regra de cota de sempre (previewImage).
-   */
-  async function regen(o: OffspringOption, e: React.MouseEvent, sex?: "M" | "F") {
-    e.stopPropagation();
-    const previewKey = sex ? `${o.key}:${sex}` : o.key;
-    setLoading(previewKey);
-    setErrors((p) => { if (!(previewKey in p)) return p; const n = { ...p }; delete n[previewKey]; return n; });
-    try {
-      const r = await previewImage({ ...crossInput, choiceKey: o.key, force: true, ...(sex ? { sex } : {}) });
-      if (r.imageUrl) {
-        setPreviews((p) => ({ ...p, [previewKey]: r.imageUrl! + "?t=" + Date.now() }));
-        setCachedKeys((p) => ({ ...p, [previewKey]: r.cached }));
-      }
-      // Sem imageUrl (modo procedural) NÃO é erro — sem "gerado", sem mensagem.
-    } catch (err) {
-      setErrors((p) => ({ ...p, [previewKey]: classifyError(err) }));
-    } finally { setLoading(null); }
-  }
-  async function choose(o: OffspringOption) {
+  // Só seleciona/desseleciona — nenhuma prévia de imagem é gerada aqui (o
+  // retrato de IA só nasce ao SINTETIZAR o escolhido, já incluído no
+  // cruzamento, ADR-0019).
+  function choose(o: OffspringOption) {
     if (!canChoose) return;
     if (selectedKey === o.key) { onSelect(null); return; }
     onSelect(o.key);
-    if (describeMode) return; // Free: decide pela descrição; imagem só ao sintetizar
-    // Dimórfica: retrato só ao clicar em CADA lado (♂/♀), não auto-gera aqui
-    // — não dá pra saber qual dos dois mostrar antes de o jogador escolher.
-    if (o.sexDimorphic) return;
-    if (!previews[o.key]) {
-      setLoading(o.key);
-      setErrors((p) => { if (!(o.key in p)) return p; const n = { ...p }; delete n[o.key]; return n; });
-      try {
-        const r = await previewImage({ ...crossInput, choiceKey: o.key });
-        if (r.imageUrl) {
-          setPreviews((p) => ({ ...p, [o.key]: r.imageUrl! }));
-          setCachedKeys((p) => ({ ...p, [o.key]: r.cached }));
-        }
-      } catch (err) {
-        setErrors((p) => ({ ...p, [o.key]: classifyError(err) }));
-      } finally { setLoading(null); }
-    }
   }
 
   if (options.length === 0) return null;
@@ -212,13 +145,11 @@ export function PhenotypeSelector({
         <h3 className="font-display text-xs font-bold uppercase text-cyan">
           {canChoose ? `Selecione o fenótipo · top ${Math.min(maxOptions, options.length)}` : "Prévia da prole possível"}
         </h3>
-        {canChoose && <span className="text-[0.65rem] uppercase text-ink-muted">{describeMode ? "escolha pela descrição · imagem no final" : "clique para ver o retrato"}</span>}
+        {canChoose && <span className="text-[0.65rem] uppercase text-ink-muted">toque para escolher</span>}
       </div>
       <p className="mb-3 text-[0.7rem] text-ink-muted">
         {canChoose
-          ? (describeMode
-              ? "Você tem imagens limitadas: escolha pela DESCRIÇÃO do fenótipo. O retrato é gerado só ao sintetizar o escolhido."
-              : "Clique numa opção para gerar o retrato e escolhê-la. Gerar retrato consome sua cota mensal de imagens.")
+          ? "O retrato de IA é gerado ao sintetizar o fenótipo escolhido, sem consumir sua cota."
           : "No seu tier o filhote é sorteado pela probabilidade. Suba para Senior para escolher."}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -226,9 +157,10 @@ export function PhenotypeSelector({
           const sel = canChoose && selectedKey === o.key;
           const dimorphic = o.sexDimorphic && !describeMode;
 
-          // Opção dimórfica (ADR-0017/0018): dois cards de sexo, mesmo
-          // tratamento visual (aspect-square, borda, padding) do card não
-          // dimórfico abaixo, DENTRO de uma moldura comum. `sm:col-span-2`
+          // Opção dimórfica (ADR-0017/0018): dois cards de sexo (sem
+          // retrato — só rótulo, probabilidade e selo Estéril, ver bloco
+          // abaixo), mesmo tratamento visual (borda, padding) do card não
+          // dimórfico, DENTRO de uma moldura comum. `sm:col-span-2`
           // (min-width — vale de 640px em diante, sem precisar repetir em
           // lg:) faz a moldura ocupar 2 colunas do grid externo (=1 linha
           // inteira em sm:, 2 de 3 em lg:) — aí cada card de sexo (grid
@@ -236,8 +168,7 @@ export function PhenotypeSelector({
           // dimórfico. Abaixo de 640px (grid externo de 1 coluna só) não há
           // 2 colunas pra ocupar: os dois cards dividem a largura total da
           // moldura — menores que um card não dimórfico nesse breakpoint,
-          // mas NUNCA transbordam (compromisso deliberado, única forma de
-          // garantir 360px sem overflow com dois retratos completos).
+          // mas NUNCA transbordam.
           if (dimorphic) {
             return (
               <div key={o.key}
@@ -255,38 +186,21 @@ export function PhenotypeSelector({
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   {(["M", "F"] as const).map((sex) => {
-                    const previewKey = `${o.key}:${sex}`;
                     const phen = sex === "M" ? o.phenotypeBySex?.M : o.phenotypeBySex?.F;
                     const other = sex === "M" ? o.phenotypeBySex?.F : o.phenotypeBySex?.M;
                     const label = sexDiffLabel(phen, other) || phenoSummary(phen?.loci ?? o.phenotype.loci);
+                    // Sem retrato por sexo aqui (link "ver retrato" removido):
+                    // cada card mostra só o rótulo de fenótipo do sexo, a
+                    // probabilidade (50/50) e o selo Estéril quando cabe.
                     return (
                       <div key={sex} role="button" tabIndex={0} onClick={() => choose(o)}
-                        className={`w-full min-w-0 rounded-lg border bg-bg-900/60 p-2 text-left transition ${sel ? "border-cyan" : "border-white/10"} ${canChoose ? "cursor-pointer hover:border-cyan/60" : "cursor-default"}`}
+                        className={`w-full min-w-0 rounded-lg border bg-bg-900/60 p-2 text-center transition ${sel ? "border-cyan" : "border-white/10"} ${canChoose ? "cursor-pointer hover:border-cyan/60" : "cursor-default"}`}
                       >
-                        <div className="mb-1.5 flex min-w-0 items-center justify-between gap-1">
+                        <div className="mb-1 flex min-w-0 items-center justify-center gap-1">
                           <span className="font-mono text-[0.6rem] text-cyan">{sex === "M" ? "♂ 50%" : "♀ 50%"}</span>
                           {sex === "M" && o.maleSterile && <SterileBadge title="Este macho nasce estéril (ADR-0018)." />}
                         </div>
-                        <div className="relative mb-1.5 grid aspect-square w-full place-items-center overflow-hidden rounded bg-bg-900 p-1">
-                          {previews[previewKey] ? (
-                            <>
-                              <img src={previews[previewKey]} alt={sex === "M" ? "retrato macho" : "retrato fêmea"} className="h-full w-full object-cover" />
-                              {!cachedKeys[previewKey] && (
-                                <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e, sex)}
-                                  className="absolute bottom-0.5 right-0.5 grid h-5 w-5 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.6rem] text-cyan transition hover:scale-110">↻</span>
-                              )}
-                            </>
-                          ) : loading === previewKey ? (
-                            <span className="animate-pulse font-mono text-[0.5rem] uppercase text-cyan">gerando…</span>
-                          ) : (
-                            <span role="button" tabIndex={0} onClick={(e) => regen(o, e, sex)}
-                              className="px-1 text-center font-mono text-[0.55rem] text-cyan underline">
-                              {sex === "M" ? "♂" : "♀"} ver retrato
-                            </span>
-                          )}
-                        </div>
-                        <div className="truncate text-center text-[0.6rem] text-ink" title={label}>{label}</div>
-                        {errors[previewKey] && <GenErrorBox error={errors[previewKey]!} onGoToProfile={goToProfile} />}
+                        <div className="truncate text-[0.65rem] text-ink" title={label}>{label}</div>
                       </div>
                     );
                   })}
@@ -316,32 +230,18 @@ export function PhenotypeSelector({
                 <span className="font-mono text-xs text-purple">{(o.prob * 100).toFixed(1)}%</span>
                 <AuraMini n={o.aura} />
               </div>
-              <div className="relative mb-2 grid aspect-square w-full place-items-center overflow-hidden rounded bg-bg-900 p-2">
-                {describeMode ? (
-                  <div className="flex flex-wrap content-center justify-center gap-1">
-                    {richChips(o).map((c, i) => (
-                      <span key={i} className="rounded-full border border-cyan/30 bg-cyan/5 px-2 py-0.5 text-[0.6rem] text-cyan">{c}</span>
-                    ))}
-                  </div>
-                ) : previews[o.key] ? (
-                  <>
-                    <img src={previews[o.key]} alt="retrato" className="h-full w-full object-cover" />
-                    {!cachedKeys[o.key] && (
-                      <span role="button" tabIndex={0} title="Regenerar" onClick={(e) => regen(o, e)}
-                        className="absolute bottom-1 right-1 grid h-6 w-6 cursor-pointer place-items-center rounded-full border border-cyan/50 bg-bg-900/80 text-[0.7rem] text-cyan transition hover:scale-110">↻</span>
-                    )}
-                  </>
-                ) : loading === o.key ? (
-                  <span className="animate-pulse font-mono text-[0.6rem] uppercase text-cyan">gerando retrato…</span>
-                ) : (
-                  <span className="px-2 text-center font-display text-sm font-bold text-ink">{phenoSummary(o.phenotype.loci)}</span>
-                )}
+              {/* Sem retrato aqui (ADR-0019 — a prévia não gera imagem em
+                  nenhum card): bloco de características no lugar da imagem,
+                  legível em 360px, sem moldura vazia. */}
+              <div className="mb-2 flex min-h-[3rem] w-full flex-wrap content-center items-center justify-center gap-1 rounded bg-bg-900 p-2">
+                {richChips(o).map((c, i) => (
+                  <span key={i} className="rounded-full border border-cyan/30 bg-cyan/5 px-2 py-0.5 text-[0.6rem] text-cyan">{c}</span>
+                ))}
               </div>
               <div className="flex items-center justify-center gap-1 text-center text-[0.7rem] text-ink">
                 <span>{phenoSummary(o.phenotype.loci)}</span>
                 {o.maleSterile && <SterileBadge title="Machos desta cruza nascem estéreis (ADR-0018)." />}
               </div>
-              {errors[o.key] && <GenErrorBox error={errors[o.key]!} onGoToProfile={goToProfile} />}
               {o.variants > 1 && <div className="text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
               {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
               {canChoose && (

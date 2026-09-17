@@ -124,6 +124,41 @@ America/Sao_Paulo.
 partir do plano Junior."` se `!tierPolicy(tier).weeklyBonus`. Web esconde o
 botão pra quem não tem `weeklyBonus`.
 
+### 6. Prévia de fenótipo NÃO gera mais imagem (adendo, decisão do dono do produto)
+
+**Motivo**: com o retrato incluído (item 3) e o seletor de fenótipo
+(`PhenotypeSelector`, Senior/PhD) mostrando até `maxOptions` cartas por
+cruzamento, um PhD (12 opções) clicando em cada carta pra "ver o retrato"
+antes de escolher esgotava a cota mensal de 20 retratos extras em só **2
+cruzamentos** — o retrato incluído deixaria de significar quase nada na
+prática, e a margem de imagem (ver Consequências) ficaria refém do quanto
+o jogador clica antes de decidir, não de quantos filhotes ele de fato gera.
+
+**Decisão**: nenhum card de opção — dimórfico ou não — gera ou mostra
+retrato de IA. `PhenotypeSelector` escolhe só por **probabilidade, aura,
+nome do fenótipo e características** (chips como "Merle · Fulvo"); o
+retrato só nasce ao **sintetizar** o fenótipo escolhido, via o retrato
+incluído do item 3 (sem custo) ou, se já usado, a regra normal de
+cota/crédito do `POST /specimens/:id/image`.
+
+Removido:
+
+- `POST /api/v1/cross/preview` (`preview.controller.ts`, `PreviewController`
+  — desregistrado de `cross.module.ts`) e `ImageService.previewImage()`
+  (sem outro chamador).
+- `apps/web/lib/api.ts`: `previewImage()`.
+- `apps/web/components/PhenotypeSelector.tsx`: todo o mecanismo de prévia
+  por card (imagem, "gerando…", botão ↻ regenerar, erro de cota, estados
+  `previews`/`loading`/`errors`/`cachedKeys`, função `regen()`) — inclusive
+  nos cards de sexo de uma opção dimórfica (ADR-0017/0018), que já não
+  tinham o link "ver retrato" desde a correção anterior a este adendo.
+- Textos que descreviam clicar pra ver o retrato (topo do seletor, planos)
+  — substituídos por "O retrato de IA é gerado ao sintetizar o fenótipo
+  escolhido, sem consumir sua cota." e, nos planos (`plans.ts`), "Retrato
+  em todo cruzamento + N **para regenerar**" (SENIOR/PHD) — `monthlyExtraImages`
+  agora só é gasto por **regenerar** um retrato já existente (`force=true`),
+  nunca mais por prévia.
+
 ## Consequências
 
 - Cota de cruzamento sobrevive a deploy/restart (persistida), fecha o vetor
@@ -156,6 +191,16 @@ botão pra quem não tem `weeklyBonus`.
 - Migração de schema (`included_portrait`, `cross_reservations`) gerada via
   `db:generate` pelo dono do produto, não por este agente (regra da sessão:
   nenhum comando executado).
+- Sem prévia de imagem (item 6), o jogador Senior/PhD escolhe o fenótipo
+  "às cegas" (sem ver o retrato antes de decidir) — trade-off aceito: o
+  card já mostra probabilidade, aura e as características (chips), e o
+  retrato do escolhido chega junto (grátis) ao sintetizar; quem quiser ver
+  antes de sintetizar não tem mais essa opção nesta versão.
+- `preview-no-delete.spec.ts` perdeu todo o seu objeto de teste (a garantia
+  de que o preview nunca apaga um retrato deixou de fazer sentido — não há
+  mais nenhum caminho de preview); virou um `describe.skip` documentando a
+  remoção (cobertura equivalente já existe em `included-portrait.spec.ts`
+  e `image-access.spec.ts`/`regenerate-founders.spec.ts`).
 
 ## Alternativas consideradas
 
@@ -175,3 +220,14 @@ botão pra quem não tem `weeklyBonus`.
 - **Deixar a cota de cruzamento em memória e só persistir o retrato
   incluído** — rejeitado: não resolve o vetor de abuso "resetar via
   redeploy", que é justamente o motivo da mudança.
+- **Manter a prévia de imagem, mas contar contra o retrato incluído em vez
+  da cota mensal** (item 6) — rejeitado: um PhD ainda esgotaria os 3
+  cruzamentos incluídos do dia só clicando nas 12 opções de UM cruzamento,
+  sem nunca sintetizar nada; a cota de cruzamento não é o recurso que a
+  prévia consome (imagem é). O problema é estrutural (N cliques por
+  cruzamento vs. 1 retrato incluído por cruzamento), não resolvido
+  trocando de qual cota a prévia debita.
+- **Limitar a prévia a 1 clique por cruzamento (ex.: só a opção
+  destacada)** — rejeitado: complexidade de UX (qual opção?) sem eliminar
+  o custo de inferência por clique; a decisão do dono do produto foi
+  simplificar pra zero prévias, não pra uma prévia mais restrita.

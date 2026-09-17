@@ -73,10 +73,8 @@ export class ImageService {
    * Regenerar (`force`) só o DONO pode; fundador nunca (compartilhado —
    * regenerar trocaria a foto de todo mundo com o mesmo genótipo) — por
    * isso `remove()` só é alcançável daqui (`regenerateOwned`, privado),
-   * depois que dono/fundador já foi checado. Nem `generateForSpecimen` nem
-   * `previewImage` (preview de cruzamento) chamam `remove()` — GARANTIDO
-   * pelo tipo: são os únicos métodos públicos que geram imagem além deste,
-   * e nenhum dos dois recebe/usa `force` pra apagar nada.
+   * depois que dono/fundador já foi checado. `generateForSpecimen` nunca
+   * chama `remove()` — GARANTIDO pelo tipo: não recebe/usa `force`.
    */
   async generate(specimenId: string, payerId: string, tier: Tier, force = false, skipQuota = false): Promise<ImageResult> {
     const s = await this.repo.get(specimenId);
@@ -93,10 +91,9 @@ export class ImageService {
 
   /**
    * Gera (ou devolve do cache) SEM NUNCA apagar nada — 1ª geração de um
-   * espécime real (via `generate`, acesso já checado) ou preview de
-   * cruzamento (via `previewImage`, sem dono/checagem, sempre livre pra
-   * gerar mas nunca pra apagar). `payerId` é SEMPRE quem paga a cota/crédito
-   * — nunca `s.ownerId`.
+   * espécime real (via `generate`, acesso já checado), ou o retrato
+   * incluído no cruzamento (via `CrossService`, fire-and-forget, ADR-0019).
+   * `payerId` é SEMPRE quem paga a cota/crédito — nunca `s.ownerId`.
    */
   async generateForSpecimen(s: StoredSpecimen, payerId: string, tier: Tier, skipQuota = false): Promise<ImageResult> {
     const cacheKey = cacheKeyOf(s);
@@ -105,20 +102,6 @@ export class ImageService {
     // Rever imagem já gerada é GRÁTIS (não consome cota) — e nunca apaga.
     if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), model: "cache", cached: true, prompt };
     return this.chargeAndGenerate(s, cacheKey, prompt, payerId, tier, skipQuota);
-  }
-
-  /**
-   * Preview de cruzamento (não persistido, sem dono real) — MESMA regra
-   * "nunca apaga" de `generateForSpecimen` (reusa o método por baixo). O
-   * `force` do pedido de preview é IGNORADO de propósito: cacheKey é só
-   * genótipo+pack+sexo, compartilhado por qualquer espécime igual (inclusive
-   * fundador) — apagar aqui era exatamente o buraco original (qualquer
-   * usuário apagava/trocava um retrato compartilhado pelo ↻ da prévia).
-   * Havendo imagem, devolve a existente (versionada), sem gastar cota, sem
-   * erro; não havendo, gera normalmente — igual com ou sem `force`.
-   */
-  async previewImage(s: StoredSpecimen, payerId: string, tier: Tier, skipQuota = false): Promise<ImageResult> {
-    return this.generateForSpecimen(s, payerId, tier, skipQuota);
   }
 
   /**
