@@ -24,9 +24,10 @@ export interface ImageResult { cacheKey: string; status: string; imageUrl: strin
  * espécimes "preview" não persistidos (ver preview.controller.ts). Passa
  * `s.sex` pro cálculo — sem isso, `leao` e `leao-femea` cairiam na MESMA
  * chave e a leoa herdaria o retrato COM juba do macho (achado que originou
- * esta correção).
+ * esta correção). Exportado pra quem precisa da MESMA cacheKey sem duplicar
+ * a fórmula (ex.: regenerate-founders.ts, admin).
  */
-function cacheKeyOf(s: StoredSpecimen): string {
+export function cacheKeyOf(s: StoredSpecimen): string {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
   return s.cacheKey ?? computeCacheKey(s.genotype, pack, s.sex ?? undefined);
 }
@@ -121,9 +122,32 @@ export class ImageService {
   }
 
   /**
+   * ADMIN: regenera o retrato de um FUNDADOR, apagando o anterior — método
+   * PÚBLICO específico (não expõe `regenerateOwned`, que é de usuário dono de
+   * espécime real) usado SÓ pelo script `regenerate-founders.ts`; nenhuma
+   * rota HTTP chama isto. `generate()` continua bloqueando fundador pra
+   * usuários comuns (403 "Retratos de fundador não podem ser regenerados.",
+   * 16/09) — este método é o caminho de administração pra quando isso
+   * precisa ser revertido de propósito. Só aceita `method === "FOUNDER"`;
+   * qualquer outro espécime é rejeitado, sem apagar nada.
+   */
+  async regenerateFounderAdmin(s: StoredSpecimen, tier: Tier): Promise<ImageResult> {
+    if (s.method !== "FOUNDER") {
+      throw new ForbiddenException(`regenerateFounderAdmin: "${s.id}" não é fundador (method="${s.method}").`);
+    }
+    const cacheKey = cacheKeyOf(s);
+    const prompt = buildPrompt(s);
+    await remove(cacheKey);
+    // skipQuota=true sempre — regeneração de fundador por admin não é cota de ninguém.
+    return this.chargeAndGenerate(s, cacheKey, prompt, s.ownerId, tier, true);
+  }
+
+  /**
    * REGENERA um espécime REAL apagando a imagem anterior — só chamado por
    * `generate()`, depois que dono (ou 404 antes) e "não é fundador" (ou 403
-   * antes) já foram garantidos. Único método do serviço que chama `remove()`.
+   * antes) já foram garantidos. Único método PRIVADO (via `generate()`) que
+   * chama `remove()`; `regenerateFounderAdmin` acima é o outro, público e
+   * restrito a fundador.
    *
    * LIMITAÇÃO CONHECIDA (reportada, não resolvida aqui): cacheKey é só
    * genótipo+pack+sexo — regenerar o retrato do PRÓPRIO espécime ainda troca
