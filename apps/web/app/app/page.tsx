@@ -4,10 +4,11 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { listSpecimens, postCross, type ApiSpecimen } from "../../lib/api";
 import { compatibility } from "../../lib/lab";
-import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getMyTier, classifyCross, type OffspringOption, type CrossClassification } from "../../lib/api";
+import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getMyTier, classifyCross, type OffspringOption, type CrossClassification, type MyTier } from "../../lib/api";
 import { PhenotypeSelector } from "../../components/PhenotypeSelector";
 import { displayName } from "../../lib/display";
 import { methodLabel } from "../../lib/method-label";
+import { crossQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
 import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
@@ -26,9 +27,10 @@ function LabInner() {
   const [freezeMsg, setFreezeMsg] = useState<string | null>(null);
   const [freezeRest, setFreezeRest] = useState(true);
   const [describeMode, setDescribeMode] = useState(false);
+  const [myTier, setMyTier] = useState<MyTier | null>(null);
   const [classification, setClassification] = useState<CrossClassification | null>(null);
   // Tier efetivo (TierService, via /api/v1/me/tier) — nunca mais de um seletor local.
-  useEffect(() => { getMyTier().then((t) => setDescribeMode(t.tier === "FREE")).catch(() => {}); }, []);
+  useEffect(() => { getMyTier().then((t) => { setDescribeMode(t.tier === "FREE"); setMyTier(t); }).catch(() => {}); }, []);
   const [specimens, setSpecimens] = useState<ApiSpecimen[]>([]);
   const [sireId, setSireId] = useState("");
   const [damId, setDamId] = useState("");
@@ -229,6 +231,14 @@ function LabInner() {
         {loading ? "Sintetizando…" : canChoose && choiceKey ? "Sintetizar fenótipo escolhido" : "Sintetizar genoma"}
         {compatible && <span className="font-mono text-sm opacity-80">🌿 25.000 · ⬢ 750</span>}
       </button>
+      {myTier && (
+        <p className="mt-2 text-center text-[0.7rem] text-ink-muted">
+          {crossQuotaLabel(myTier.crossQuota)}
+          {myTier.crossQuota.nextAvailableAt && myTier.crossQuota.used >= myTier.crossQuota.limit && (
+            <span className="text-amber"> · {nextAvailableLabel(myTier.crossQuota.nextAvailableAt)}</span>
+          )}
+        </p>
+      )}
       {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
 
 

@@ -7,6 +7,7 @@
  */
 
 import type { Genotype } from "@genbreedai/shared";
+import { nextAvailableLabel } from "./quota-format";
 
 export type PackId = "feline" | "canine" | "saurian";
 
@@ -29,6 +30,8 @@ export interface ApiSpecimen {
   sex: "M" | "F" | null;
   fertility: number | null;
   haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
+  /** ADR-0019: retrato incluído no cruzamento ainda não usado (todo espécime nascido de cruzamento nasce com isto true). */
+  includedPortrait?: boolean;
 }
 
 export interface CrossResponse {
@@ -114,8 +117,15 @@ export async function postCross(input: {
     body: JSON.stringify(input),
   });
   if (!res.ok) {
-    const fallback = res.status === 429 ? "Cota diária de cruzamentos esgotada para este tier." : `Cruzamento falhou (${res.status}).`;
-    throw await apiErrorFrom(res, fallback);
+    if (res.status === 429) {
+      // ADR-0019: a API devolve nextAvailableAt (ISO) — "Próximo cruzamento
+      // em <data e hora local>", nunca um texto fixo de "cota diária" (a
+      // janela agora pode ser rolling7d OU day, conforme o tier).
+      const body = await res.json().catch(() => null) as { message?: string; nextAvailableAt?: string | null } | null;
+      const when = body?.nextAvailableAt ? nextAvailableLabel(body.nextAvailableAt) : null;
+      throw new ApiError(429, when ?? body?.message ?? "Cota de cruzamentos esgotada.");
+    }
+    throw await apiErrorFrom(res, `Cruzamento falhou (${res.status}).`);
   }
   return res.json();
 }
@@ -306,7 +316,14 @@ export async function subscribeToPlan(tier: Exclude<Tier, "FREE">, interval: "mo
   return res.json();
 }
 
-export interface MyTier { tier: Tier; dailyCrosses: number; monthlyImages: number; }
+export interface CrossQuotaInfo {
+  limit: number;
+  window: "rolling7d" | "day";
+  used: number;
+  /** null = tem cota agora; senão, instante ISO em que volta a ter (ADR-0019). */
+  nextAvailableAt: string | null;
+}
+export interface MyTier { tier: Tier; crossQuota: CrossQuotaInfo; monthlyExtraImages: number; weeklyBonus: boolean; }
 /**
  * Tier EFETIVO do usuário logado (GET /api/v1/me/tier) — TierService.resolve()
  * no backend (assinatura → concessão em granted_tiers → FREE). Única fonte de

@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack } from "../../../lib/api";
+import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack, type MyTier } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
+import { crossQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
 
 const TIER_NAME: Record<Tier, string> = {
   FREE: "FREEBREEDER",
@@ -16,10 +17,10 @@ const TIER_NAME: Record<Tier, string> = {
 export default function ProfilePage() {
   const [items, setItems] = useState<ApiSpecimen[]>([]);
   // Tier efetivo (nome + limites) vem só de GET /api/v1/me/tier (TierService no
-  // backend). Nunca mais de um seletor local — dailyCrosses/imgsMonth ficam
-  // null até a resposta chegar (evita mostrar "FREE" errado por 1 instante).
+  // backend, ADR-0019). Nunca mais de um seletor local — myTier fica null até
+  // a resposta chegar (evita mostrar "FREE" errado por 1 instante).
   const [tier, setTierState] = useState<Tier>("FREE");
-  const [tierLimits, setTierLimits] = useState<{ dailyCrosses: number; imgsMonth: number } | null>(null);
+  const [myTier, setMyTier] = useState<MyTier | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [imgQuota, setImgQuota] = useState<ImageQuota | null>(null);
   const [ref, setRef] = useState<Referral | null>(null);
@@ -33,7 +34,7 @@ export default function ProfilePage() {
     // JWT nem de /billing/subscription sozinho, que só enxerga Stripe e por
     // isso mostraria FREE pra quem tem PHD concedido fora do Stripe.
     getMyTier()
-      .then((t) => { setTierState(t.tier); setTierLimits({ dailyCrosses: t.dailyCrosses, imgsMonth: t.monthlyImages }); })
+      .then((t) => { setTierState(t.tier); setMyTier(t); })
       .catch(() => setTierState("FREE"));
     getWallet().then(setWallet).catch(() => {});
     getImageQuota().then(setImgQuota).catch(() => {});
@@ -93,8 +94,13 @@ export default function ProfilePage() {
         <div className="flex-1">
           <div className="font-display text-lg font-bold uppercase text-ink">{getUser()?.name || getUser()?.email || "Criador"}</div>
           <div className="text-sm text-purple">{TIER_NAME[tier] ?? TIER_NAME.FREE}</div>
-          {tierLimits && (
-            <div className="mt-1 text-xs text-ink-muted">{tierLimits.dailyCrosses} cruzamentos/dia · {tierLimits.imgsMonth} imagens IA/mês</div>
+          {myTier && (
+            <div className="mt-1 text-xs text-ink-muted">
+              {crossQuotaLabel(myTier.crossQuota)} · {myTier.monthlyExtraImages} retratos extras/mês
+              {myTier.crossQuota.nextAvailableAt && myTier.crossQuota.used >= myTier.crossQuota.limit && (
+                <div className="mt-0.5 text-amber">{nextAvailableLabel(myTier.crossQuota.nextAvailableAt)}</div>
+              )}
+            </div>
           )}
         </div>
         {tier !== "PHD" && (
@@ -124,9 +130,12 @@ export default function ProfilePage() {
           <button onClick={coletar} className="w-full rounded-lg bg-ok py-2.5 font-display text-sm font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110">
             ☀ Coletar recompensa diária
           </button>
-          <button onClick={coletarSemanal} className="mt-2 w-full rounded-lg border border-purple/40 py-2 font-display text-xs uppercase text-purple transition hover:bg-purple/10">
-            🖼 Coletar imagem semanal (+1 crédito)
-          </button>
+          {/* ADR-0019: bônus semanal só a partir do Junior. */}
+          {myTier?.weeklyBonus && (
+            <button onClick={coletarSemanal} className="mt-2 w-full rounded-lg border border-purple/40 py-2 font-display text-xs uppercase text-purple transition hover:bg-purple/10">
+              🖼 Coletar imagem semanal (+1 crédito)
+            </button>
+          )}
           {wallet.imageCredits !== undefined && <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos de imagem: {wallet.imageCredits ?? 0}</div>}
           {dailyMsg && <p className="mt-2 text-center text-xs text-cyan">{dailyMsg}</p>}
           {imgQuota && (

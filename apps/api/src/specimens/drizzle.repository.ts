@@ -4,7 +4,7 @@
  * ou PGlite nos testes). O mesmo código de query roda nos dois. Ver ADR-0006.
  */
 
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { Pedigree } from "@genbreedai/engine";
 import {
@@ -43,6 +43,7 @@ function toStored(r: Row): StoredSpecimen {
     sex: (r.sex as StoredSpecimen["sex"]) ?? null,
     fertility: r.fertility ?? null,
     haldaneStatus: (r.haldaneStatus as StoredSpecimen["haldaneStatus"]) ?? null,
+    includedPortrait: r.includedPortrait ?? false,
   };
 }
 
@@ -90,6 +91,7 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
       sex: specimen.sex ?? null,
       fertility: specimen.fertility ?? null,
       haldaneStatus: specimen.haldaneStatus ?? null,
+      includedPortrait: specimen.includedPortrait ?? false,
     };
     await this.db
       .insert(specimens)
@@ -99,9 +101,27 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
         set: {
           status: row.status, cacheKey: row.cacheKey, phenotype: row.phenotype,
           sex: row.sex, fertility: row.fertility, haldaneStatus: row.haldaneStatus,
+          // includedPortrait de PROPÓSITO fora deste set: só muda via
+          // claimIncludedPortrait (atômico) — um save() por outro motivo
+          // nunca deve devolver o "vale" de retrato de graça.
         },
       });
     return { ...specimen, id };
+  }
+
+  /**
+   * Reivindica o retrato incluído (ADR-0019) — UPDATE...WHERE...RETURNING
+   * atômico de verdade no Postgres (não depende de single-thread como o
+   * adapter in-memory): só afeta a linha se `included_portrait` ainda for
+   * true, e a MESMA query já grava false.
+   */
+  async claimIncludedPortrait(id: string): Promise<StoredSpecimen | null> {
+    const rows: Row[] = await this.db
+      .update(specimens)
+      .set({ includedPortrait: false })
+      .where(and(eq(specimens.id, id), eq(specimens.includedPortrait, true)))
+      .returning();
+    return rows[0] ? toStored(rows[0]) : null;
   }
 
   /** Caminha ancestrais em lotes (BFS) até estabilizar o pedigree. */

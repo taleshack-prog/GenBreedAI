@@ -1,5 +1,5 @@
 /**
- * Imagens do espécime (TDD §5 / §8-ampliado).
+ * Imagens do espécime (TDD §5 / §8-ampliado; ADR-0019 — retrato incluído).
  *  POST /api/v1/specimens/:id/image  → gera (ou retorna cache).
  *  GET  /api/v1/specimens/:id/image  → status/url do cache.
  */
@@ -17,7 +17,17 @@ export class ImageController {
   @UseGuards(AuthGuard)
   async create(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string, @Body() body: { force?: boolean }) {
     const tier = await this.tier.resolve(user.id, user.tier);
-    return this.images.generate(id, user.id, tier, body?.force === true);
+    const force = body?.force === true;
+    // Retrato incluído no cruzamento (ADR-0019): só quando NÃO é force
+    // (regenerar nunca usa o retrato incluído — item explícito da regra) e
+    // o espécime é do usuário (claimIncludedPortrait já checa isso; nunca
+    // bate pra fundador, que é sempre dono "demo"). Reivindicação atômica —
+    // se `null`, cai pra regra normal (cota mensal → crédito → 403).
+    if (!force) {
+      const claimed = await this.images.claimIncludedPortrait(id, user.id);
+      if (claimed) return this.images.generateForSpecimen(claimed, user.id, tier, true);
+    }
+    return this.images.generate(id, user.id, tier, force);
   }
 
   @Get()

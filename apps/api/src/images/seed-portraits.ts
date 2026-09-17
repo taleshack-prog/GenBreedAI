@@ -16,7 +16,7 @@ async function main() {
   const repo = new InMemorySpecimenRepository();
   const svc = new ImageService(repo, new ImageJobRepository(), new ImageQuotaService(), new WalletService(new InMemoryWalletRepository()));
   const ids = founderSeeds().map((f) => f.id);
-  console.log(`Gerando ${ids.length} retratos via fal.ai (${process.env.FAL_MODEL ?? "fal-ai/flux/dev"})…`);
+  console.log(`Gerando ${ids.length} retratos via fal.ai (${process.env.FAL_MODEL ?? "fal-ai/flux-2-pro"})…`);
   for (const id of ids) {
     try {
       const r = await svc.generate(id, "demo", "PHD", false, true); // seed ignora cota; payerId "demo" (dono dos fundadores)

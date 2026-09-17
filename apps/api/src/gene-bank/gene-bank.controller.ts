@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { TierService } from "../billing/tier.service";
+import { tierPolicy } from "../common/tiers";
 import { GeneBankService } from "./gene-bank.service";
 import { WalletService } from "../economy/wallet.service";
 import type { CrossDto } from "../cross/dto/cross.dto";
@@ -22,9 +23,16 @@ export class GeneBankController {
     return this.wallet.claimDaily(user.id, tier);
   }
 
+  /** ADR-0019: bônus semanal só a partir do Junior (FREE não tem). */
   @Post("wallet/weekly")
   @UseGuards(AuthGuard)
-  claimWeekly(@CurrentUser() user: AuthenticatedUser) { return this.wallet.claimWeekly(user.id); }
+  async claimWeekly(@CurrentUser() user: AuthenticatedUser) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    if (!tierPolicy(tier).weeklyBonus) {
+      throw new ForbiddenException("Bônus semanal disponível a partir do plano Junior.");
+    }
+    return this.wallet.claimWeekly(user.id);
+  }
 
   @Post("gene-bank/freeze-option")
   @UseGuards(AuthGuard)

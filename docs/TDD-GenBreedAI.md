@@ -357,14 +357,16 @@ $$\text{provenanceHash} = \text{SHA-256}(\text{genotypeJSON} + \text{pedigreeTre
 
 A matriz de monetização é estruturada para monetizar capacidade de processamento, amplitude de conteúdo taxonômico e ferramentas de visualização analítica, blindando o ecossistema contra dinâmicas de Pay-to-Win.
 
-> Cota de imagens IA/mês: o código (`apps/api/src/common/tiers.ts`, `TIER_POLICIES`) é a referência desde 16/09/2026 — a coluna abaixo foi corrigida pra bater com ele.
+> Cota de cruzamentos e imagens: o código (`apps/api/src/common/tiers.ts`, `TIER_POLICIES`) é a referência desde 17/09/2026 (ADR-0019) — a tabela abaixo reflete `crossQuota`, `monthlyExtraImages` e `weeklyBonus`. Desde a ADR-0019, **todo cruzamento em qualquer tier já inclui 1 retrato de IA sem custo** (`specimens.includedPortrait`, consumido pelo próprio fluxo de síntese); a coluna "Imagens IA / Mês" abaixo só conta retratos **extras** (prévia de fenótipo, regeneração) além desse retrato incluído — esses, sim, consomem a cota mensal e, esgotada, créditos avulsos. A cota de cruzamentos passou de um contador diário em memória (zerava a cada deploy) para reservas persistidas em `cross_reservations`, com janela **móvel de 7 dias** (FREE/JUNIOR) ou **dia civil em America/Sao_Paulo** (SENIOR/PHD).
 
-| **Tier de Acesso** | **Pool Taxonômico Disponível** | **Cota de Cruzamentos** | **Imagens IA / Mês** | **Ferramentas Analíticas e Recursos** | **Preço Mensal** |
-| --- | --- | --- | --- | --- | --- |
-| Freebreeder | Gatos domésticos — Felis catus (DOMESTIC_CAT), apenas intraespécie (ADR-0016) | 1 cruzamento / dia (+1 evento semanal de hibridação) | 0 imagens premium / mês | Visualizador de genoma básico, streak diário, renderização procedural ilimitada. | `R$ 0,00` |
-| Junior Breeder | + Felinos selvagens (WILD_FELINE — onça, leão, tigre, serval etc.) e cruzamentos interespecíficos entre felinos (ADR-0016) | 3 cruzamentos / dia | 10 imagens premium / mês | Bio-filtros de alelos, árvore genealógica de 3 gerações, remoção de anúncios. | `R$ 19,90` |
-| Senior Breeder | + Caninos (DOG) — todas as raças do catálogo atual (ADR-0016) | 5 cruzamentos / dia | 20 imagens premium / mês | Mapeamento cromossômico completo, árvore genealógica de 7 gerações, simulador preditivo de Punnett avançado. | `R$ 39,90` |
-| PhD Breeder | Mesmo pool do Senior — "grandes animais" (bovinos, equinos, suínos, ovinos) ainda não têm fundador nem poolGroup cadastrado no catálogo (ADR-0016); nenhuma espécie adicional além do Senior por ora | 10 cruzamentos / dia | 30 imagens premium / mês | Acesso ao Mercado (compra/venda), exportação 4K, ferramentas de seleção por QTL, auditoria de linhagem completa. | `R$ 89,90` |
+| **Tier de Acesso** | **Pool Taxonômico Disponível** | **Cota de Cruzamentos** | **Imagens IA / Mês** | **Bônus Semanal** | **Ferramentas Analíticas e Recursos** | **Preço Mensal** |
+| --- | --- | --- | --- | --- | --- | --- |
+| Freebreeder | Gatos domésticos — Felis catus (DOMESTIC_CAT), apenas intraespécie (ADR-0016) | 1 cruzamento a cada 7 dias (janela móvel) | Retrato incluído em todo cruzamento; 0 retratos extras/mês | Não | Visualizador de genoma básico, streak diário, renderização procedural ilimitada. | `R$ 0,00` |
+| Junior Breeder | + Felinos selvagens (WILD_FELINE — onça, leão, tigre, serval etc.) e cruzamentos interespecíficos entre felinos (ADR-0016) | 3 cruzamentos a cada 7 dias (janela móvel) | Retrato incluído em todo cruzamento; 0 retratos extras/mês | Sim | Bio-filtros de alelos, árvore genealógica de 3 gerações, remoção de anúncios. | `R$ 19,90` |
+| Senior Breeder | + Caninos (DOG) — todas as raças do catálogo atual (ADR-0016) | 1 cruzamento / dia civil (America/Sao_Paulo) | Retrato incluído em todo cruzamento; 15 retratos extras/mês | Sim | Mapeamento cromossômico completo, árvore genealógica de 7 gerações, simulador preditivo de Punnett avançado. | `R$ 39,90` |
+| PhD Breeder | Mesmo pool do Senior — "grandes animais" (bovinos, equinos, suínos, ovinos) ainda não têm fundador nem poolGroup cadastrado no catálogo (ADR-0016); nenhuma espécie adicional além do Senior por ora | 3 cruzamentos / dia civil (America/Sao_Paulo) | Retrato incluído em todo cruzamento; 20 retratos extras/mês | Sim | Acesso ao Mercado (compra/venda), exportação 4K, ferramentas de seleção por QTL, auditoria de linhagem completa. | `R$ 89,90` |
+
+Ver `docs/adr/0019-cotas-com-retrato-incluido.md` para o racional completo (retrato incluído, modelo único FLUX.2 [pro], margem de imagem-alvo ≤ 30% da receita líquida).
 
 ### SEÇÃO 7 — SISTEMAS SOCIAIS E ECONOMIA
 

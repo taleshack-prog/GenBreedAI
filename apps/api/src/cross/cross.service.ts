@@ -14,6 +14,7 @@ import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.
 import { assertTierAllows, specimenVisibleAtTier } from "../common/tier-access";
 import { classifyCross, type CrossClassification } from "@genbreedai/engine";
 import { WalletService } from "../economy/wallet.service";
+import { ImageService } from "../images/image.service";
 import type { CrossDto } from "./dto/cross.dto";
 
 /** Nome da linhagem (slugs crus). Biologia NUNCA por este valor — usar isInterspecific/biologicalComponents. */
@@ -95,7 +96,19 @@ export interface OptionsResponse {
 
 @Injectable()
 export class CrossService {
-  constructor(private readonly repo: SpecimenRepository, private readonly wallet: WalletService) {}
+  /**
+   * `images` é OPCIONAL de propósito: muitos testes existentes instanciam
+   * `new CrossService(repo, wallet)` (2 args) sem se importar com imagem —
+   * exigir `ImageService` quebraria todos eles. Em produção o Nest injeta
+   * sempre a instância real (CrossModule importa ImageModule); só quando
+   * ausente (instanciação direta em teste) o retrato incluído do cruzamento
+   * (ADR-0019) simplesmente não dispara — sem erro, sem afetar o cruzamento.
+   */
+  constructor(
+    private readonly repo: SpecimenRepository,
+    private readonly wallet: WalletService,
+    private readonly images?: ImageService,
+  ) {}
 
   private async resolve(dto: CrossDto, tier: Tier) {
     const sire = await this.repo.get(dto.sireId);
@@ -221,8 +234,25 @@ export class CrossService {
       fertility: result.specimen.fertility.score,
       haldaneStatus: result.specimen.fertility.haldaneStatus,
       phenotype: result.specimen.phenotype,
+      includedPortrait: true, // ADR-0019: todo cruzamento já inclui 1 retrato de IA, sem cota/crédito.
     });
     await this.wallet.rewardForCross(ownerId, result.specimen.aura).catch(() => {}); // fonte: fixação
+    // Retrato incluído (ADR-0019) — dispara em segundo plano, NUNCA atrasa
+    // nem desfaz o cruzamento: falha aqui só vira log (o web faz polling em
+    // /specimens/:id/image; sem imagem ainda, o usuário pode pedir de novo
+    // pelo endpoint manual, que tenta o retrato incluído de novo enquanto
+    // `includedPortrait` continuar true). `skipQuota=true` sempre — é de
+    // graça, não é a cota/crédito do usuário.
+    if (this.images) {
+      void this.images.generateForSpecimen(stored, ownerId, tier, true)
+        .then(async (r) => {
+          // Só "gasta" o retrato incluído se saiu imagem de verdade — sem
+          // FAL_KEY (modo procedural) não conta como o retrato ter sido
+          // usado, fica disponível pra quando uma geração real acontecer.
+          if (r.imageUrl) await this.repo.claimIncludedPortrait(stored.id);
+        })
+        .catch((e) => { console.error(`[cross] retrato incluído (espécime "${stored.id}") falhou:`, (e as Error).message); });
+    }
     return { specimen: stored, cacheKey: result.cacheKey, engine: result.specimen };
   }
 }

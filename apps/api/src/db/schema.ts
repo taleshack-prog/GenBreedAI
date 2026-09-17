@@ -63,6 +63,18 @@ export const specimens = pgTable("specimens", {
   sex: text("sex"), // "M" | "F" | null — legado fica NULL até migração de dados explícita
   fertility: doublePrecision("fertility"), // 0–100 | null — idem
   haldaneStatus: text("haldane_status"), // "NONE" | "STERILE" | "REDUCED" | null — idem
+  /**
+   * ADR-0019: todo espécime nascido de cruzamento já tem direito a UM
+   * retrato de IA sem custo (nem cota, nem crédito) — este campo é esse
+   * "vale" ainda não usado. `true` só na criação via cruzamento (nunca em
+   * fundador); vira `false` no primeiro retrato gerado (automático após o
+   * cruzamento OU o 1º pedido manual, o que vier primeiro) — sempre por
+   * `UPDATE ... WHERE included_portrait = true RETURNING` (atômico, nunca
+   * concede duas vezes). Legado (pré-ADR-0019): `false` por padrão — nunca
+   * inventa um retrato de graça que a linha não tinha antes desta coluna
+   * existir.
+   */
+  includedPortrait: boolean("included_portrait").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   sexCheck: check("specimens_sex_check", sql`${t.sex} IS NULL OR ${t.sex} IN ('M','F')`),
@@ -83,10 +95,32 @@ export const crosses = pgTable("crosses", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Reservas de cota de cruzamento (ADR-0019) — persistidas pra não zerar a
+ * cada deploy (o contador antigo era 100% em memória). `RESERVED` = criada
+ * pelo QuotaGuard antes do motor rodar; `CONFIRMED` = cruzamento concluiu
+ * com sucesso (nunca mais expira). Falha no cruzamento → a linha é
+ * APAGADA (estorno), nunca fica como `RESERVED` órfã. `RESERVED` com mais
+ * de 10 minutos (processo morto entre reservar e confirmar/apagar) não
+ * conta pra ninguém — checado por `created_at` na hora de contar, nunca por
+ * um job de limpeza (nenhuma linha "errada" precisa ser apagada por
+ * segundo processo; só deixa de ser CONTADA).
+ */
+export const crossReservations = pgTable("cross_reservations", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  status: text("status").notNull(), // "RESERVED" | "CONFIRMED"
+}, (t) => ({
+  statusCheck: check("cross_reservations_status_check", sql`${t.status} IN ('RESERVED','CONFIRMED')`),
+  ownerCreatedIdx: index("cross_reservations_owner_created_idx").on(t.ownerId, t.createdAt),
+}));
+
 export type DbSchema = {
   users: typeof users;
   specimens: typeof specimens;
   crosses: typeof crosses;
+  crossReservations: typeof crossReservations;
 };
 
 /** Carteira de recursos por usuário (economia — TDD §7). */

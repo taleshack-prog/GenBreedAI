@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { listSpecimens, generateImage, type ApiSpecimen } from "../../../../lib/api";
+import { listSpecimens, generateImage, getImage, type ApiSpecimen } from "../../../../lib/api";
 import { CapsuleCard } from "../../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../../components/Genome";
 import { rarityOf, phenotypeOf } from "../../../../lib/reveal";
@@ -37,12 +37,52 @@ export default function RevealPage() {
   const [imgMsg, setImgMsg] = useState<string | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // ADR-0019: todo cruzamento já inclui 1 retrato (specimen.includedPortrait),
+  // gerado em segundo plano pelo próprio CrossService — aqui só consultamos
+  // (getImage, sem cobrar nada) até 60s; depois disso, o botão manual assume,
+  // ainda de graça (generateImage sem force usa o retrato incluído se ele
+  // continuar disponível — a mesma regra do endpoint POST .../image).
+  const [polling, setPolling] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
 
   useEffect(() => { listSpecimens().then(setAll).catch((e) => setErr(e.message)); }, []);
 
   const specimen = useMemo(() => all.find((s) => s.id === params.id) ?? null, [all, params.id]);
   const sire = useMemo(() => (specimen ? all.find((s) => s.id === specimen.sireId) ?? null : null), [all, specimen]);
   const dam = useMemo(() => (specimen ? all.find((s) => s.id === specimen.damId) ?? null : null), [all, specimen]);
+
+  useEffect(() => {
+    if (!specimen) return;
+    if (specimen.imageUrl || imgUrl) return; // já tem retrato — nada a consultar
+    if (specimen.includedPortrait !== true) return; // sem retrato incluído pendente
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20; // 20 × 3s = 60s
+    setPolling(true);
+    setPollTimedOut(false);
+    const id = setInterval(async () => {
+      attempts += 1;
+      try {
+        const r = await getImage(specimen.id);
+        if (cancelled) return;
+        if (r?.imageUrl) {
+          setImgUrl(r.imageUrl);
+          setPolling(false);
+          clearInterval(id);
+          return;
+        }
+      } catch {
+        // ainda gerando (ou 404 momentâneo) — mantém o polling silencioso
+      }
+      if (attempts >= MAX_ATTEMPTS) {
+        setPolling(false);
+        setPollTimedOut(true);
+        clearInterval(id);
+      }
+    }, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specimen?.id, specimen?.imageUrl, specimen?.includedPortrait, imgUrl]);
 
   if (err) return <main className="mx-auto max-w-xl px-4 pb-28 pt-10"><div className="rounded-card border border-crit/40 bg-crit/10 p-4 text-sm text-crit">{err}</div></main>;
   // A espécie ainda não é conhecida aqui (specimen null) — sem como saber se é "híbrido" ou "filhote".
@@ -93,19 +133,25 @@ export default function RevealPage() {
 
       {/* Ações */}
       <div className="mt-5 space-y-3">
-        <button
-          onClick={async () => {
-            setImgLoading(true); setImgMsg(null);
-            try {
-              const r = await generateImage(specimen.id);
-              if (r.imageUrl) { setImgUrl(r.imageUrl); setImgMsg(`Retrato gerado (${r.model}).`); }
-              else setImgMsg("Modo procedural ativo. Defina FAL_KEY no .env da API para retratos fotorrealistas (fal.ai / FLUX).");
-            } catch (e) { setImgMsg((e as Error).message); } finally { setImgLoading(false); }
-          }}
-          disabled={imgLoading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan transition hover:bg-cyan/10 disabled:opacity-60">
-          {imgLoading ? "Gerando retrato…" : "◈ Gerar Retrato IA (fal.ai / FLUX)"}
-        </button>
+        {polling ? (
+          <div className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan opacity-80">
+            ◈ Gerando retrato…
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              setImgLoading(true); setImgMsg(null);
+              try {
+                const r = await generateImage(specimen.id);
+                if (r.imageUrl) { setImgUrl(r.imageUrl); setImgMsg(`Retrato gerado (${r.model}).`); setPollTimedOut(false); }
+                else setImgMsg("Modo procedural ativo. Defina FAL_KEY no .env da API para retratos fotorrealistas (fal.ai / FLUX).");
+              } catch (e) { setImgMsg((e as Error).message); } finally { setImgLoading(false); }
+            }}
+            disabled={imgLoading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-cyan/40 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan transition hover:bg-cyan/10 disabled:opacity-60">
+            {imgLoading ? "Gerando retrato…" : pollTimedOut ? "Gerar retrato" : "◈ Gerar Retrato IA (fal.ai / FLUX)"}
+          </button>
+        )}
         {imgMsg && <p className="text-center text-xs text-ink-muted">{imgMsg}</p>}
         <button
           onClick={() => {

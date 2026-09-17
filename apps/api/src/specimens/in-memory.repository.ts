@@ -35,6 +35,15 @@ export interface StoredSpecimen {
   fertility: number | null;
   /** Estado de Haldane (ADR-0015) — tipo derivado de FertilityResult, não duplicado. `null` = legado. */
   haldaneStatus: FertilityResult["haldaneStatus"] | null;
+  /**
+   * Retrato incluído no cruzamento ainda não usado (ADR-0019). OPCIONAL —
+   * ausente/undefined é tratado como `false` em todo ponto de leitura
+   * (`=== true`, nunca truthy-check solto), pra não exigir atualizar todo
+   * literal de `StoredSpecimen` já existente (fundadores, fixtures de
+   * teste, preview) só por causa deste campo novo. `true` só quando
+   * `CrossService.execute()` cria o espécime; nunca em fundador.
+   */
+  includedPortrait?: boolean;
 }
 
 export abstract class SpecimenRepository {
@@ -43,6 +52,14 @@ export abstract class SpecimenRepository {
   abstract save(specimen: StoredSpecimen): Promise<StoredSpecimen>;
   /** Monta o pedigree (ancestrais) necessário para o F de Wright. */
   abstract buildPedigree(ids: string[]): Promise<Pedigree>;
+  /**
+   * Reivindica o retrato incluído (ADR-0019) — atômico: só some se
+   * `includedPortrait` ainda for `true`, e a MESMA chamada já vira `false`;
+   * devolve o espécime atualizado, ou `null` se não havia retrato incluído
+   * disponível (já usado, ou nunca teve — fundador/legado). Nunca concede
+   * duas vezes, mesmo sob chamadas concorrentes.
+   */
+  abstract claimIncludedPortrait(id: string): Promise<StoredSpecimen | null>;
 }
 
 /**
@@ -141,6 +158,8 @@ export function founderSeeds(): StoredSpecimen[] {
     // fundador (não nasceram de um cruzamento) — só a migração de dados real
     // (dry-run primeiro) preencheria isso, se algum dia fizer sentido.
     sex: FOUNDER_SEX[id]!, fertility: null, haldaneStatus: null,
+    // Fundador nunca teve "cruzamento" nenhum — sem retrato incluído (ADR-0019).
+    includedPortrait: false,
   });
   const R = (x: [string,string]) => x; // helper de legibilidade
   const base: StoredSpecimen[] = [
@@ -281,6 +300,15 @@ export class InMemorySpecimenRepository extends SpecimenRepository {
     const withId = { ...specimen, id };
     this.store.set(id, withId);
     return withId;
+  }
+
+  /** Atômico (JS single-thread: sem `await` entre ler e escrever, nada mais roda no meio). */
+  async claimIncludedPortrait(id: string): Promise<StoredSpecimen | null> {
+    const s = this.store.get(id);
+    if (!s || s.includedPortrait !== true) return null;
+    const updated: StoredSpecimen = { ...s, includedPortrait: false };
+    this.store.set(id, updated);
+    return updated;
   }
 
   async buildPedigree(ids: string[]): Promise<Pedigree> {

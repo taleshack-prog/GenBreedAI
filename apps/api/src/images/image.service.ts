@@ -122,6 +122,22 @@ export class ImageService {
   }
 
   /**
+   * Reivindica o retrato INCLUÍDO no cruzamento (ADR-0019) pro dono do
+   * espécime — atômico via `repo.claimIncludedPortrait` (UPDATE...WHERE
+   * included_portrait=true RETURNING); `null` se o espécime não existe, não
+   * é do usuário (fundador nunca tem retrato incluído — dono é sempre
+   * "demo", nunca bate com um userId real) ou o retrato incluído já foi
+   * usado. Chamador decide o que fazer no `null` (cai pra regra normal de
+   * cota/crédito). NUNCA chamado com `force=true` — regenerar não usa o
+   * retrato incluído (ImageController garante isso).
+   */
+  async claimIncludedPortrait(specimenId: string, userId: string): Promise<StoredSpecimen | null> {
+    const s = await this.repo.get(specimenId);
+    if (!s || s.ownerId !== userId) return null;
+    return this.repo.claimIncludedPortrait(specimenId);
+  }
+
+  /**
    * ADMIN: regenera o retrato de um FUNDADOR, apagando o anterior — método
    * PÚBLICO específico (não expõe `regenerateOwned`, que é de usuário dono de
    * espécime real) usado SÓ pelo script `regenerate-founders.ts`; nenhuma

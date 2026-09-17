@@ -4,6 +4,7 @@ import { SubscriptionsRepository, InMemorySubscriptionsRepository, DrizzleSubscr
 import { GrantedTiersRepository, InMemoryGrantedTiersRepository, DrizzleGrantedTiersRepository } from "./granted-tiers.repository";
 import { TierService } from "./tier.service";
 import { MeController } from "./me.controller";
+import { QuotaModule } from "../quota/quota.module";
 
 const subscriptionsRepositoryProvider = {
   provide: SubscriptionsRepository,
@@ -31,6 +32,7 @@ const grantedTiersRepositoryProvider = {
  * ganhar acesso sem import extra.
  */
 @Module({
+  imports: [QuotaModule], // MeController usa QuotaService pra devolver crossQuota (ADR-0019)
   controllers: [MeController],
   providers: [TierService, subscriptionsRepositoryProvider, grantedTiersRepositoryProvider],
   exports: [TierService, SubscriptionsRepository, GrantedTiersRepository],

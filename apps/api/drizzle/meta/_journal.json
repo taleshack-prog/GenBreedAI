@@ -57,6 +57,13 @@
       "when": 1789517470574,
       "tag": "0007_flawless_tiger_shark",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789660020376,
+      "tag": "0008_brave_prima",
+      "breakpoints": true
     }
   ]
 }

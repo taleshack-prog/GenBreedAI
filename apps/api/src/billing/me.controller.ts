@@ -8,16 +8,31 @@ import { Controller, Get, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { TierService } from "./tier.service";
 import { tierPolicy } from "../common/tiers";
+import { QuotaService } from "../quota/quota.service";
 
 @Controller("api/v1/me")
 export class MeController {
-  constructor(private readonly tierService: TierService) {}
+  constructor(private readonly tierService: TierService, private readonly quota: QuotaService) {}
 
   @Get("tier")
   @UseGuards(AuthGuard)
   async tier(@CurrentUser() user: AuthenticatedUser) {
     const tier = await this.tierService.resolve(user.id, user.tier);
     const policy = tierPolicy(tier);
-    return { tier, dailyCrosses: policy.dailyCrosses, monthlyImages: policy.monthlyPremiumImages };
+    const [used, nextAvailableAt] = await Promise.all([
+      this.quota.used(user.id, policy.crossQuota),
+      this.quota.nextAvailableAt(user.id, policy.crossQuota),
+    ]);
+    return {
+      tier,
+      crossQuota: {
+        limit: policy.crossQuota.limit,
+        window: policy.crossQuota.window,
+        used,
+        nextAvailableAt: nextAvailableAt ? nextAvailableAt.toISOString() : null,
+      },
+      monthlyExtraImages: policy.monthlyExtraImages,
+      weeklyBonus: policy.weeklyBonus,
+    };
   }
 }

@@ -1,41 +1,32 @@
 import { Module } from "@nestjs/common";
 import { EconomyModule } from "../economy/economy.module";
 import { TierModule } from "../billing/tier.module";
+import { SpecimensModule } from "../specimens/specimens.module";
+import { ImageModule } from "../images/image.module";
+import { QuotaModule } from "../quota/quota.module";
 import { CrossController } from "./cross.controller";
 import { SpecimensController } from "../specimens/specimens.controller";
+import { PreviewController } from "../images/preview.controller";
 import { CrossService } from "./cross.service";
-import { QuotaService } from "../quota/quota.service";
-import {
-  SpecimenRepository,
-  InMemorySpecimenRepository,
-} from "../specimens/in-memory.repository";
-import { DrizzleSpecimenRepository } from "../specimens/drizzle.repository";
-import { createDb } from "../db/client";
 
 /**
- * Seleção de adapter de persistência:
- *  - DATABASE_URL definido  → DrizzleSpecimenRepository (Postgres/Neon)
- *  - caso contrário          → InMemorySpecimenRepository (dev/testes sem DB)
- * O serviço e o controller não mudam — trocamos apenas o provider (ADR-0005/0006).
+ * `SpecimenRepository` agora vem de `SpecimensModule` (não mais provido
+ * aqui) — ver o comentário desse módulo sobre o ciclo que isso evitava.
+ * `PreviewController` (rota `/cross/preview`) mudou de `ImageModule` pra cá:
+ * ele já dependia de `CrossService`; ficar em `CrossModule` (que agora
+ * também importa `ImageModule` pra ganhar `ImageService`) evita o mesmo
+ * ciclo pelo lado do preview. `QuotaService` mudou pra `QuotaModule` (mesmo
+ * motivo: `TierModule` também precisa dele, em `MeController`, e importar
+ * `CrossModule` de dentro de `TierModule` seria outro ciclo).
  */
-const specimenRepositoryProvider = {
-  provide: SpecimenRepository,
-  useFactory: (): SpecimenRepository => {
-    const url = process.env.DATABASE_URL;
-    if (url && url.length > 0) {
-      const { db } = createDb(url);
-      return new DrizzleSpecimenRepository(db);
-    }
-    return new InMemorySpecimenRepository();
-  },
-};
-
 @Module({
-  imports: [EconomyModule, TierModule],
-  controllers: [CrossController, SpecimensController],
-  providers: [CrossService, QuotaService, specimenRepositoryProvider],
-  // Reexporta TierService: ImageModule/GeneBankModule/GenomeModule já importam
-  // CrossModule (por causa de SpecimenRepository) e ganham TierService de graça.
-  exports: [SpecimenRepository, QuotaService, CrossService, TierModule],
+  imports: [EconomyModule, TierModule, SpecimensModule, ImageModule, QuotaModule],
+  controllers: [CrossController, SpecimensController, PreviewController],
+  providers: [CrossService],
+  // Reexporta TierModule/SpecimensModule/QuotaModule: GeneBankModule/
+  // GenomeModule já importam CrossModule (por causa de SpecimenRepository/
+  // TierService/QuotaService) e ganham os três de graça, sem precisar mudar
+  // o import deles.
+  exports: [SpecimensModule, QuotaModule, CrossService, TierModule],
 })
 export class CrossModule {}

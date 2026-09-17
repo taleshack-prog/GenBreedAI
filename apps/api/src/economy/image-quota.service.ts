@@ -1,7 +1,9 @@
 /**
- * Cota MENSAL de imagem IA por tier (economia — protege a margem da fal.ai).
- * FREE 0 (só procedural) · JUNIOR 10 · SENIOR 20 · PHD 30. Excedeu → precisa de
- * crédito. Modelo por tier: PhD usa FLUX Pro; demais usam FLUX dev.
+ * Cota MENSAL de retratos EXTRAS de IA por tier (ADR-0019 — prévia de
+ * fenótipo + regenerar; NÃO conta o retrato que já vem incluído em todo
+ * cruzamento). FREE 0 · JUNIOR 0 (só créditos) · SENIOR 15 · PHD 20.
+ * Excedeu → precisa de crédito. Modelo: o MESMO pra todo tier — FLUX.2 [pro]
+ * (fal-ai/flux-2-pro, US$0,03/imagem 1024x1024).
  *
  * Fonte ÚNICA do número: tierPolicy() em ../common/tiers.ts (mesmos valores
  * vendidos em apps/web/lib/plans.ts) — não duplicar a tabela aqui.
@@ -13,11 +15,26 @@ import { imageQuota } from "../db/schema";
 import { createDb } from "../db/client";
 import { tierPolicy } from "../common/tiers";
 
-export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyPremiumImages ?? 0; }
+/** Cota de retratos EXTRAS (prévia/regenerar) — NÃO conta o retrato incluído no cruzamento (ADR-0019). */
+export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyExtraImages ?? 0; }
+
+// DECISÃO: todo tier usa o MESMO modelo (FLUX.2 [pro], US$0,03/imagem
+// 1024x1024) — não é mais escolhido por tier. `FAL_MODEL_PHD` não é mais
+// lido pra decidir modelo; se ainda estiver definida no ambiente, é
+// ignorada (compatibilidade) e um aviso é registrado uma vez no log (não a
+// cada chamada) pra alguém notar e remover a env.
+let warnedFalModelPhdIgnored = false;
 export function modelForTier(tier: string): string {
-  const dev = process.env.FAL_MODEL ?? "fal-ai/flux/dev";
-  // PhD usa o modelo premium só se FAL_MODEL_PHD estiver definido; senão cai no dev (evita rota inválida).
-  return tier === "PHD" ? (process.env.FAL_MODEL_PHD ?? dev) : dev;
+  void tier; // mantido no parâmetro só por compatibilidade de assinatura com os chamadores existentes.
+  if (process.env.FAL_MODEL_PHD && !warnedFalModelPhdIgnored) {
+    warnedFalModelPhdIgnored = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[image-quota] FAL_MODEL_PHD está definida mas não é mais usada — todos os tiers usam o mesmo modelo " +
+        "(FAL_MODEL, padrão fal-ai/flux-2-pro). Pode remover essa variável de ambiente.",
+    );
+  }
+  return process.env.FAL_MODEL ?? "fal-ai/flux-2-pro";
 }
 function ym(): string { return new Date().toISOString().slice(0, 7); }
 

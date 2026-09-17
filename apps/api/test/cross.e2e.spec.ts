@@ -30,7 +30,7 @@ describe("POST /api/v1/cross", () => {
   });
   it("401: sem autenticação", async () => { expect((await post(CROSS, {})).statusCode).toBe(401); });
   it("400: método inválido", async () => { expect((await post({ sireId: "onca-pintada", damId: "onca-negra", method: "XYZ" }, AUTH_PHD)).statusCode).toBe(400); });
-  it("429: FREE estoura cota (1/dia) na 2ª", async () => {
+  it("429: FREE estoura cota (1 a cada 7 dias, ADR-0019) na 2ª chamada", async () => {
     // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016), não onca-pintada/
     // onca-negra (WILD_FELINE, fora do pool FREE — dava 404 na 1ª chamada,
     // não 201). Tier e asserções inalterados.
