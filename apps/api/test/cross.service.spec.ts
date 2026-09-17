@@ -197,3 +197,42 @@ describe("classify() — correção do achado em produção (/app/reveal/[id]: '
     expect(c.kinship).toBeLessThan(0.25);
   });
 });
+
+/**
+ * BUG 1 reportado (Gene Bank): "Selecione um macho e uma fêmea férteis"
+ * pra qualquer par de fundadores — os 148 fundadores têm `fertility` NULL
+ * no banco (nunca calculada, nascem sem cruzamento). Auditoria (ver
+ * relatório da correção): `gene-bank/page.tsx:33`, `app/page.tsx:50-51`
+ * (web) e `cross.ts:123-124`/`cross.service.ts:141,146` (motor/API) JÁ
+ * tratam `fertility !== 0` corretamente (null/undefined passam — só
+ * `=== 0` explícito bloqueia). Nenhum ponto tratando NULL como estéril foi
+ * encontrado; estes testes fixam esse comportamento fim-a-fim via
+ * CrossService (equivalente ao fluxo real do Gene Bank → Laboratório →
+ * POST /cross), pra pegar qualquer regressão futura.
+ */
+describe("Gate de fertilidade — fertility NULL é fértil, só fertility===0 bloqueia (bug reportado no Gene Bank)", () => {
+  let repo: InMemorySpecimenRepository;
+  let svc: CrossService;
+  beforeEach(() => { repo = new InMemorySpecimenRepository(); svc = new CrossService(repo, new WalletService(new InMemoryWalletRepository())); });
+
+  it("par de FUNDADORES com fertility null (nunca calculada) → cruzamento PERMITIDO", async () => {
+    const onca = await repo.get("onca-pintada");
+    const negra = await repo.get("onca-negra");
+    expect(onca?.fertility).toBeNull();
+    expect(negra?.fertility).toBeNull();
+    const r = await svc.execute("demo", "JUNIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
+    expect(r.engine.phenotype.viable).toBe(true);
+  });
+
+  it("espécime com fertility===0 (estéril conhecido, ex.: macho híbrido pós-F1, ADR-0018) → cruzamento RECUSADO", async () => {
+    const onca = (await repo.get("onca-pintada"))!;
+    await repo.save({
+      id: "sire-esteril-teste", ownerId: "demo", pack: "feline", species: "panthera-onca",
+      genotype: onca.genotype, generation: 1, sireId: "onca-pintada", damId: "onca-negra", method: "F1",
+      fPedigree: 0, fixationIndex: 0, aura: 3, cacheKey: null,
+      sex: "M", fertility: 0, haldaneStatus: "STERILE",
+    });
+    await expect(svc.execute("demo", "JUNIOR", { sireId: "sire-esteril-teste", damId: "onca-negra", method: "F1" }))
+      .rejects.toThrow(/estéril/i);
+  });
+});

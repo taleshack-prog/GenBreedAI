@@ -147,7 +147,7 @@ export default function ProfilePage() {
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full bg-purple" style={{ width: `${imgQuota.limit ? (imgQuota.used / imgQuota.limit) * 100 : 0}%` }} />
               </div>
-              <p className="mt-1.5 text-[0.65rem] text-ink-muted">Prévias são procedurais (grátis). O retrato IA final consome a cota. Excedeu → créditos.</p>
+              <p className="mt-1.5 text-[0.65rem] text-ink-muted">O retrato de todo cruzamento já vem incluído, sem custo. Esta cota vale só para regenerar um retrato existente — excedeu, usa créditos.</p>
             </div>
           )}
           <p className="mt-2 text-[0.7rem] text-ink-muted">Fontes de recursos: recompensa diária (por tier), fixação de linhagem (aura 4/5 rende), cota do tier. Congelar custa pouco (20).</p>

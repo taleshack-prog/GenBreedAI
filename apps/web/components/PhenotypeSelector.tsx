@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { freezeOption, type OffspringOption } from "../lib/api";
+import { cap, phenoSummary, richChips } from "../lib/phenotype-summary";
+import { GenotypeToggle } from "./Genome";
 
 function AuraMini({ n }: { n: number }) {
   return <span className="text-star text-sm">{"★".repeat(n)}<span className="text-white/20">{"★".repeat(5 - n)}</span></span>;
@@ -16,75 +18,19 @@ function SterileBadge({ title }: { title?: string }) {
   );
 }
 
-function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
-/** Resumo do fenótipo ciente da família (felino usa P/W; canino usa A/K/B/M/H/S). */
-function phenoSummary(loci: Record<string, string>): string {
-  const isCanine = loci.K !== undefined || loci.M !== undefined; // loci exclusivos caninos
-  if (isCanine) {
-    const parts: string[] = [];
-    if (loci.M && loci.M.includes("merle")) parts.push("Merle");
-    if (loci.H && loci.H.includes("arlequim")) parts.push("Arlequim");
-    if (loci.K === "brindle/tigrado") parts.push("Brindle");
-    if (loci.A) parts.push(cap(loci.A.split("/")[0]!)); // fulvo/tan-points/não-agouti
-    if (loci.B && loci.B !== "preto/roan") parts.push(loci.B.split("/")[0]!); // liver/chocolate
-    if (loci.F && loci.F !== "liso") parts.push(loci.F); // ondulado/cacheado
-    if (loci.S === "piebald") parts.push("piebald");
-    if (loci.E === "creme/vermelho") parts.push("creme");
-    return parts.length ? parts.join(" · ") : "Pelagem padrão";
-  }
-  const parts: string[] = [];
-  if (loci.Hr === "pelado (sphynx)") parts.push("Pelado");
-  if (loci.W === "branco") parts.push("Branco");
-  else {
-    if (loci.C === "albino") parts.push("Albino");
-    else if (loci.C === "pontos") parts.push("Pontos (siamês)");
-    if (loci.A?.startsWith("melan")) parts.push("Melanístico");
-    if (loci.P && loci.P !== "branco") parts.push(cap(loci.P));
-    if (loci.B && loci.B !== "preto") parts.push(loci.B);
-    if (loci.D === "diluído") parts.push("diluído");
-  }
-  if (loci.Ma === "juba completa") parts.push("Juba");
-  else if (loci.Ma === "juba parcial") parts.push("Juba parcial");
-  if (loci.Fl === "pelo longo" && loci.Hr !== "pelado (sphynx)") parts.push("Pelo longo");
-  if (loci.Ec && loci.Ec.includes("tufadas")) parts.push("Orelhas tufadas");
-  else if (loci.Ec && loci.Ec.includes("grandes")) parts.push("Orelhas grandes");
-  return parts.length ? parts.join(" · ") : "Fulvo comum";
-}
-
-
-/** Porte a partir do QTL (0..1). */
-function porteWord(p?: number): string {
-  const v = p ?? 0.5;
-  if (v >= 0.85) return "Gigante"; if (v >= 0.65) return "Grande";
-  if (v >= 0.45) return "Médio"; if (v >= 0.3) return "Pequeno-médio"; return "Pequeno";
-}
-/** Orelhas (felino Ec tufadas/grandes; canino Ec eretas/caídas). */
-function earsWord(loci: Record<string, string>): string | null {
-  const e = loci.Ec;
-  if (!e) return null;
-  if (e.includes("tufadas")) return "Orelhas tufadas";
-  if (e.includes("grandes")) return "Orelhas grandes";
-  if (e.includes("eretas")) return "Orelhas eretas";
-  if (e.includes("semi")) return "Orelhas semieretas";
-  if (e.includes("caídas")) return "Orelhas caídas";
-  return null;
-}
-/** Pelo (felino Fl/Hr; canino Cl/Ct). */
-function furWord(loci: Record<string, string>): string | null {
-  if (loci.Hr === "pelado (sphynx)") return "Pelado";
-  if (loci.Fl === "pelo longo" || loci.Cl === "pelo longo") return "Pelo longo";
-  if (loci.Ct === "pelo cacheado") return "Pelo cacheado";
-  if (loci.Ct === "pelo áspero") return "Pelo áspero";
-  return "Pelo curto";
-}
-/** Lista de chips descritivos — usada em todo card de opção (ADR-0019: nenhuma prévia gera imagem). */
-function richChips(o: { phenotype: { loci: Record<string, string> }; genotype: { qtl?: Record<string, number> } }): string[] {
-  const loci = o.phenotype.loci;
-  const chips: string[] = [phenoSummary(loci), porteWord(o.genotype.qtl?.porte)];
-  const ears = earsWord(loci); if (ears) chips.push(ears);
-  const fur = furWord(loci); if (fur) chips.push(fur);
-  return chips;
+/**
+ * TODOS os loci do fenótipo, com o valor JÁ EXPRESSO pelo pack
+ * (`o.phenotype.loci`, calculado por `expressPhenotype()` no motor —
+ * nenhum rótulo inventado aqui). Rolável (max-height) se não couber, pra
+ * nunca estourar o card em 360px.
+ */
+function FullPhenotype({ loci }: { loci: Record<string, string> }) {
+  const text = Object.entries(loci).map(([locus, value]) => `${locus}: ${value}`).join(" · ");
+  return (
+    <p className="mt-1 max-h-14 overflow-y-auto rounded border border-white/10 bg-bg-900/40 px-2 py-1 text-left font-mono text-[0.6rem] leading-snug text-ink-muted">
+      {text}
+    </p>
+  );
 }
 
 /**
@@ -149,7 +95,7 @@ export function PhenotypeSelector({
       </div>
       <p className="mb-3 text-[0.7rem] text-ink-muted">
         {canChoose
-          ? "O retrato de IA é gerado ao sintetizar o fenótipo escolhido, sem consumir sua cota."
+          ? "O retrato de IA é gerado ao sintetizar, sem consumir cota."
           : "No seu tier o filhote é sorteado pela probabilidade. Suba para Senior para escolher."}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -201,6 +147,7 @@ export function PhenotypeSelector({
                           {sex === "M" && o.maleSterile && <SterileBadge title="Este macho nasce estéril (ADR-0018)." />}
                         </div>
                         <div className="truncate text-[0.65rem] text-ink" title={label}>{label}</div>
+                        <FullPhenotype loci={phen?.loci ?? o.phenotype.loci} />
                       </div>
                     );
                   })}
@@ -208,6 +155,9 @@ export function PhenotypeSelector({
                 {o.variants > 1 && <div className="mt-1 text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
                 <p className="mt-1 text-center text-[0.55rem] text-ink-muted">O sexo é sorteado na síntese.</p>
                 {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
+                {/* Genótipo é o MESMO pros dois sexos (moldura já diz "mesmo
+                    genótipo") — 1 toggle só, não duplicado por sub-card. */}
+                <GenotypeToggle genotype={o.genotype} />
                 {canChoose && (
                   <span role="button" tabIndex={0} onClick={(e) => freeze(o, e)}
                     className="mt-2 block cursor-pointer rounded border border-cyan/30 py-1 text-center font-display text-[0.6rem] uppercase text-cyan transition hover:bg-cyan/10">
@@ -242,8 +192,10 @@ export function PhenotypeSelector({
                 <span>{phenoSummary(o.phenotype.loci)}</span>
                 {o.maleSterile && <SterileBadge title="Machos desta cruza nascem estéreis (ADR-0018)." />}
               </div>
+              <FullPhenotype loci={o.phenotype.loci} />
               {o.variants > 1 && <div className="text-center text-[0.55rem] text-ink-muted">{o.variants} variantes de portador</div>}
               {sel && <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-cyan">✓ escolhido</div>}
+              <GenotypeToggle genotype={o.genotype} />
               {canChoose && (
                 <span role="button" tabIndex={0} onClick={(e) => freeze(o, e)}
                   className="mt-2 block cursor-pointer rounded border border-cyan/30 py-1 text-center font-display text-[0.6rem] uppercase text-cyan transition hover:bg-cyan/10">

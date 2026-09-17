@@ -18,6 +18,19 @@ export function PunnettGridView({ sire, dam }: { sire: ApiSpecimen; dam: ApiSpec
         ))}
       </div>
       <div className="mt-3 text-center text-[0.7rem] uppercase text-ink-muted">Total de combinações possíveis: {total}</div>
+      {/* O quadro só cabe até 2 loci (senão a grade explode) — o rodapé
+          diz o que ficou de fora e por quê, pra não parecer que só esses
+          loci existem no cruzamento (b). */}
+      {grid.fixedLoci.length > 0 && (
+        <div className="mt-1 text-center text-[0.6rem] text-ink-muted">
+          Sem segregação em: {grid.fixedLoci.join(", ")} (pais homozigotos — sem variação possível)
+        </div>
+      )}
+      {grid.extraSegregatingLoci.length > 0 && (
+        <div className="mt-1 text-center text-[0.6rem] text-ink-muted">
+          Também segregam, mas não cabem no quadro: {grid.extraSegregatingLoci.join(", ")}
+        </div>
+      )}
     </div>
   );
 }

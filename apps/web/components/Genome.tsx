@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { Genotype } from "@genbreedai/shared";
 
 /** Formata alelo: "K^br" → K com "br" sobrescrito; realça mutação. */
@@ -36,6 +39,29 @@ export function GenotypeChips({ genotype }: { genotype: Genotype }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Genótipo (pares de alelos, `GenotypeChips`) recolhido atrás de um link
+ * "ver genótipo" — mesmo estilo usado no genoma detalhado/reveal. Usado no
+ * Laboratório (cards dos pais) e no seletor de fenótipo (cards de opção).
+ */
+export function GenotypeToggle({ genotype, label = "genótipo" }: { genotype: Genotype; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1 text-center">
+      <span role="button" tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="cursor-pointer font-mono text-[0.6rem] text-cyan underline decoration-dotted">
+        {open ? `ocultar ${label}` : `ver ${label}`}
+      </span>
+      {open && (
+        <div className="mt-1.5 flex justify-center" onClick={(e) => e.stopPropagation()}>
+          <GenotypeChips genotype={genotype} />
+        </div>
+      )}
     </div>
   );
 }

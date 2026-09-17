@@ -13,6 +13,7 @@ import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
 import { PunnettGridView, InbreedingGauge, HybridPreview, CurrencyBar } from "../../components/LabSections";
+import { GenotypeToggle } from "../../components/Genome";
 import { wrightF } from "@genbreedai/engine";
 
 const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as const;
@@ -140,6 +141,7 @@ function LabInner() {
       <section className="grid grid-cols-1 items-start gap-4 md:grid-cols-[1fr_auto_1fr]">
         <div>
           <CapsuleCard specimen={sire} slot="A" />
+          {sire && <GenotypeToggle genotype={sire.genotype} label="genótipo do pai" />}
           {sireOptions.length > 0 ? (
             <select value={sireId} onChange={(e) => setSireId(e.target.value)} className="mt-2 w-full rounded-lg border border-cyan/30 bg-bg-900 px-3 py-2 text-ink focus:border-cyan">
               <option value="">selecionar Pai ♂…</option>
@@ -175,6 +177,7 @@ function LabInner() {
 
         <div>
           <CapsuleCard specimen={dam} slot="B" />
+          {dam && <GenotypeToggle genotype={dam.genotype} label="genótipo da mãe" />}
           {damOptions.length > 0 ? (
             <select value={damId} onChange={(e) => setDamId(e.target.value)} className="mt-2 w-full rounded-lg border border-purple/30 bg-bg-900 px-3 py-2 text-ink focus:border-purple">
               <option value="">selecionar Mãe ♀…</option>
