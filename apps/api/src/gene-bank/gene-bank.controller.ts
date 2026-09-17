@@ -34,13 +34,6 @@ export class GeneBankController {
     return this.wallet.claimWeekly(user.id);
   }
 
-  @Post("gene-bank/freeze-option")
-  @UseGuards(AuthGuard)
-  async freezeOption(@CurrentUser() user: AuthenticatedUser, @Body() dto: CrossDto) {
-    const tier = await this.tier.resolve(user.id, user.tier);
-    return this.gb.freezeOption(user.id, tier, dto);
-  }
-
   @Post("gene-bank/freeze/:id")
   @UseGuards(AuthGuard)
   async freeze(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {

@@ -3,7 +3,8 @@
  * pra um m/m homozigoto — "não-merle" contém a substring "merle"). Os
  * `loci` abaixo são os valores JÁ EXPRESSOS que `expressPhenotype()`
  * (packages/engine/src/phenotype.ts) produziria pros genótipos descritos —
- * mesmo formato de `OffspringOption.phenotype.loci` que a API entrega.
+ * mesmo formato de `IncubatorDescription.phenotype.loci` (ADR-0020) que a
+ * API entrega.
  */
 import { describe, it, expect } from "vitest";
 import { phenoSummary, earsWord } from "../phenotype-summary";

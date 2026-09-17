@@ -6,6 +6,7 @@ import { GeneBankModule } from "./gene-bank/gene-bank.module";
 import { ReferralModule } from "./referral/referral.module";
 import { BillingModule } from "./billing/billing.module";
 import { AuthModule } from "./auth/auth.module";
+import { IncubatorModule } from "./incubator/incubator.module";
 
-@Module({ imports: [AuthModule, CrossModule, ImageModule, GenomeModule, GeneBankModule, ReferralModule, BillingModule] })
+@Module({ imports: [AuthModule, CrossModule, ImageModule, GenomeModule, GeneBankModule, ReferralModule, BillingModule, IncubatorModule] })
 export class AppModule {}

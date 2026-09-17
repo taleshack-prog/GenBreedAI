@@ -1,37 +1,54 @@
 /**
- * Cota de cruzamento (ADR-0019) — reservas PERSISTIDAS (`cross_reservations`),
- * não mais um contador só em memória que zerava a cada deploy. Duas janelas
- * (CrossQuotaPolicy.window, ver common/tiers.ts):
- *   "rolling7d" — conta reservas com created_at nos últimos 7×24h corridas.
- *   "day"       — conta reservas do DIA CIVIL em America/Sao_Paulo (UTC-3
- *                 fixo — Brasil aboliu horário de verão em 2019, então não
- *                 há troca de offset a considerar aqui).
+ * Reservas atômicas PERSISTIDAS, reusadas por DOIS limites independentes
+ * (ADR-0020 — incubadora e cota de revelação):
+ *   "cross_hourly" — limite TÉCNICO anti-abuso em POST /cross (60/hora,
+ *                    igual pra todo tier, ADR-0020) — MESMA tabela
+ *                    `cross_reservations` que antes guardava a cota de
+ *                    cruzamento (ADR-0019), só o SIGNIFICADO mudou.
+ *   "reveal"       — cota de REVELAÇÃO por tier (rolling7d/day, ADR-0020,
+ *                    era a cota de cruzamento da ADR-0019) — tabela NOVA
+ *                    `reveal_reservations` (mesma forma, contador
+ *                    independente: revelar não deve consumir o teto
+ *                    horário de cruzar, nem vice-versa).
  *
- * Fluxo (igual ao anterior, só o backing store muda): QuotaGuard reserva
- * (RESERVED) ANTES do motor rodar; CrossController confirma (CONFIRMED) no
- * sucesso ou apaga (estorno) na falha. RESERVED com mais de 10 minutos
- * (processo morto entre reservar e confirmar/apagar) não conta pra ninguém —
- * nunca é apagada por um job à parte, só deixa de ser CONTADA depois desse
- * prazo (ver `countsNow`).
+ * Três janelas (`ReservationPolicy.window`):
+ *   "hour"      — últimos 60 minutos corridos (só usada por "cross_hourly").
+ *   "rolling7d" — últimos 7×24h corridos.
+ *   "day"       — DIA CIVIL em America/Sao_Paulo (UTC-3 fixo — Brasil aboliu
+ *                 horário de verão em 2019, sem troca de offset a considerar).
+ *
+ * Fluxo (igual ao de antes, ADR-0019): reserva (RESERVED) ANTES da operação
+ * rodar; quem chama confirma (CONFIRMED) no sucesso ou apaga (estorno) na
+ * falha. RESERVED com mais de 10 minutos (processo morto entre reservar e
+ * confirmar/apagar) não conta pra ninguém — nunca é apagada por um job à
+ * parte, só deixa de ser CONTADA depois desse prazo (ver `countsNow`).
  *
  * SEAM: sem DATABASE_URL (testes), implementação em memória EQUIVALENTE —
- * mesma interface pública, mesmas regras de janela/staleness. A escrita
- * (contar + inserir) não tem nenhum `await` no meio no caminho em memória,
- * então é atômica por construção (JS é single-thread: nada mais roda até a
- * função terminar ou fazer um await de verdade). No Postgres, a atomicidade
- * vem de `pg_advisory_xact_lock(hashtext(owner_id))` dentro da transação —
- * serializa reservas concorrentes do MESMO dono (donos diferentes nunca se
- * bloqueiam, hashtext é só um int por owner_id).
+ * mesma interface pública, mesmas regras de janela/staleness, um Map por
+ * `kind` (nunca mistura as duas contagens). A escrita (contar + inserir) não
+ * tem nenhum `await` no meio no caminho em memória, então é atômica por
+ * construção (JS é single-thread). No Postgres, a atomicidade vem de
+ * `pg_advisory_xact_lock(hashtext(owner_id))` dentro da transação — serializa
+ * reservas concorrentes do MESMO dono (donos diferentes nunca se bloqueiam).
  */
 
 import { Injectable } from "@nestjs/common";
 import { and, asc, eq, gte, sql } from "drizzle-orm";
-import { crossReservations } from "../db/schema";
+import { crossReservations, revealReservations } from "../db/schema";
 import { createDb, type Database } from "../db/client";
-import type { CrossQuotaPolicy } from "../common/tiers";
+import { isQuotaUnlimitedDev } from "./quota-unlimited-dev";
+
+export type ReservationWindow = "hour" | "rolling7d" | "day";
+export interface ReservationPolicy { limit: number; window: ReservationWindow; }
+export type ReservationKind = "cross_hourly" | "reveal";
+
+const TABLE_BY_KIND = { cross_hourly: crossReservations, reveal: revealReservations };
 
 const STALE_RESERVED_MS = 10 * 60 * 1000;
-const SEVEN_DAYS_MS = 7 * 24 * 3600 * 1000;
+const WINDOW_MS: Record<"hour" | "rolling7d", number> = {
+  hour: 3600 * 1000,
+  rolling7d: 7 * 24 * 3600 * 1000,
+};
 
 /**
  * Início do dia civil em America/Sao_Paulo, como instante UTC. `en-CA`
@@ -46,15 +63,17 @@ export function startOfSaoPauloDay(now: Date): Date {
   return new Date(`${ymd}T00:00:00-03:00`);
 }
 
-function windowStart(window: CrossQuotaPolicy["window"], now: Date): Date {
-  return window === "day" ? startOfSaoPauloDay(now) : new Date(now.getTime() - SEVEN_DAYS_MS);
+function windowStart(window: ReservationWindow, now: Date): Date {
+  return window === "day" ? startOfSaoPauloDay(now) : new Date(now.getTime() - WINDOW_MS[window]);
 }
 
 interface MemReservation { id: string; ownerId: string; createdAt: number; status: "RESERVED" | "CONFIRMED"; }
 
 @Injectable()
 export class QuotaService {
-  private readonly mem: MemReservation[] = [];
+  // Um array em memória POR `kind` — nunca mistura a contagem horária de
+  // cruzamento com a contagem de revelação.
+  private readonly mem: Record<ReservationKind, MemReservation[]> = { cross_hourly: [], reveal: [] };
   private db: Database | null = null;
   private seq = 0;
   constructor() { const url = process.env.DATABASE_URL; if (url) this.db = createDb(url).db; }
@@ -68,83 +87,92 @@ export class QuotaService {
   }
 
   /**
-   * Reserva atômica de 1 cruzamento. Devolve o id da reserva (pra confirmar
-   * ou estornar depois) ou `null` se a cota estourou. `CROSS_QUOTA_UNLIMITED`
-   * (modo DEV) devolve sempre um id "fictício", nunca grava nada de verdade.
+   * Reserva atômica de 1 unidade (cruzamento OU revelação, conforme `kind`).
+   * Devolve o id da reserva (pra confirmar ou estornar depois) ou `null` se
+   * a cota estourou. `QUOTA_UNLIMITED_DEV` (modo DEV/teste — NUNCA em
+   * produção, ver `isQuotaUnlimitedDev()`) devolve sempre um id "fictício",
+   * nunca grava nada de verdade — vale pros dois `kind`s.
    */
-  async reserve(ownerId: string, policy: CrossQuotaPolicy): Promise<string | null> {
-    if (process.env.CROSS_QUOTA_UNLIMITED === "true") return this.newId();
+  async reserve(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<string | null> {
+    if (isQuotaUnlimitedDev()) return this.newId();
     const now = new Date();
     const from = windowStart(policy.window, now);
+    const table = TABLE_BY_KIND[kind];
 
     if (this.db) {
       const db = this.db;
       return db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`);
+        // Lock por (dono, kind) — hashtext de string única evita que a
+        // reserva horária de cruzamento serialize com a de revelação do
+        // MESMO dono à toa (são contadores independentes).
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${kind}:${ownerId}`}))`);
         const staleBefore = new Date(now.getTime() - STALE_RESERVED_MS);
-        const rows = await tx.select({ id: crossReservations.id }).from(crossReservations).where(
+        const rows = await tx.select({ id: table.id }).from(table).where(
           and(
-            eq(crossReservations.ownerId, ownerId),
-            gte(crossReservations.createdAt, from),
-            sql`(${crossReservations.status} = 'CONFIRMED' OR ${crossReservations.createdAt} >= ${staleBefore})`,
+            eq(table.ownerId, ownerId),
+            gte(table.createdAt, from),
+            sql`(${table.status} = 'CONFIRMED' OR ${table.createdAt} >= ${staleBefore})`,
           ),
         );
         if (rows.length >= policy.limit) return null;
         const id = this.newId();
-        await tx.insert(crossReservations).values({ id, ownerId, status: "RESERVED" });
+        await tx.insert(table).values({ id, ownerId, status: "RESERVED" });
         return id;
       });
     }
 
     const nowMs = now.getTime();
     const fromMs = from.getTime();
-    const count = this.mem.filter(
+    const store = this.mem[kind];
+    const count = store.filter(
       (r) => r.ownerId === ownerId && r.createdAt >= fromMs && this.countsNow(r.status, r.createdAt, nowMs),
     ).length;
     if (count >= policy.limit) return null;
     const id = this.newId();
-    this.mem.push({ id, ownerId, createdAt: nowMs, status: "RESERVED" });
+    store.push({ id, ownerId, createdAt: nowMs, status: "RESERVED" });
     return id;
   }
 
-  /** Cruzamento concluiu com sucesso — reserva vira permanente (não expira mais por "stale"). */
-  async confirm(reservationId: string): Promise<void> {
+  /** Operação concluiu com sucesso — reserva vira permanente (não expira mais por "stale"). */
+  async confirm(kind: ReservationKind, reservationId: string): Promise<void> {
     if (this.db) {
-      await this.db.update(crossReservations).set({ status: "CONFIRMED" }).where(eq(crossReservations.id, reservationId));
+      await this.db.update(TABLE_BY_KIND[kind]).set({ status: "CONFIRMED" }).where(eq(TABLE_BY_KIND[kind].id, reservationId));
       return;
     }
-    const r = this.mem.find((x) => x.id === reservationId);
+    const r = this.mem[kind].find((x) => x.id === reservationId);
     if (r) r.status = "CONFIRMED";
   }
 
-  /** Cruzamento falhou — apaga a reserva (estorno). Reserva "fictícia" (CROSS_QUOTA_UNLIMITED) é no-op silencioso. */
-  async release(reservationId: string): Promise<void> {
+  /** Operação falhou — apaga a reserva (estorno). Reserva "fictícia" (QUOTA_UNLIMITED_DEV) é no-op silencioso. */
+  async release(kind: ReservationKind, reservationId: string): Promise<void> {
     if (this.db) {
-      await this.db.delete(crossReservations).where(eq(crossReservations.id, reservationId));
+      await this.db.delete(TABLE_BY_KIND[kind]).where(eq(TABLE_BY_KIND[kind].id, reservationId));
       return;
     }
-    const idx = this.mem.findIndex((x) => x.id === reservationId);
-    if (idx >= 0) this.mem.splice(idx, 1);
+    const store = this.mem[kind];
+    const idx = store.findIndex((x) => x.id === reservationId);
+    if (idx >= 0) store.splice(idx, 1);
   }
 
   /** Quantas reservas válidas (RESERVED recente + CONFIRMED) o dono tem na janela — GET /me/tier. */
-  async used(ownerId: string, policy: CrossQuotaPolicy): Promise<number> {
+  async used(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<number> {
     const now = new Date();
     const from = windowStart(policy.window, now);
+    const table = TABLE_BY_KIND[kind];
     if (this.db) {
       const staleBefore = new Date(now.getTime() - STALE_RESERVED_MS);
-      const rows = await this.db.select({ id: crossReservations.id }).from(crossReservations).where(
+      const rows = await this.db.select({ id: table.id }).from(table).where(
         and(
-          eq(crossReservations.ownerId, ownerId),
-          gte(crossReservations.createdAt, from),
-          sql`(${crossReservations.status} = 'CONFIRMED' OR ${crossReservations.createdAt} >= ${staleBefore})`,
+          eq(table.ownerId, ownerId),
+          gte(table.createdAt, from),
+          sql`(${table.status} = 'CONFIRMED' OR ${table.createdAt} >= ${staleBefore})`,
         ),
       );
       return rows.length;
     }
     const nowMs = now.getTime();
     const fromMs = from.getTime();
-    return this.mem.filter(
+    return this.mem[kind].filter(
       (r) => r.ownerId === ownerId && r.createdAt >= fromMs && this.countsNow(r.status, r.createdAt, nowMs),
     ).length;
   }
@@ -153,40 +181,42 @@ export class QuotaService {
    * Próximo instante em que volta a ter cota — `null` se já tem cota AGORA.
    * "day": início do PRÓXIMO dia civil em America/Sao_Paulo (nenhuma reserva
    * "envelhece" dentro do mesmo dia — só a virada de dia libera cota de novo).
-   * "rolling7d": instante em que a reserva mais ANTIGA da janela completa 7 dias.
+   * "hour"/"rolling7d": instante em que a reserva mais ANTIGA da janela sai dela.
    */
-  async nextAvailableAt(ownerId: string, policy: CrossQuotaPolicy): Promise<Date | null> {
+  async nextAvailableAt(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<Date | null> {
     const now = new Date();
-    const usedNow = await this.used(ownerId, policy);
+    const usedNow = await this.used(kind, ownerId, policy);
     if (usedNow < policy.limit) return null;
 
     if (policy.window === "day") {
       return new Date(startOfSaoPauloDay(now).getTime() + 24 * 3600 * 1000);
     }
+    const windowMs = WINDOW_MS[policy.window];
 
     const from = windowStart(policy.window, now);
+    const table = TABLE_BY_KIND[kind];
     if (this.db) {
       const staleBefore = new Date(now.getTime() - STALE_RESERVED_MS);
-      const rows = await this.db.select({ createdAt: crossReservations.createdAt }).from(crossReservations).where(
+      const rows = await this.db.select({ createdAt: table.createdAt }).from(table).where(
         and(
-          eq(crossReservations.ownerId, ownerId),
-          gte(crossReservations.createdAt, from),
-          sql`(${crossReservations.status} = 'CONFIRMED' OR ${crossReservations.createdAt} >= ${staleBefore})`,
+          eq(table.ownerId, ownerId),
+          gte(table.createdAt, from),
+          sql`(${table.status} = 'CONFIRMED' OR ${table.createdAt} >= ${staleBefore})`,
         ),
-      ).orderBy(asc(crossReservations.createdAt)).limit(1);
+      ).orderBy(asc(table.createdAt)).limit(1);
       const oldest = rows[0]?.createdAt;
-      return oldest ? new Date(oldest.getTime() + SEVEN_DAYS_MS) : null;
+      return oldest ? new Date(oldest.getTime() + windowMs) : null;
     }
 
     const nowMs = now.getTime();
     const fromMs = from.getTime();
-    const relevant = this.mem
+    const relevant = this.mem[kind]
       .filter((r) => r.ownerId === ownerId && r.createdAt >= fromMs && this.countsNow(r.status, r.createdAt, nowMs))
       .sort((a, b) => a.createdAt - b.createdAt);
     const oldest = relevant[0];
-    return oldest ? new Date(oldest.createdAt + SEVEN_DAYS_MS) : null;
+    return oldest ? new Date(oldest.createdAt + windowMs) : null;
   }
 
-  /** Uso apenas em testes: limpa tudo (equivalente em memória). */
-  resetAll(): void { this.mem.length = 0; }
+  /** Uso apenas em testes: limpa tudo (equivalente em memória), os dois `kind`s. */
+  resetAll(): void { this.mem.cross_hourly.length = 0; this.mem.reveal.length = 0; }
 }

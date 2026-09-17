@@ -30,30 +30,36 @@ export interface ApiSpecimen {
   sex: "M" | "F" | null;
   fertility: number | null;
   haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
-  /** ADR-0019: retrato incluído no cruzamento ainda não usado (todo espécime nascido de cruzamento nasce com isto true). */
+  /**
+   * ADR-0019 (retrato incluído no cruzamento) — SUPERSEDIDO pela ADR-0020:
+   * nascer agora reaproveita o retrato já pago na revelação, então todo
+   * espécime que nasce pela incubadora já sai com isto `false`. Campo
+   * mantido (nunca populado `true` mais nos fluxos que a web usa) só pra
+   * não quebrar `reveal/[id]/page.tsx`, que ainda checa (sempre falso,
+   * então sempre cai no caminho normal de buscar a imagem já existente).
+   */
   includedPortrait?: boolean;
 }
 
-export interface CrossResponse {
-  specimen: ApiSpecimen;
-  cacheKey: string;
-  engine: {
-    genotype: Genotype;
-    phenotype: {
-      loci: Record<string, string>;
-      qtl: Record<string, number>;
-      viable: boolean;
-      epistasis: string[];
-      hasMutation: boolean;
-    };
-    fPedigree: number;
-    fertility: { score: number; inviabilityRisk: number; haldaneSterile: boolean; notes: string[] };
-    fixationIndex: number;
-    aura: number;
-    generation: number;
-    method: string;
-  };
+type ApiPhenotype = { loci: Record<string, string>; qtl: Record<string, number>; viable: boolean; epistasis: string[]; hasMutation: boolean };
+
+/**
+ * ADR-0020: uma descrição de fenótipo recém-criada na incubadora — o que
+ * POST /api/v1/cross devolve por opção enumerada (livre, sem cota, sem
+ * espécime nenhum ainda). Campos mínimos que o Laboratório mostra logo
+ * após cruzar (probabilidade/aura/fenótipo/genótipo/sexo); a entrada
+ * completa (com estado revelada/congelada/nascida) só existe na listagem
+ * da incubadora — ver `IncubatorEntry`.
+ */
+export interface IncubatorDescription {
+  id: string;
+  genotype: Genotype;
+  phenotype: ApiPhenotype;
+  prob: number;
+  aura: number;
+  sex: "M" | "F";
 }
+export interface CrossResult { crossId: string; entries: IncubatorDescription[]; }
 
 // Usuário-demo do scaffold (dono dos fundadores semeados na API).
 export type Tier = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
@@ -104,29 +110,26 @@ export async function listSpecimens(): Promise<ApiSpecimen[]> {
   return res.json();
 }
 
+/**
+ * ADR-0020: cruzar é LIVRE e sem custo — não recebe mais `choiceKey`
+ * (ninguém escolhe UMA opção pra sintetizar; todas as opções enumeradas
+ * viram descrições na incubadora) nem devolve espécime — devolve as
+ * descrições (`entries`), que ficam na incubadora até serem reveladas.
+ * 429 aqui é só o limite TÉCNICO anti-abuso (60/hora, igual pra todo tier,
+ * sem `nextAvailableAt` — não é cota de jogo), nunca cota de revelação.
+ */
 export async function postCross(input: {
   sireId: string;
   damId: string;
   method: string;
   seed?: string;
-  choiceKey?: string;
-}): Promise<CrossResponse> {
+}): Promise<CrossResult> {
   const res = await fetch("/api/v1/cross", {
     method: "POST",
     headers: demoHeaders(),
     body: JSON.stringify(input),
   });
-  if (!res.ok) {
-    if (res.status === 429) {
-      // ADR-0019: a API devolve nextAvailableAt (ISO) — "Próximo cruzamento
-      // em <data e hora local>", nunca um texto fixo de "cota diária" (a
-      // janela agora pode ser rolling7d OU day, conforme o tier).
-      const body = await res.json().catch(() => null) as { message?: string; nextAvailableAt?: string | null } | null;
-      const when = body?.nextAvailableAt ? nextAvailableLabel(body.nextAvailableAt) : null;
-      throw new ApiError(429, when ?? body?.message ?? "Cota de cruzamentos esgotada.");
-    }
-    throw await apiErrorFrom(res, `Cruzamento falhou (${res.status}).`);
-  }
+  if (!res.ok) throw await apiErrorFrom(res, `Cruzamento falhou (${res.status}).`);
   return res.json();
 }
 
@@ -144,24 +147,6 @@ export async function getImage(id: string): Promise<ImageResult | null> {
 export async function generateImage(id: string, force = false): Promise<ImageResult> {
   const res = await fetch(`/api/v1/specimens/${id}/image`, { method: "POST", headers: demoHeaders(), body: JSON.stringify({ force }) });
   if (!res.ok) throw await apiErrorFrom(res, `Falha ao gerar (${res.status}).`);
-  return res.json();
-}
-
-type ApiPhenotype = { loci: Record<string, string>; qtl: Record<string, number>; viable: boolean; epistasis: string[]; hasMutation: boolean };
-export interface OffspringOption {
-  key: string; prob: number; fixationIndex: number; aura: number; variants: number;
-  phenotype: ApiPhenotype; genotype: Genotype;
-  /** O sexo (sorteado só na síntese) muda a aparência deste genótipo? (ADR-0017/0018) */
-  sexDimorphic: boolean;
-  /** Só presente quando sexDimorphic — fenótipo por sexo (ex.: juba/sem juba). */
-  phenotypeBySex?: { M: ApiPhenotype; F: ApiPhenotype };
-  /** ADR-0018: machos desta opção nascerão estéreis. */
-  maleSterile: boolean;
-}
-export interface OptionsResponse { canChoose: boolean; maxOptions: number; options: OffspringOption[]; }
-export async function getCrossOptions(input: { sireId: string; damId: string; method: string }): Promise<OptionsResponse> {
-  const res = await fetch("/api/v1/cross/options", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw await apiErrorFrom(res, `Falha ao obter opções (${res.status}).`);
   return res.json();
 }
 
@@ -187,11 +172,6 @@ export async function getWallet(): Promise<Wallet> {
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar carteira.");
   return res.json();
 }
-export async function freezeOption(input: { sireId: string; damId: string; method: string; choiceKey: string }): Promise<{ specimen: ApiSpecimen; wallet: Wallet }> {
-  const res = await fetch("/api/v1/gene-bank/freeze-option", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw await apiErrorFrom(res, "Falha ao congelar.");
-  return res.json();
-}
 export async function freezeSpecimen(id: string): Promise<{ specimen: ApiSpecimen; wallet: Wallet }> {
   const res = await fetch(`/api/v1/gene-bank/freeze/${id}`, { method: "POST", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao congelar.");
@@ -203,11 +183,57 @@ export async function thawSpecimen(id: string): Promise<{ specimen: ApiSpecimen;
   return res.json();
 }
 
-export interface SynthesizeResult { specimen: ApiSpecimen; frozen: ApiSpecimen[]; frozenCount: number; skipped: number; wallet: Wallet; }
-export async function synthesizeAndFreeze(input: { sireId: string; damId: string; method: string; choiceKey?: string; freezeKeys: string[] }): Promise<SynthesizeResult> {
-  const res = await fetch("/api/v1/gene-bank/synthesize", { method: "POST", headers: demoHeaders(), body: JSON.stringify(input) });
-  if (!res.ok) throw await apiErrorFrom(res, "Falha ao sintetizar.");
+/**
+ * Incubadora (ADR-0020) — descrições de fenótipo de todo cruzamento vivem
+ * aqui, de graça e sem prazo, até serem reveladas (retrato de IA, consome
+ * `revealQuota`) e/ou nascerem (grátis, reaproveita o retrato revelado).
+ */
+export interface IncubatorEntry extends IncubatorDescription {
+  crossId: string; sireId: string; damId: string; method: string; pack: PackId; species: string;
+  fPedigree: number; fixationIndex: number; generation: number;
+  fertility: number | null; haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
+  imageUrl: string | null; revealed: boolean; frozen: boolean; born: boolean; bornSpecimenId: string | null;
+  createdAt: string;
+}
+export async function listIncubator(): Promise<IncubatorEntry[]> {
+  const res = await fetch("/api/v1/incubator", { headers: demoHeaders(), cache: "no-store" });
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar a incubadora.");
   return res.json();
+}
+/**
+ * Gera o retrato de IA de uma descrição — consome `revealQuota` (ou 1
+ * crédito de imagem no fallback); já revelada, devolve a imagem existente
+ * sem cobrar. 429 aqui É cota de jogo (diferente do 429 de POST /cross) —
+ * a API devolve `nextAvailableAt`, igual à ADR-0019.
+ */
+export async function revealEntry(id: string): Promise<ImageResult> {
+  const res = await fetch(`/api/v1/incubator/${id}/reveal`, { method: "POST", headers: demoHeaders() });
+  if (!res.ok) {
+    if (res.status === 429) {
+      const body = await res.json().catch(() => null) as { message?: string; nextAvailableAt?: string | null } | null;
+      const when = body?.nextAvailableAt ? nextAvailableLabel(body.nextAvailableAt) : null;
+      throw new ApiError(429, when ?? body?.message ?? "Sem cota de revelação nem créditos de imagem.");
+    }
+    throw await apiErrorFrom(res, `Falha ao revelar (${res.status}).`);
+  }
+  return res.json();
+}
+/** Materializa o espécime a partir de uma descrição já revelada — grátis, sem cota. */
+export async function bornEntry(id: string): Promise<{ specimen: ApiSpecimen }> {
+  const res = await fetch(`/api/v1/incubator/${id}/born`, { method: "POST", headers: demoHeaders() });
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao fazer nascer (${res.status}).`);
+  return res.json();
+}
+/** Preserva uma descrição revelada-e-não-nascida (−20 catalisadores, mesmo custo do freezeOption antigo). */
+export async function freezeEntry(id: string): Promise<{ entry: IncubatorEntry; wallet: Wallet }> {
+  const res = await fetch(`/api/v1/incubator/${id}/freeze`, { method: "POST", headers: demoHeaders() });
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao congelar (${res.status}).`);
+  return res.json();
+}
+/** Descarta a descrição (perde, sem volta) — a confirmação é responsabilidade de quem chama. */
+export async function discardEntry(id: string): Promise<void> {
+  const res = await fetch(`/api/v1/incubator/${id}`, { method: "DELETE", headers: demoHeaders() });
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao descartar (${res.status}).`);
 }
 
 export async function claimDaily(): Promise<{ claimed: boolean; gain?: { catalisadores: number; biomassa: number }; wallet: Wallet }> {
@@ -304,14 +330,14 @@ export async function subscribeToPlan(tier: Exclude<Tier, "FREE">, interval: "mo
   return res.json();
 }
 
-export interface CrossQuotaInfo {
+export interface RevealQuotaInfo {
   limit: number;
   window: "rolling7d" | "day";
   used: number;
-  /** null = tem cota agora; senão, instante ISO em que volta a ter (ADR-0019). */
+  /** null = tem cota agora; senão, instante ISO em que volta a ter (ADR-0020). */
   nextAvailableAt: string | null;
 }
-export interface MyTier { tier: Tier; crossQuota: CrossQuotaInfo; monthlyExtraImages: number; weeklyBonus: boolean; }
+export interface MyTier { tier: Tier; revealQuota: RevealQuotaInfo; monthlyExtraImages: number; weeklyBonus: boolean; }
 /**
  * Tier EFETIVO do usuário logado (GET /api/v1/me/tier) — TierService.resolve()
  * no backend (assinatura → concessão em granted_tiers → FREE). Única fonte de

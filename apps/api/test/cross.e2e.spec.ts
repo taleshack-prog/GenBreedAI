@@ -1,4 +1,9 @@
-/** Testes e2e do endpoint POST /api/v1/cross (modelo v2). */
+/**
+ * Testes e2e do endpoint POST /api/v1/cross (ADR-0020 — incubadora: cruzar é
+ * livre, cria descrições na incubadora, NÃO cria espécime, NÃO consome
+ * revealQuota; só o limite técnico horário — 60/hora, `QuotaGuard` — pode
+ * bloquear, com 429).
+ */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { buildApp } from "../src/main";
@@ -6,51 +11,93 @@ import { buildApp } from "../src/main";
 let app: NestFastifyApplication;
 const post = (body: Record<string, unknown>, headers: Record<string, string> = {}) =>
   app.inject({ method: "POST", url: "/api/v1/cross", payload: body, headers });
-const AUTH_FREE = { "x-user-id": "user-free", "x-user-tier": "FREE" };
+const get = (url: string, headers: Record<string, string>) => app.inject({ method: "GET", url, headers });
+const AUTH_FREE = (id = "user-free") => ({ "x-user-id": id, "x-user-tier": "FREE" });
 const AUTH_PHD = { "x-user-id": "user-phd", "x-user-tier": "PHD" };
 const CROSS = { sireId: "onca-pintada", damId: "onca-negra", method: "F1" };
 
-let savedQuotaUnlimited: string | undefined;
-beforeEach(() => { savedQuotaUnlimited = process.env.CROSS_QUOTA_UNLIMITED; delete process.env.CROSS_QUOTA_UNLIMITED; });
+// Apaga os DOIS nomes (novo QUOTA_UNLIMITED_DEV e o antigo, ainda aceito por
+// compatibilidade, CROSS_QUOTA_UNLIMITED) — o `.env` real de dev pode ter
+// qualquer um dos dois definido, e os testes deste arquivo dependem da cota
+// valendo de verdade.
+let savedQuotaUnlimitedDev: string | undefined;
+let savedCrossQuotaUnlimited: string | undefined;
+beforeEach(() => {
+  savedQuotaUnlimitedDev = process.env.QUOTA_UNLIMITED_DEV; delete process.env.QUOTA_UNLIMITED_DEV;
+  savedCrossQuotaUnlimited = process.env.CROSS_QUOTA_UNLIMITED; delete process.env.CROSS_QUOTA_UNLIMITED;
+});
 afterEach(() => {
-  if (savedQuotaUnlimited === undefined) delete process.env.CROSS_QUOTA_UNLIMITED;
-  else process.env.CROSS_QUOTA_UNLIMITED = savedQuotaUnlimited;
+  if (savedQuotaUnlimitedDev === undefined) delete process.env.QUOTA_UNLIMITED_DEV;
+  else process.env.QUOTA_UNLIMITED_DEV = savedQuotaUnlimitedDev;
+  if (savedCrossQuotaUnlimited === undefined) delete process.env.CROSS_QUOTA_UNLIMITED;
+  else process.env.CROSS_QUOTA_UNLIMITED = savedCrossQuotaUnlimited;
 });
 
 beforeAll(async () => { process.env.NODE_ENV = "test"; process.env.AUTH_DEV_HEADERS = "true"; delete process.env.DATABASE_URL; app = await buildApp(); await app.init(); await app.getHttpAdapter().getInstance().ready(); });
 afterAll(async () => { await app.close(); });
 
-describe("POST /api/v1/cross", () => {
-  it("201: cruzamento válido retorna espécime + cacheKey", async () => {
+describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
+  it("201: cruzamento válido devolve crossId + descrições na incubadora, SEM espécime", async () => {
     const res = await post(CROSS, AUTH_PHD);
     expect(res.statusCode).toBe(201);
     const b = res.json();
-    expect(typeof b.cacheKey).toBe("string");
-    expect(b.specimen.sireId).toBe("onca-pintada");
+    expect(typeof b.crossId).toBe("string");
+    expect(Array.isArray(b.entries)).toBe(true);
+    expect(b.entries.length).toBeGreaterThan(0);
+    const e = b.entries[0];
+    expect(e.sireId).toBe("onca-pintada");
+    expect(e.damId).toBe("onca-negra");
+    expect(typeof e.id).toBe("string");
+    expect(e.genotype).toBeDefined();
+    expect(e.phenotype).toBeDefined();
+    expect(["M", "F"]).toContain(e.sex);
+    // Nenhuma imagem/retrato nasce junto — isso é trabalho da revelação.
+    expect(e.imageCacheKey ?? null).toBeNull();
+    expect(e.revealedAt ?? null).toBeNull();
+    expect(e.bornSpecimenId ?? null).toBeNull();
+    expect(b).not.toHaveProperty("specimen"); // o formato antigo (ADR-0019) não existe mais
   });
+
   it("401: sem autenticação", async () => { expect((await post(CROSS, {})).statusCode).toBe(401); });
   it("400: método inválido", async () => { expect((await post({ sireId: "onca-pintada", damId: "onca-negra", method: "XYZ" }, AUTH_PHD)).statusCode).toBe(400); });
-  it("429: FREE estoura cota (1 a cada 7 dias, ADR-0019) na 2ª chamada", async () => {
-    // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016), não onca-pintada/
-    // onca-negra (WILD_FELINE, fora do pool FREE — dava 404 na 1ª chamada,
-    // não 201). Tier e asserções inalterados.
-    const FREE_CROSS = { sireId: "gato-tabby", damId: "gato-siames", method: "F1" };
-    expect((await post(FREE_CROSS, AUTH_FREE)).statusCode).toBe(201);
-    expect((await post(FREE_CROSS, AUTH_FREE)).statusCode).toBe(429);
+
+  it("cruzar NÃO consome revealQuota — GET /me/tier.revealQuota.used continua 0 depois de cruzar várias vezes", async () => {
+    const headers = AUTH_FREE("user-no-quota-spend");
+    for (let i = 0; i < 3; i++) {
+      expect((await post({ sireId: "gato-tabby", damId: "gato-siames", method: "F1" }, headers)).statusCode).toBe(201);
+    }
+    const me = (await get("/api/v1/me/tier", headers)).json();
+    expect(me.revealQuota.used).toBe(0);
   });
+
+  it("limite TÉCNICO horário (61 cruzamentos numa hora) → 429 no 61º", async () => {
+    const headers = AUTH_FREE("user-hourly-spam");
+    const cross = { sireId: "gato-tabby", damId: "gato-siames", method: "F1" };
+    let last = 0;
+    for (let i = 0; i < 61; i++) {
+      last = (await post(cross, headers)).statusCode;
+    }
+    expect(last).toBe(429);
+  }, 20000);
+
   it("GET /specimens lista fundadores", async () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/specimens", headers: { "x-user-id": "demo", "x-user-tier": "PHD" } });
     expect(res.statusCode).toBe(200);
     const ids = res.json().map((s: { id: string }) => s.id);
     expect(ids).toEqual(expect.arrayContaining(["onca-pintada","onca-negra","puma","tigre-bengala","gato-tabby","boerboel"]));
   });
-  it("ANTI-P2W: FREE e PHD → mesmo resultado genético", async () => {
+
+  it("ANTI-P2W: FREE e PHD → mesma descrição de maior probabilidade (mesmo seed)", async () => {
     // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016): CROSS (onca-pintada/
-    // onca-negra) é WILD_FELINE, fora do pool FREE — FREE receberia 404, não
-    // o cacheKey esperado. Asserção inalterada.
+    // onca-negra) é WILD_FELINE, fora do pool FREE — FREE receberia 404.
     const fixed = { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed: "e2e-fixed" };
     const phd = (await post(fixed, { "x-user-id": "p1", "x-user-tier": "PHD" })).json();
     const free = (await post(fixed, { "x-user-id": "f1", "x-user-tier": "FREE" })).json();
-    expect(free.cacheKey).toBe(phd.cacheKey);
+    // PHD vê até 12 opções, FREE até 6 — mas a ORDEM (por probabilidade) e o
+    // resultado da 1ª (mais provável) têm que ser IDÊNTICOS: a probabilidade
+    // do motor não muda por tier.
+    expect(free.entries[0].genotype).toEqual(phd.entries[0].genotype);
+    expect(free.entries[0].phenotype).toEqual(phd.entries[0].phenotype);
+    expect(free.entries[0].sex).toBe(phd.entries[0].sex);
   });
 });

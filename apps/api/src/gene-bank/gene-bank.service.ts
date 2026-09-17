@@ -4,13 +4,12 @@
  * Biomassa) materializa para uso como progenitor. Anti-P2W: custo por operação.
  */
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Genotype, Tier } from "@genbreedai/shared";
+import type { Tier } from "@genbreedai/shared";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { CrossService } from "../cross/cross.service";
 import { WalletService, FREEZE_COST, THAW_COST } from "../economy/wallet.service";
 import type { Wallet } from "../economy/wallet.repository";
 import type { CrossDto } from "../cross/dto/cross.dto";
-import { FREEZE_COST as FC } from "../economy/wallet.service";
 import { specimenVisibleAtTier } from "../common/tier-access";
 
 @Injectable()
@@ -20,24 +19,6 @@ export class GeneBankService {
     private readonly cross: CrossService,
     private readonly wallet: WalletService,
   ) {}
-
-  /** Congela uma OPÇÃO de prole (genótipo escolhido no seletor), sem sintetizar. */
-  async freezeOption(owner: string, tier: Tier, dto: CrossDto): Promise<{ specimen: StoredSpecimen; wallet: Wallet }> {
-    const { result, sire, dam, species, pack } = await this.cross.computeResult(tier, dto);
-    await this.wallet.charge(owner, FREEZE_COST);
-    const stored = await this.repo.save({
-      id: "", ownerId: owner, pack: pack as "feline" | "canine", species,
-      genotype: result.specimen.genotype as Genotype, generation: result.specimen.generation,
-      sireId: sire.id, damId: dam.id, method: dto.method,
-      fPedigree: result.specimen.fPedigree, fixationIndex: result.specimen.fixationIndex,
-      aura: result.specimen.aura, cacheKey: result.cacheKey, status: "FROZEN",
-      sex: result.specimen.sex,
-      fertility: result.specimen.fertility.score,
-      haldaneStatus: result.specimen.fertility.haldaneStatus,
-      phenotype: result.specimen.phenotype,
-    });
-    return { specimen: stored, wallet: await this.wallet.get(owner) };
-  }
 
   /** Congela um ESPÉCIME já existente. */
   async freezeSpecimen(owner: string, tier: Tier, id: string) {
@@ -63,29 +44,26 @@ export class GeneBankService {
   }
 
   /**
-   * Sintetiza a opção ESCOLHIDA (materializa, status ALIVE) e CONGELA as demais
-   * opções informadas — resolve a dor de perder fenótipos não usados. Cada
-   * congelamento debita Catalisadores; se acabar o saldo, congela os que couberem
-   * e informa quantos ficaram. A síntese sempre acontece.
+   * Sintetiza a opção ESCOLHIDA (materializa, status ALIVE).
+   *
+   * ÓRFÃO (ADR-0020, item 9): "congela as demais opções informadas"
+   * (`freezeKeys`) foi REMOVIDO — dependia de `freezeOption` (congelar uma
+   * opção NÃO sintetizada, pagando catalisadores só pra "reservar" o
+   * genótipo), que não existe mais: toda descrição enumerada por um
+   * cruzamento já fica de graça na incubadora (`POST /cross`, ADR-0020),
+   * sem precisar congelar nada pra não perder. `freezeKeys` continua no
+   * parâmetro (evita mudar a assinatura/DTO agora — a web ainda manda esse
+   * campo) mas é IGNORADO; `frozen`/`skipped` sempre saem vazios/zero. Este
+   * fluxo inteiro (POST gene-bank/synthesize) tende a ser substituído pelo
+   * par incubadora "revelar" + "nascer" quando a web for atualizada (prompt
+   * seguinte) — mantido funcionando aqui só pra não quebrar o build.
    */
   async synthesizeAndFreeze(
     owner: string, tier: import("@genbreedai/shared").Tier,
     dto: CrossDto, freezeKeys: string[],
   ): Promise<{ specimen: StoredSpecimen; frozen: StoredSpecimen[]; frozenCount: number; skipped: number; wallet: Wallet }> {
-    // 1) materializa o escolhido (ALIVE) — reusa o fluxo de cruzamento
+    void freezeKeys; // ver ÓRFÃO acima
     const synth = await this.cross.execute(owner, tier, dto);
-    // 2) congela os demais (um por um; para quando faltar saldo)
-    const frozen: StoredSpecimen[] = [];
-    let skipped = 0;
-    for (const key of freezeKeys) {
-      if (key === dto.choiceKey) continue;
-      const wallet = await this.wallet.get(owner);
-      if ((FC.catalisadores ?? 0) > wallet.catalisadores) { skipped++; continue; }
-      try {
-        const r = await this.freezeOption(owner, tier, { ...dto, choiceKey: key });
-        frozen.push(r.specimen);
-      } catch { skipped++; }
-    }
-    return { specimen: synth.specimen, frozen, frozenCount: frozen.length, skipped, wallet: await this.wallet.get(owner) };
+    return { specimen: synth.specimen, frozen: [], frozenCount: 0, skipped: 0, wallet: await this.wallet.get(owner) };
   }
 }

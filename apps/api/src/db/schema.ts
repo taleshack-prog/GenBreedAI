@@ -96,24 +96,90 @@ export const crosses = pgTable("crosses", {
 });
 
 /**
- * Reservas de cota de cruzamento (ADR-0019) — persistidas pra não zerar a
- * cada deploy (o contador antigo era 100% em memória). `RESERVED` = criada
- * pelo QuotaGuard antes do motor rodar; `CONFIRMED` = cruzamento concluiu
- * com sucesso (nunca mais expira). Falha no cruzamento → a linha é
- * APAGADA (estorno), nunca fica como `RESERVED` órfã. `RESERVED` com mais
- * de 10 minutos (processo morto entre reservar e confirmar/apagar) não
- * conta pra ninguém — checado por `created_at` na hora de contar, nunca por
- * um job de limpeza (nenhuma linha "errada" precisa ser apagada por
- * segundo processo; só deixa de ser CONTADA).
+ * Fábrica de tabela de reservas atômicas (mesma forma, dois usos
+ * independentes — ADR-0020, ver quota.service.ts): `RESERVED` = criada pelo
+ * QuotaGuard/QuotaService ANTES da operação rodar; `CONFIRMED` = operação
+ * concluiu com sucesso (nunca mais expira). Falha → a linha é APAGADA
+ * (estorno), nunca fica como `RESERVED` órfã. `RESERVED` com mais de 10
+ * minutos (processo morto entre reservar e confirmar/apagar) não conta pra
+ * ninguém — checado por `created_at` na hora de contar, nunca por um job de
+ * limpeza (nenhuma linha "errada" precisa ser apagada por segundo processo;
+ * só deixa de ser CONTADA).
  */
-export const crossReservations = pgTable("cross_reservations", {
+function reservationsTable(name: string) {
+  return pgTable(name, {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    status: text("status").notNull(), // "RESERVED" | "CONFIRMED"
+  }, (t) => ({
+    statusCheck: check(`${name}_status_check`, sql`${t.status} IN ('RESERVED','CONFIRMED')`),
+    ownerCreatedIdx: index(`${name}_owner_created_idx`).on(t.ownerId, t.createdAt),
+  }));
+}
+
+/**
+ * Reservas do limite TÉCNICO horário de POST /cross (ADR-0020 — 60/hora,
+ * anti-abuso, igual pra todo tier). Tabela e nome INALTERADOS desde a
+ * ADR-0019 (não precisa migração): só o SIGNIFICADO mudou — antes contava a
+ * cota de cruzamento por tier (rolling7d/day), agora conta só o teto técnico
+ * por hora (ver `quota.service.ts`, kind "cross_hourly").
+ */
+export const crossReservations = reservationsTable("cross_reservations");
+
+/**
+ * Reservas da cota de REVELAÇÃO por tier (ADR-0020 — rolling7d/day, mesmos
+ * valores que a cota de cruzamento tinha na ADR-0019, só o alvo mudou de
+ * "cruzar" pra "revelar uma descrição da incubadora"). Tabela NOVA — contador
+ * independente do limite horário de cruzamento acima (`quota.service.ts`,
+ * kind "reveal").
+ */
+export const revealReservations = reservationsTable("reveal_reservations");
+
+/**
+ * Incubadora (ADR-0020): toda descrição de fenótipo enumerada por um
+ * cruzamento (livre/ilimitado) vira uma linha aqui — SEM imagem, sem custo,
+ * sem prazo. Campos ALÉM da lista literal pedida (`sireId`/`damId`/`method`/
+ * `pack`/`species`/`fPedigree`/`fixationIndex`/`generation`/`fertility`/
+ * `haldaneStatus`) são necessários pra "nascer" (passo 5, ADR-0020) NUNCA
+ * recalcular nada — sem eles não dá pra montar um `StoredSpecimen` válido
+ * só com o que a lista original tinha (genotype/phenotype/prob/aura/sex).
+ * `crossId` NÃO é FK pra outra tabela — é só um id de correlação, o MESMO em
+ * toda linha gerada pelo mesmo POST /cross (pra UI agrupar "essas N vieram
+ * do mesmo cruzamento"); a tabela `crosses` (legada, nunca chegou a ser
+ * escrita) não serve pra isso porque `resultSpecimenId` é NOT NULL (exige um
+ * espécime já existente, incompatível com "cruzar não cria espécime" desta
+ * ADR) — deliberadamente não reaproveitada aqui.
+ */
+export const incubatorEntries = pgTable("incubator_entries", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id").notNull(),
+  crossId: text("cross_id").notNull(),
+  sireId: text("sire_id").notNull(),
+  damId: text("dam_id").notNull(),
+  method: text("method").notNull(),
+  pack: text("pack").notNull(), // "canine" | "feline"
+  species: text("species").notNull(),
+  genotype: jsonb("genotype").$type<Genotype>().notNull(),
+  phenotype: jsonb("phenotype").$type<Phenotype>().notNull(),
+  prob: doublePrecision("prob").notNull(),
+  fPedigree: doublePrecision("f_pedigree").notNull().default(0),
+  fixationIndex: doublePrecision("fixation_index").notNull().default(0),
+  aura: integer("aura").notNull(),
+  generation: integer("generation").notNull().default(0),
+  sex: text("sex").notNull(), // "M" | "F" — ADR-0020: sexo é sorteado na INCUBAÇÃO, não mais só na síntese
+  fertility: doublePrecision("fertility"), // 0–100 | null (ADR-0015, mesma regra de specimens.fertility)
+  haldaneStatus: text("haldane_status"), // "NONE" | "STERILE" | "REDUCED" | null
+  imageCacheKey: text("image_cache_key"),
+  revealedAt: timestamp("revealed_at", { withTimezone: true }),
+  bornSpecimenId: text("born_specimen_id"),
+  frozen: boolean("frozen").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  status: text("status").notNull(), // "RESERVED" | "CONFIRMED"
 }, (t) => ({
-  statusCheck: check("cross_reservations_status_check", sql`${t.status} IN ('RESERVED','CONFIRMED')`),
-  ownerCreatedIdx: index("cross_reservations_owner_created_idx").on(t.ownerId, t.createdAt),
+  sexCheck: check("incubator_entries_sex_check", sql`${t.sex} IN ('M','F')`),
+  fertilityCheck: check("incubator_entries_fertility_check", sql`${t.fertility} IS NULL OR (${t.fertility} >= 0 AND ${t.fertility} <= 100)`),
+  haldaneStatusCheck: check("incubator_entries_haldane_status_check", sql`${t.haldaneStatus} IS NULL OR ${t.haldaneStatus} IN ('NONE','STERILE','REDUCED')`),
+  ownerCreatedIdx: index("incubator_entries_owner_created_idx").on(t.ownerId, t.createdAt),
 }));
 
 export type DbSchema = {
@@ -121,6 +187,8 @@ export type DbSchema = {
   specimens: typeof specimens;
   crosses: typeof crosses;
   crossReservations: typeof crossReservations;
+  revealReservations: typeof revealReservations;
+  incubatorEntries: typeof incubatorEntries;
 };
 
 /** Carteira de recursos por usuário (economia — TDD §7). */

@@ -66,6 +66,26 @@ export function GenotypeToggle({ genotype, label = "genótipo" }: { genotype: Ge
   );
 }
 
+/** Aura em estrelas (1-5) — mesmo padrão visual usado em toda a web. */
+export function AuraStars({ n }: { n: number }) {
+  return <span className="text-star text-sm">{"★".repeat(n)}<span className="text-white/20">{"★".repeat(5 - n)}</span></span>;
+}
+
+/**
+ * TODOS os loci do fenótipo, com o valor JÁ EXPRESSO pelo pack (calculado
+ * por `expressPhenotype()` no motor — nenhum rótulo inventado aqui).
+ * Rolável (max-height) se não couber, pra nunca estourar o card em 360px.
+ * Usada nos cards de opção/descrição (Laboratório, Incubadora).
+ */
+export function FullPhenotype({ loci }: { loci: Record<string, string> }) {
+  const text = Object.entries(loci).map(([locus, value]) => `${locus}: ${value}`).join(" · ");
+  return (
+    <p className="mt-1 max-h-14 overflow-y-auto rounded border border-white/10 bg-bg-900/40 px-2 py-1 text-left font-mono text-[0.6rem] leading-snug text-ink-muted">
+      {text}
+    </p>
+  );
+}
+
 const QTL_LABEL: Record<string, string> = {
   porte: "Porte", vigor: "Vigor", beleza: "Beleza", temperamento: "Temperamento", rosetas: "Rosetas",
 };

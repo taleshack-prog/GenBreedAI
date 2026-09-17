@@ -8,35 +8,40 @@ import { firstSeedWithSex } from "./helpers/seed-for-sex";
 
 describe("Criopreservação (Gene Bank)", () => {
   let repo: InMemorySpecimenRepository; let cross: CrossService; let wallet: WalletService; let gb: GeneBankService;
-  beforeEach(() => { repo = new InMemorySpecimenRepository(); cross = new CrossService(repo, wallet); wallet = new WalletService(new InMemoryWalletRepository()); gb = new GeneBankService(repo, cross, wallet); });
+  // ORDEM IMPORTA: `wallet` precisa existir ANTES de `new CrossService(repo,
+  // wallet)` — `CrossService` guarda a referência recebida no construtor
+  // (não relê a variável de fora depois); construir `cross` com `wallet`
+  // ainda `undefined` (bug de ordem, não de injeção do Nest — este arquivo
+  // instancia as classes na mão, sem DI nenhuma) deixa `cross.wallet`
+  // permanentemente `undefined`, e qualquer `cross.execute()` que tente
+  // `this.wallet.rewardForCross(...)` explode com TypeError.
+  beforeEach(() => { repo = new InMemorySpecimenRepository(); wallet = new WalletService(new InMemoryWalletRepository()); cross = new CrossService(repo, wallet); gb = new GeneBankService(repo, cross, wallet); });
 
-  it("congela uma OPÇÃO → cria espécime FROZEN e debita Catalisadores", async () => {
-    const opts = await cross.options("SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
-    const r = await gb.freezeOption("demo", "SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", choiceKey: opts.options[0]!.key });
-    expect(r.specimen.status).toBe("FROZEN");
-    expect(r.wallet.catalisadores).toBe(12450 - 20);
-  });
+  // `gb.freezeOption` (congelar uma OPÇÃO ainda não sintetizada) foi
+  // REMOVIDO (ADR-0020, item 9) — toda descrição de um cruzamento já fica
+  // de graça na incubadora (POST /cross), sem precisar pagar catalisadores
+  // só pra "reservar" o genótipo. Cobertura equivalente (revelar/congelar
+  // uma descrição JÁ revelada) vive em `incubator.e2e.spec.ts`.
 
   it("espécime CONGELADO não pode cruzar até descongelar", async () => {
-    const opts = await cross.options("SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
-    // onca-pintada×onca-negra é SAME_SPECIES (sem Haldane) — mas o sexo do
-    // filho ainda é sorteado por RNG, e ele é usado como SIRE logo abaixo
-    // (precisa ser Macho). firstSeedWithSex acha a seed certa em vez de fixar
-    // à mão. Retrocruza à MÃE real (onca-negra, Fêmea) — não a onca-pintada
-    // (Macho: era o PAI do próprio frozen; usá-lo como dam violaria o gate de
-    // sexo do motor).
-    let frozen!: Awaited<ReturnType<typeof gb.freezeOption>>;
+    // Cruza e materializa DIRETO (CrossService.execute, ainda usado
+    // internamente — ver ADR-0020) pra ter um espécime real pra congelar.
+    let frozenId!: string;
+    let frozenSex!: string;
     await firstSeedWithSex(async (seed) => {
-      frozen = await gb.freezeOption("demo", "SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", choiceKey: opts.options[0]!.key, seed });
-      return { specimen: { sex: frozen.specimen.sex! } };
+      const r = await cross.execute("demo", "SENIOR", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", seed });
+      frozenId = r.specimen.id; frozenSex = r.specimen.sex!;
+      return { specimen: { sex: r.specimen.sex! } };
     }, "M", "frozen-sire");
-    await expect(cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-negra", method: "BC1" }))
+    expect(frozenSex).toBe("M");
+    await gb.freezeSpecimen("demo", "SENIOR", frozenId);
+    await expect(cross.execute("demo", "SENIOR", { sireId: frozenId, damId: "onca-negra", method: "BC1" }))
       .rejects.toThrow(/congelado/);
     // descongela → agora cruza
-    const thawed = await gb.thaw("demo", "SENIOR", frozen.specimen.id);
+    const thawed = await gb.thaw("demo", "SENIOR", frozenId);
     expect(thawed.specimen.status).toBe("ALIVE");
     expect(thawed.wallet.biomassa).toBe(125480 - 10000);
-    const r = await cross.execute("demo", "SENIOR", { sireId: frozen.specimen.id, damId: "onca-negra", method: "BC1" });
+    const r = await cross.execute("demo", "SENIOR", { sireId: frozenId, damId: "onca-negra", method: "BC1" });
     expect(r.specimen.id).toBeTruthy();
   });
 
@@ -48,14 +53,14 @@ describe("Criopreservação (Gene Bank)", () => {
     await expect(gb.freezeSpecimen("demo", "JUNIOR", "onca-negra")).rejects.toThrow(/insuficientes/);
   });
 
-  it("sintetiza o escolhido e CONGELA os demais (fluxo do Tales)", async () => {
+  it("sintetiza o escolhido — ÓRFÃO (ADR-0020): 'congela os demais' não existe mais, frozen/frozenCount sempre vazios", async () => {
     const opts = await cross.options("PHD", { sireId: "onca-pintada", damId: "onca-negra", method: "F1" });
     const keys = opts.options.map((o) => o.key);
     const chosen = keys[0]!;
     const r = await gb.synthesizeAndFreeze("demo", "PHD", { sireId: "onca-pintada", damId: "onca-negra", method: "F1", choiceKey: chosen }, keys);
-    expect(r.specimen.status).toBe("ALIVE");            // o escolhido nasce vivo
-    expect(r.frozenCount).toBe(keys.length - 1);         // os demais congelados
-    for (const f of r.frozen) expect(f.status).toBe("FROZEN");
-    expect(r.wallet.catalisadores).toBeLessThanOrEqual(12450 - 20 * (keys.length - 1));
+    expect(r.specimen.status).toBe("ALIVE"); // o escolhido ainda nasce vivo — isso não mudou
+    expect(r.frozenCount).toBe(0);
+    expect(r.frozen).toEqual([]);
+    expect(r.skipped).toBe(0);
   });
 });

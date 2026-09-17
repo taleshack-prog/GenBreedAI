@@ -8,6 +8,8 @@ const icons: Record<string, React.ReactNode> = {
   lab: <path d="M9 3v6l-5 9a2 2 0 002 3h12a2 2 0 002-3l-5-9V3M8 3h8M9 13h6" />,
   species: <path d="M4 5h16M4 12h16M4 19h16" />,
   crosses: <path d="M6 4v6a6 6 0 006 6 6 6 0 006-6V4M6 4h12M12 16v4" />,
+  // ADR-0020: incubadora — ovo (descrição de fenótipo ainda não revelada/nascida).
+  incubator: <path d="M12 3C8 8 6 12.5 6 15.5a6 6 0 0012 0C18 12.5 16 8 12 3z" />,
   genome: <path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 6h10M7 18h10" />,
   market: <path d="M4 7h16l-1.5 9.5A2 2 0 0116.5 18h-9a2 2 0 01-2-1.5L4 7zM4 7l-1-3H1M9 11v3M15 11v3" />,
   profile: <circle cx="12" cy="8" r="3.2" />,
@@ -17,6 +19,7 @@ const profilePath = <><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0114
 const TABS = [
   { href: "/app", key: "lab", label: "Laboratório" },
   { href: "/app/species", key: "species", label: "Espécies" },
+  { href: "/app/incubadora", key: "incubator", label: "Incubadora" },
   { href: "/app/crosses", key: "crosses", label: "Cruzamentos" },
   { href: "/app/gene-bank", key: "genome", label: "Gene Bank" },
   { href: "/app/market", key: "market", label: "Mercado" },

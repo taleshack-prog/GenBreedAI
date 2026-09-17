@@ -1,8 +1,8 @@
 /**
- * Rótulos curtos/descritivos do fenótipo pro seletor de opções
- * (`PhenotypeSelector.tsx`) — módulo `.ts` puro (sem JSX/React) de propósito,
- * pra poder ser testado sem precisar de ambiente de DOM/renderização
- * (`__tests__/phenotype-summary.test.ts`).
+ * Rótulos curtos/descritivos do fenótipo — usados nos cards de descrição do
+ * Laboratório e da Incubadora (ADR-0020). Módulo `.ts` puro (sem JSX/React)
+ * de propósito, pra poder ser testado sem precisar de ambiente de
+ * DOM/renderização (`__tests__/phenotype-summary.test.ts`).
  *
  * Regra de ouro (bug corrigido nesta rodada): NUNCA usar `.includes(palavra)`
  * pra detectar "tem o traço X" — os valores aqui vêm de
@@ -60,13 +60,6 @@ export function phenoSummary(loci: Record<string, string>): string {
   return parts.length ? parts.join(" · ") : "Fulvo comum";
 }
 
-/** Porte a partir do QTL (0..1). */
-export function porteWord(p?: number): string {
-  const v = p ?? 0.5;
-  if (v >= 0.85) return "Gigante"; if (v >= 0.65) return "Grande";
-  if (v >= 0.45) return "Médio"; if (v >= 0.3) return "Pequeno-médio"; return "Pequeno";
-}
-
 /**
  * Orelhas (felino Ec tufadas/grandes/normais; canino Ec eretas/semieretas/
  * caídas/semicaídas). Igualdade EXATA contra os valores que os packs (feline.ts/
@@ -86,22 +79,4 @@ export function earsWord(loci: Record<string, string>): string | null {
     case "orelhas semicaídas": return "Orelhas semicaídas";
     default: return null;
   }
-}
-
-/** Pelo (felino Fl/Hr; canino Cl/Ct). */
-export function furWord(loci: Record<string, string>): string | null {
-  if (loci.Hr === "pelado (sphynx)") return "Pelado";
-  if (loci.Fl === "pelo longo" || loci.Cl === "pelo longo") return "Pelo longo";
-  if (loci.Ct === "pelo cacheado") return "Pelo cacheado";
-  if (loci.Ct === "pelo áspero") return "Pelo áspero";
-  return "Pelo curto";
-}
-
-/** Lista de chips descritivos — usada em todo card de opção (ADR-0019: nenhuma prévia gera imagem). */
-export function richChips(o: { phenotype: { loci: Record<string, string> }; genotype: { qtl?: Record<string, number> } }): string[] {
-  const loci = o.phenotype.loci;
-  const chips: string[] = [phenoSummary(loci), porteWord(o.genotype.qtl?.porte)];
-  const ears = earsWord(loci); if (ears) chips.push(ears);
-  const fur = furWord(loci); if (fur) chips.push(fur);
-  return chips;
 }

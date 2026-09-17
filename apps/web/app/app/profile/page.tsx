@@ -5,7 +5,7 @@ import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getRe
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
-import { crossQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
+import { revealUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
 
 const TIER_NAME: Record<Tier, string> = {
   FREE: "FREEBREEDER",
@@ -96,9 +96,9 @@ export default function ProfilePage() {
           <div className="text-sm text-purple">{TIER_NAME[tier] ?? TIER_NAME.FREE}</div>
           {myTier && (
             <div className="mt-1 text-xs text-ink-muted">
-              {crossQuotaLabel(myTier.crossQuota)} · {myTier.monthlyExtraImages} retratos extras/mês
-              {myTier.crossQuota.nextAvailableAt && myTier.crossQuota.used >= myTier.crossQuota.limit && (
-                <div className="mt-0.5 text-amber">{nextAvailableLabel(myTier.crossQuota.nextAvailableAt)}</div>
+              {revealUsageLabel(myTier.revealQuota)} · {myTier.monthlyExtraImages} retratos extras/mês
+              {myTier.revealQuota.nextAvailableAt && myTier.revealQuota.used >= myTier.revealQuota.limit && (
+                <div className="mt-0.5 text-amber">{nextAvailableLabel(myTier.revealQuota.nextAvailableAt)}</div>
               )}
             </div>
           )}

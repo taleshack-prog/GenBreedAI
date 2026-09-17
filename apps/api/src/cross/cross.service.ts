@@ -4,6 +4,7 @@
  * escolhe top-12. Escolher NÃO muda probabilidade — só materializa a opção.
  */
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import {
   cross as crossEngine, enumerateOffspring, materializeCross,
   CANINE_PACK, FELINE_PACK, SexMismatchError, SterileParentError, type OffspringOption,
@@ -220,6 +221,63 @@ export class CrossService {
       throw new BadRequestException("Genótipo incompatível com o pack atual.");
     }
     return { result, sire, dam, species: combineSpecies(sire.species, dam.species), pack: sire.pack };
+  }
+
+  /**
+   * ADR-0020: cruzar é livre e NÃO cria espécime — enumera até `optionCount`
+   * descrições de fenótipo (mesma lista de `options()`) e, pra CADA uma,
+   * roda `materializeCross()` (sexo+xLoci, fenótipo pro sexo sorteado,
+   * fertilidade, IF, aura, cacheKey) — igual ao que `execute()` faz pra UMA
+   * opção escolhida, só que aqui é feito pra TODAS, sem persistir specimen
+   * nenhum. Quem chama (IncubatorService) grava cada resultado como uma
+   * linha de `incubator_entries`; "nascer" depois só COPIA esses campos
+   * (nunca recalcula).
+   *
+   * Seed por opção: `${dto.seed ?? crossId}|${chave da opção}` — com
+   * `dto.seed` explícito (testes), o resultado é 100% determinístico
+   * (mesmos pais+método+seed ⇒ mesmas N descrições, sempre). SEM `dto.seed`
+   * (chamada normal), `crossId` é um `randomUUID()` novo a cada chamada —
+   * cruzar sendo livre/ilimitado, o jogador pode repetir o MESMO par várias
+   * vezes pra encher a incubadora com descrições diferentes; se o default
+   * fosse determinístico (como `execute()`/`computeResult()` usam pra 1
+   * espécime), toda repetição sem seed devolveria as MESMAS N descrições —
+   * inútil pro mecanismo "cruze de novo pra ver mais opções".
+   */
+  async incubate(ownerId: string, tier: Tier, dto: CrossDto): Promise<{
+    crossId: string; sireId: string; damId: string; method: BreedingMethod;
+    pack: string; species: string;
+    entries: Array<{
+      genotype: Genotype; phenotype: CrossResult["specimen"]["phenotype"];
+      prob: number; fPedigree: number; fixationIndex: number; aura: number;
+      generation: number; sex: CrossResult["specimen"]["sex"];
+      fertility: number; haldaneStatus: CrossResult["specimen"]["fertility"]["haldaneStatus"];
+    }>;
+  }> {
+    const { sire, dam, a, b, ctx, interspecific } = await this.resolve(dto, tier);
+    assertTierAllows(tier, sire.pack, dam.pack, interspecific);
+    const opts = enumerateOffspring(a, b, ctx, optionCount(tier));
+    const crossId = `cross_${randomUUID()}`;
+    const seedBase = dto.seed ?? crossId;
+    let entries;
+    try {
+      entries = opts.map((o) => {
+        const result = materializeCross(a, b, dto.method as BreedingMethod, `${seedBase}|${o.key}`, ctx, o.genotype);
+        return {
+          genotype: result.specimen.genotype as Genotype, phenotype: result.specimen.phenotype,
+          prob: o.prob, fPedigree: result.specimen.fPedigree, fixationIndex: result.specimen.fixationIndex,
+          aura: result.specimen.aura, generation: result.specimen.generation, sex: result.specimen.sex,
+          fertility: result.specimen.fertility.score, haldaneStatus: result.specimen.fertility.haldaneStatus,
+        };
+      });
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      if (e instanceof SexMismatchError) throw new BadRequestException("Cruzamento exige pai macho e mãe fêmea.");
+      if (e instanceof SterileParentError) throw new BadRequestException("Espécime estéril não pode reproduzir.");
+      // eslint-disable-next-line no-console
+      console.error("[CrossService.incubate] erro do motor:", e);
+      throw new BadRequestException("Genótipo incompatível com o pack atual.");
+    }
+    return { crossId, sireId: sire.id, damId: dam.id, method: dto.method, pack: sire.pack, species: combineSpecies(sire.species, dam.species), entries };
   }
 
   async execute(ownerId: string, tier: Tier, dto: CrossDto): Promise<CrossResponse> {

@@ -32,7 +32,7 @@ const grantedTiersRepositoryProvider = {
  * ganhar acesso sem import extra.
  */
 @Module({
-  imports: [QuotaModule], // MeController usa QuotaService pra devolver crossQuota (ADR-0019)
+  imports: [QuotaModule], // MeController usa QuotaService pra devolver revealQuota (ADR-0020)
   controllers: [MeController],
   providers: [TierService, subscriptionsRepositoryProvider, grantedTiersRepositoryProvider],
   exports: [TierService, SubscriptionsRepository, GrantedTiersRepository],

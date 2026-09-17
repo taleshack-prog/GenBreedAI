@@ -2,43 +2,60 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { listSpecimens, postCross, type ApiSpecimen } from "../../lib/api";
+import { listSpecimens, postCross, getMyTier, classifyCross, type ApiSpecimen, type CrossClassification, type MyTier, type IncubatorDescription } from "../../lib/api";
 import { compatibility } from "../../lib/lab";
-import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getMyTier, classifyCross, type OffspringOption, type CrossClassification, type MyTier } from "../../lib/api";
-import { PhenotypeSelector } from "../../components/PhenotypeSelector";
 import { displayName } from "../../lib/display";
 import { methodLabel } from "../../lib/method-label";
-import { crossQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
+import { phenoSummary } from "../../lib/phenotype-summary";
+import { revealQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
 import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
-import { PunnettGridView, InbreedingGauge, HybridPreview, CurrencyBar } from "../../components/LabSections";
-import { GenotypeToggle } from "../../components/Genome";
+import { PunnettGridView, InbreedingGauge, CurrencyBar } from "../../components/LabSections";
+import { GenotypeToggle, FullPhenotype, AuraStars } from "../../components/Genome";
 import { wrightF } from "@genbreedai/engine";
 
 const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as const;
 
+/** Card de UMA descrição recém-criada na incubadora (ADR-0020) — mesma informação que a incubadora mostra: probabilidade, aura, fenótipo completo, genótipo. "Revelar" leva pra incubadora, não gera nada aqui. */
+function CrossResultCard({ e, router }: { e: IncubatorDescription; router: ReturnType<typeof useRouter> }) {
+  return (
+    <div className="rounded-lg border border-cyan/25 bg-bg-900/60 p-3 text-left">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-mono text-xs text-purple">{(e.prob * 100).toFixed(1)}%</span>
+        <AuraStars n={e.aura} />
+      </div>
+      <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
+      <FullPhenotype loci={e.phenotype.loci} />
+      <GenotypeToggle genotype={e.genotype} />
+      <button
+        onClick={() => router.push("/app/incubadora")}
+        className="mt-2 block w-full rounded border border-cyan/30 py-1.5 text-center font-display text-[0.65rem] uppercase text-cyan transition hover:bg-cyan/10"
+      >
+        ◈ Revelar
+      </button>
+    </div>
+  );
+}
+
 function LabInner() {
   const router = useRouter();
   const search = useSearchParams();
-  const [options, setOptions] = useState<OffspringOption[]>([]);
-  const [canChoose, setCanChoose] = useState(false);
-  const [maxOptions, setMaxOptions] = useState(6);
-  const [choiceKey, setChoiceKey] = useState<string | null>(null);
-  const [freezeMsg, setFreezeMsg] = useState<string | null>(null);
-  const [freezeRest, setFreezeRest] = useState(true);
-  const [describeMode, setDescribeMode] = useState(false);
   const [myTier, setMyTier] = useState<MyTier | null>(null);
   const [classification, setClassification] = useState<CrossClassification | null>(null);
   // Tier efetivo (TierService, via /api/v1/me/tier) — nunca mais de um seletor local.
-  useEffect(() => { getMyTier().then((t) => { setDescribeMode(t.tier === "FREE"); setMyTier(t); }).catch(() => {}); }, []);
+  useEffect(() => { getMyTier().then(setMyTier).catch(() => {}); }, []);
   const [specimens, setSpecimens] = useState<ApiSpecimen[]>([]);
   const [sireId, setSireId] = useState("");
   const [damId, setDamId] = useState("");
   const [method, setMethod] = useState<(typeof METHODS)[number]>("F1");
-  const [loading, setLoading] = useState(false);
+  const [crossing, setCrossing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  // ADR-0020: resultado do ÚLTIMO cruzamento (livre, sem custo) — as
+  // descrições ficam na tela até o jogador ir revelar/nascer na incubadora;
+  // cruzar de novo troca pelo resultado novo.
+  const [crossEntries, setCrossEntries] = useState<IncubatorDescription[]>([]);
 
   useEffect(() => {
     listSpecimens().then(setSpecimens).catch((e) => { const m = (e as Error).message; if (/401|autentica|Sess/i.test(m)) { router.push("/login"); return; } setListError(m); });
@@ -77,14 +94,9 @@ function LabInner() {
     if (b && specimens.some((s) => s.id === b)) setDamId(b);
   }, [specimens, search]);
 
-  useEffect(() => {
-    setChoiceKey(null); setOptions([]);
-    if (sire && dam && sire.pack === dam.pack) {
-      getCrossOptions({ sireId: sire.id, damId: dam.id, method })
-        .then((r) => { setOptions(r.options); setCanChoose(r.canChoose); setMaxOptions(r.maxOptions); })
-        .catch(() => setOptions([]));
-    }
-  }, [sire?.id, dam?.id, method]);
+  // Trocar de par/método esconde o resultado do cruzamento anterior — ele já
+  // está salvo na incubadora de qualquer forma, não precisa continuar visível.
+  useEffect(() => { setCrossEntries([]); }, [sire?.id, dam?.id, method]);
 
   const compatible = sire && dam && sire.pack === dam.pack;
 
@@ -99,24 +111,15 @@ function LabInner() {
 
   async function onCross() {
     if (!sire || !dam) return;
-    setLoading(true);
+    setCrossing(true);
     setError(null);
     try {
-      if (canChoose && choiceKey && freezeRest && options.length > 1) {
-        const res = await synthesizeAndFreeze({
-          sireId: sire.id, damId: dam.id, method, choiceKey,
-          freezeKeys: options.map((o) => o.key),
-        });
-        router.push(`/app/reveal/${res.specimen.id}`);
-        return;
-      }
-      const res = await postCross({ sireId: sire.id, damId: dam.id, method, choiceKey: choiceKey ?? undefined });
-      router.push(`/app/reveal/${res.specimen.id}`);
-      return;
+      const res = await postCross({ sireId: sire.id, damId: dam.id, method });
+      setCrossEntries(res.entries);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setLoading(false);
+      setCrossing(false);
     }
   }
 
@@ -202,49 +205,39 @@ function LabInner() {
         </div>
       )}
 
-      {/* Seletor de fenótipo (Senior+ escolhe; Free só vê) */}
-      {compatible && options.length > 0 && (
-        <section className="mt-5">
-          <PhenotypeSelector
-            options={options} canChoose={canChoose} maxOptions={maxOptions}
-            selectedKey={choiceKey} onSelect={setChoiceKey}
-            crossInput={{ sireId: sire!.id, damId: dam!.id, method }}
-            family={sire!.pack}
-            describeMode={describeMode}
-            onFrozen={setFreezeMsg}
-          />
-          {freezeMsg && <p className="mt-2 text-center text-xs text-cyan">{freezeMsg}</p>}
+      {/* Botão cruzar — livre, sem custo (ADR-0020) */}
+      <button
+        onClick={onCross}
+        disabled={!compatible || crossing || sireOptions.length === 0 || damOptions.length === 0}
+        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl bg-ok px-4 py-4 font-display text-lg font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
+      >
+        {crossing ? "Cruzando…" : "Cruzar"}
+      </button>
+      <p className="mt-2 text-center text-[0.65rem] uppercase tracking-wide text-ok">Cruzamentos ilimitados, sem custo</p>
+      {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
+
+      {/* Resultado do cruzamento (ADR-0020): descrições recém-criadas, ainda
+          sem retrato — ficam na incubadora até o jogador revelar. */}
+      {crossEntries.length > 0 && (
+        <section className="mt-6 rounded-card border border-cyan/20 bg-bg-800 p-4">
+          <h3 className="mb-1 font-display text-xs font-bold uppercase text-cyan">
+            {crossEntries.length} descriç{crossEntries.length === 1 ? "ão" : "ões"} de fenótipo
+          </h3>
+          <p className="mb-3 text-[0.7rem] text-ink-muted">As descrições ficam na Incubadora até você revelar.</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {crossEntries.map((e) => <CrossResultCard key={e.id} e={e} router={router} />)}
+          </div>
         </section>
       )}
 
-      {/* Congelar os não escolhidos */}
-      {canChoose && options.length > 1 && (
-        <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 text-xs text-ink-muted">
-          <input type="checkbox" checked={freezeRest} onChange={(e) => setFreezeRest(e.target.checked)} className="accent-cyan" />
-          Congelar os {options.length - 1} fenótipos não escolhidos (−100 cat. cada = −{(options.length - 1) * 100} catalisadores)
-        </label>
-      )}
-
-      {/* Botão sintetizar */}
-      <button
-        onClick={onCross}
-        disabled={!compatible || loading || sireOptions.length === 0 || damOptions.length === 0}
-        className="mt-6 flex w-full items-center justify-center gap-3 rounded-xl bg-ok px-4 py-4 font-display text-lg font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-muted disabled:shadow-none"
-      >
-        {loading ? "Sintetizando…" : canChoose && choiceKey ? "Sintetizar fenótipo escolhido" : "Sintetizar genoma"}
-        {compatible && <span className="font-mono text-sm opacity-80">🌿 25.000 · ⬢ 750</span>}
-      </button>
       {myTier && (
-        <p className="mt-2 text-center text-[0.7rem] text-ink-muted">
-          {crossQuotaLabel(myTier.crossQuota)}
-          {myTier.crossQuota.nextAvailableAt && myTier.crossQuota.used >= myTier.crossQuota.limit && (
-            <span className="text-amber"> · {nextAvailableLabel(myTier.crossQuota.nextAvailableAt)}</span>
+        <p className="mt-4 text-center text-[0.7rem] text-ink-muted">
+          Revelar: {revealQuotaLabel(myTier.revealQuota)}
+          {myTier.revealQuota.nextAvailableAt && myTier.revealQuota.used >= myTier.revealQuota.limit && (
+            <span className="text-amber"> · {nextAvailableLabel(myTier.revealQuota.nextAvailableAt)}</span>
           )}
         </p>
       )}
-      {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
-
-
     </main>
   );
 }

@@ -50,8 +50,8 @@ export function PlanPicker({
                 <div className="mb-3" />
               )}
               <ul className="mb-5 flex-1 space-y-2.5 text-[0.72rem] leading-snug text-ink-muted">
-                <li><span className="text-ink">{p.crosses}</span> de cruzamentos</li>
-                <li><span className="text-ink">{p.images}</span> de imagens IA</li>
+                <li><span className="text-ink">{p.crosses}</span></li>
+                <li><span className="text-ink">{p.images}</span></li>
                 <li>{p.tools}</li>
                 <li>{p.pool}</li>
               </ul>
