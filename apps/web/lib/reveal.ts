@@ -12,8 +12,4 @@ export function phenotypeOf(s: ApiSpecimen) {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
   return expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack);
 }
-export const METHOD_LABEL: Record<string, string> = {
-  F1: "F1 · Primeira geração", F2: "F2 · Intercruzamento", F3: "F3 · Terceira geração",
-  BC1: "BC1 · Retrocruzamento", LINE: "Line-breeding", INBREED: "Endocruzamento",
-  OUTCROSS: "Outcross de resgate", FOUNDER: "Fundador",
-};
+// Rótulo de method: ver lib/method-label.ts (fonte única — removida a tabela local).

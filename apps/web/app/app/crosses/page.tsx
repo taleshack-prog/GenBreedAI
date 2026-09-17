@@ -4,12 +4,9 @@ import { listSpecimens, type ApiSpecimen } from "../../../lib/api";
 import { AscendancyTree } from "../../../components/AscendancyTree";
 import { Screen, ComingSoon } from "../../../components/Screen";
 import { displayName } from "../../../lib/display";
+import { methodLabel } from "../../../lib/method-label";
 
 type Fam = "feline" | "canine";
-
-const METHOD_LABEL: Record<string, string> = {
-  F1: "F1", F2: "F2", F3: "F3", BC1: "Retrocruza", LINE: "Linebreeding", INBREED: "Endogamia", OUTCROSS: "Outcross",
-};
 
 export default function LineagesPage() {
   const [items, setItems] = useState<ApiSpecimen[]>([]);
@@ -82,7 +79,7 @@ export default function LineagesPage() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-display text-sm font-semibold text-ink">{displayName(s)}</div>
                     <div className="font-mono text-[0.62rem] text-ink-muted">
-                      {METHOD_LABEL[s.method] ?? s.method} · <span className="tnum">{nodes}</span> ancestrais · F=<span className="tnum">{(s.fPedigree ?? 0).toFixed(3)}</span>
+                      {methodLabel(s.method, "short")} · <span className="tnum">{nodes}</span> ancestrais · F=<span className="tnum">{(s.fPedigree ?? 0).toFixed(3)}</span>
                     </div>
                   </div>
                   <span className="shrink-0 font-mono text-[0.6rem] text-star">{"★".repeat(s.aura)}</span>

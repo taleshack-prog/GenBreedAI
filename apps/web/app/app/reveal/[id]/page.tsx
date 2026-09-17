@@ -6,8 +6,9 @@ import Link from "next/link";
 import { listSpecimens, generateImage, type ApiSpecimen } from "../../../../lib/api";
 import { CapsuleCard } from "../../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../../components/Genome";
-import { rarityOf, phenotypeOf, METHOD_LABEL } from "../../../../lib/reveal";
+import { rarityOf, phenotypeOf } from "../../../../lib/reveal";
 import { displayName } from "../../../../lib/display";
+import { methodLabel } from "../../../../lib/method-label";
 import { revealTitleWord } from "@genbreedai/shared";
 import { SexBadge } from "../../../../components/SexBadge";
 
@@ -86,7 +87,7 @@ export default function RevealPage() {
           <LineageMini s={dam} cor="#BF00FF" />
         </div>
         <div className="mt-2 text-center font-mono text-xs text-ink-muted">
-          {METHOD_LABEL[specimen.method] ?? specimen.method} · geração {specimen.generation}
+          {methodLabel(specimen.method)} · geração {specimen.generation}
         </div>
       </div>
 

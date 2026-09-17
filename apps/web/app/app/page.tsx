@@ -7,6 +7,7 @@ import { compatibility } from "../../lib/lab";
 import { getCrossOptions, synthesizeAndFreeze, recordReferralClick, getMyTier, classifyCross, type OffspringOption, type CrossClassification } from "../../lib/api";
 import { PhenotypeSelector } from "../../components/PhenotypeSelector";
 import { displayName } from "../../lib/display";
+import { methodLabel } from "../../lib/method-label";
 import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
@@ -166,7 +167,7 @@ function LabInner() {
             </div>
           )}
           <select value={method} onChange={(e) => setMethod(e.target.value as (typeof METHODS)[number])} className="w-44 rounded-lg border border-white/10 bg-bg-900 px-2 py-1.5 text-center font-mono text-sm text-ink transition focus:border-cyan focus:outline-none">
-            {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            {METHODS.map((m) => <option key={m} value={m}>{methodLabel(m, "short")}</option>)}
           </select>
         </div>
 

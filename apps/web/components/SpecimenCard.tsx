@@ -3,11 +3,7 @@ import { Creature } from "./Creature";
 import { AuraStars } from "./AuraStars";
 import { GenotypeChips, QtlBars } from "./Genome";
 import { SexBadge } from "./SexBadge";
-
-const METHOD_LABEL: Record<string, string> = {
-  F1: "F1 · primeira geração", F2: "F2 · intercruzamento", F3: "F3 · terceira geração",
-  BC1: "BC1 · retrocruzamento", LINE: "Line-breeding", INBREED: "Endocruzamento", OUTCROSS: "Outcross de resgate",
-};
+import { methodLabel } from "../lib/method-label";
 
 function fTone(f: number) {
   if (f > 0.2) return "text-crit";
@@ -47,7 +43,7 @@ export function SpecimenCard({ result }: { result: CrossResponse }) {
 
       <div className="p-6">
         <div className="text-xs text-ink-muted">
-          {METHOD_LABEL[engine.method] ?? engine.method} · geração {engine.generation}
+          {methodLabel(engine.method)} · geração {engine.generation}
         </div>
         <h3 className="font-display text-2xl font-bold uppercase text-ink">
           {specimen.species}

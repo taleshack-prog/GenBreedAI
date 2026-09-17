@@ -2,11 +2,7 @@
 import { useRouter } from "next/navigation";
 import type { ApiSpecimen } from "../lib/api";
 import { displayName } from "../lib/display";
-
-const METHOD_LABEL: Record<string, string> = {
-  F1: "F1", F2: "F2", F3: "F3", BC1: "Retrocruza (BC1)",
-  LINE: "Linebreeding", INBREED: "Endogamia", OUTCROSS: "Outcross", FOUNDER: "Fundador",
-};
+import { methodLabel } from "../lib/method-label";
 
 /** Árvore de ascendência recuada: o espécime no topo, pais indentados abaixo. */
 export function AscendancyTree({ specimen, byId, depth = 0 }: {
@@ -30,7 +26,7 @@ export function AscendancyTree({ specimen, byId, depth = 0 }: {
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-xs font-bold text-ink">{displayName(specimen)}</div>
           <div className="text-[0.6rem] text-ink-muted">
-            {isFounder ? "Fundador" : METHOD_LABEL[specimen.method] ?? specimen.method}
+            {isFounder ? "Fundador" : methodLabel(specimen.method, "short")}
             {!isFounder && <> · F={f.toFixed(3)}</>}
             {f >= 0.125 && !isFounder && <span className="text-crit"> ⚠</span>}
           </div>
