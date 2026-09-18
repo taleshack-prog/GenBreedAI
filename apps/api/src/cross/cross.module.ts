@@ -5,6 +5,7 @@ import { SpecimensModule } from "../specimens/specimens.module";
 import { ImageModule } from "../images/image.module";
 import { QuotaModule } from "../quota/quota.module";
 import { IncubatorStoreModule } from "../incubator/incubator-store.module";
+import { ClockModule } from "../common/clock.module";
 import { CrossController } from "./cross.controller";
 import { SpecimensController } from "../specimens/specimens.controller";
 import { CrossService } from "./cross.service";
@@ -28,9 +29,14 @@ import { CrossService } from "./cross.service";
  * importar nada), então importar aqui não cria ciclo com `IncubatorModule`
  * (que tem o resto da feature — revelar/nascer/congelar — e não precisa de
  * `CrossModule` pra nada).
+ * `ClockModule` (ADR-0023, ciclo de vida da incubadora) — `CrossController`
+ * agora chama `pruneExpiredBorn`/`enforceNonGestatedCap`
+ * (`incubator-lifecycle.ts`), que precisam de `Clock` (nunca `new Date()`
+ * direto, mesma regra de `IncubatorService`); módulo-folha, mesma instância
+ * singleton de `Clock` já usada por `IncubatorModule` (ver `clock.module.ts`).
  */
 @Module({
-  imports: [EconomyModule, TierModule, SpecimensModule, ImageModule, QuotaModule, IncubatorStoreModule],
+  imports: [EconomyModule, TierModule, SpecimensModule, ImageModule, QuotaModule, IncubatorStoreModule, ClockModule],
   controllers: [CrossController, SpecimensController],
   providers: [CrossService],
   // Reexporta TierModule/SpecimensModule/QuotaModule: GeneBankModule/

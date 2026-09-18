@@ -13,7 +13,8 @@ NENHUM sinal visual dessa condição — indistinguível de um `S/S` que nunca
 poderia gerar piebald.
 
 Levantamento antes da mudança (packs em vigor até esta ADR):
-- **Nenhum dos 74 fundadores caninos** era `S/s^p` — todos são `S/S` ou
+- **Nenhum dos 47 fundadores caninos** (94 espécimes com os gêmeos; o "74"
+  anterior era o total dos dois packs) era `S/s^p` — todos são `S/S` ou
   `s^p/s^p` homozigotos (`apps/api/src/specimens/in-memory.repository.ts`).
   Logo, nenhum fundador muda de fenótipo visível com esta mudança.
 - 3 fixtures do motor (`packages/engine/src/__tests__/fixtures.ts`:

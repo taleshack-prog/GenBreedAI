@@ -60,7 +60,8 @@ export interface IncubatorDescription {
   aura: number;
   sex: "M" | "F";
 }
-export interface CrossResult { crossId: string; entries: IncubatorDescription[]; }
+/** `discardedForCap` (ADR-0023): quantas entradas NÃO gestadas antigas foram apagadas pra caber no teto de 200 — 0 na maioria das vezes. */
+export interface CrossResult { crossId: string; entries: IncubatorDescription[]; discardedForCap: number; }
 
 // Usuário-demo do scaffold (dono dos fundadores semeados na API).
 export type Tier = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
@@ -219,6 +220,8 @@ export interface IncubatorEntry extends IncubatorDescription {
   gestationHours: number;
   bornSpecimenId: string | null;
   createdAt: string;
+  /** ADR-0023 — só entradas NASCIDAS têm valor: quando a entrada some da incubadora (7 dias corridos do nascimento). O espécime NUNCA é afetado, fica no Gene Bank pra sempre. */
+  expiresAt: string | null;
 }
 
 /** Uma página de `GET /incubator` — paginação por cursor + contagem COMPLETA por estado (nunca só da página atual). */

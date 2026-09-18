@@ -89,6 +89,10 @@ function LabInner() {
   const [crossing, setCrossing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  // ADR-0023: teto de 200 entradas não gestadas por dono — quando cruzar
+  // dispara o descarte das mais antigas pra abrir espaço, avisa aqui (tom
+  // neutro, não é erro).
+  const [discardNotice, setDiscardNotice] = useState<string | null>(null);
   // ADR-0021: resultado do ÚLTIMO cruzamento (livre, sem custo) — as
   // descrições ficam na tela até o jogador gestar (aqui) ou ir pra
   // incubadora; cruzar de novo troca pelo resultado novo.
@@ -150,9 +154,14 @@ function LabInner() {
     if (!sire || !dam) return;
     setCrossing(true);
     setError(null);
+    setDiscardNotice(null);
     try {
       const res = await postCross({ sireId: sire.id, damId: dam.id, method });
       setCrossEntries(res.entries);
+      if (res.discardedForCap > 0) {
+        const n = res.discardedForCap;
+        setDiscardNotice(n === 1 ? "1 descrição antiga foi liberada para abrir espaço." : `${n} descrições antigas foram liberadas para abrir espaço.`);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -252,6 +261,7 @@ function LabInner() {
       </button>
       <p className="mt-2 text-center text-[0.65rem] uppercase tracking-wide text-ok">Cruzamentos ilimitados, sem custo</p>
       {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
+      {discardNotice && <p className="mt-3 text-center text-[0.7rem] text-ink-muted">{discardNotice}</p>}
 
       {/* Resultado do cruzamento (ADR-0021): descrições recém-criadas, ainda
           sem retrato — ficam livres na incubadora até o jogador gestar. */}

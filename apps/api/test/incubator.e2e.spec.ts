@@ -25,8 +25,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { buildApp } from "../src/main";
 import { SystemClock } from "../src/common/clock";
-import { InMemoryIncubatorRepository } from "../src/incubator/in-memory.repository";
+import { IncubatorRepository, InMemoryIncubatorRepository } from "../src/incubator/in-memory.repository";
 import { IncubatorService } from "../src/incubator/incubator.service";
+import { enforceNonGestatedCap, NON_GESTATED_CAP } from "../src/incubator/incubator-lifecycle";
 import { InMemorySpecimenRepository } from "../src/specimens/in-memory.repository";
 import { ImageService } from "../src/images/image.service";
 import { ImageJobRepository } from "../src/images/image-job.repository";
@@ -191,6 +192,51 @@ describe("Incubadora — HTTP (ADR-0021, gestação)", () => {
     const badState = await get("/api/v1/incubator?state=NAO_EXISTE", headers);
     expect(badState.statusCode).toBe(400);
   });
+
+  it("teto de 200 não-gestadas (ADR-0023, item 2): POST /cross que estoura o teto descarta as mais antigas e informa quantas na resposta", async () => {
+    const headers = AUTH_JUNIOR("incu-cap-http-1");
+    const genotype: Genotype = { loci: { A: ["a", "a"] }, qtl: {} };
+    const phenotype: Phenotype = { loci: { A: "não-melanístico" }, qtl: {}, viable: true, epistasis: [], hasMutation: false };
+    // Pré-semeia exatamente o teto (200) direto no repositório (rápido — sem
+    // passar pelo pipeline de cruzamento/HTTP 200 vezes só pra montar o
+    // cenário). `app.get(IncubatorRepository)` é a MESMA instância que
+    // `CrossController` usa (sem DATABASE_URL, `IncubatorStoreModule` provê
+    // um `InMemoryIncubatorRepository` singleton).
+    const incubatorRepo = app.get(IncubatorRepository);
+    for (let i = 0; i < NON_GESTATED_CAP; i++) {
+      await incubatorRepo.create({
+        ownerId: "incu-cap-http-1", crossId: `seed-${i}`, sireId: "gato-tabby", damId: "gato-siames", method: "F1",
+        pack: "feline", species: "felis-catus", genotype, phenotype,
+        prob: 1, fPedigree: 0, fixationIndex: 0, aura: 3, generation: 1, sex: "M", fertility: null, haldaneStatus: null,
+      });
+    }
+    const before = (await get("/api/v1/incubator", headers)).json();
+    expect(before.counts.NA_INCUBADORA).toBe(NON_GESTATED_CAP);
+
+    // Garante que as 4 entradas do cruzamento abaixo fiquem num milissegundo
+    // estritamente DEPOIS de todas as 200 semeadas — o desempate de
+    // `createdAt` empatado é por `id` (UUID aleatório, não cronológico), e
+    // sem isso a ordem "mais nova" das novas 4 vs. as últimas semeadas
+    // ficaria ambígua (não é o mesmo tipo de espera que o pedido quer
+    // evitar — aquela é sobre simular dias de negócio via Clock).
+    await new Promise((r) => setTimeout(r, 5));
+
+    const crossRes = await post("/api/v1/cross", CROSS, headers);
+    expect(crossRes.statusCode).toBe(201);
+    const body = crossRes.json();
+    // gato-tabby × gato-siames dá 4 descrições (ver teste de paginação acima)
+    // — 200 pré-existentes + 4 novas = 204, 4 acima do teto → 4 descartadas.
+    expect(body.entries.length).toBe(4);
+    expect(body.discardedForCap).toBe(4);
+
+    const after = (await get("/api/v1/incubator", headers)).json();
+    expect(after.counts.NA_INCUBADORA).toBe(NON_GESTATED_CAP); // voltou pro teto, nunca abaixo
+    // As 4 entradas RECÉM-criadas (as mais novas) nunca são descartadas pelo
+    // teto — só as mais antigas (semeadas) são.
+    const newIds = new Set(body.entries.map((e: { id: string }) => e.id));
+    const stillThere = new Set(after.entries.map((e: { id: string }) => e.id));
+    for (const id of newIds) expect(stillThere.has(id)).toBe(true);
+  });
 });
 
 describe("Incubadora — instanciação direta (fallback de crédito, gestações simultâneas, determinismo)", () => {
@@ -285,5 +331,101 @@ describe("Incubadora — instanciação direta (fallback de crédito, gestaçõe
     expect(inc2.entries[0]!.genotype).toEqual(e.genotype);
     expect(inc2.entries[0]!.phenotype).toEqual(e.phenotype);
     expect(inc2.entries[0]!.sex).toBe(e.sex);
+  });
+
+  it("ADR-0023: entrada NASCIDA há 6 dias permanece; há 8 dias some do GET /incubator (limpeza preguiçosa) — contagem correta; o ESPÉCIME nunca é afetado", async () => {
+    const { incubator, incubatorRepo, specimenRepo, clock } = build();
+    const owner = "lifecycle-born-user";
+    const tier = "PHD" as const; // vaga de sobra, não é o foco do teste
+    const entry = await makeEntry(incubatorRepo, owner);
+    const gestated = await incubator.gestate(entry.id, owner, tier);
+
+    let bornAt: Date;
+    let specimenId: string;
+    try {
+      bornAt = new Date(new Date(gestated.gestationEndsAt!).getTime() + 1000);
+      clock.setForTesting(bornAt);
+      const { specimen } = await incubator.born(entry.id, owner, tier);
+      specimenId = specimen.id;
+    } finally {
+      clock.setForTesting(null);
+    }
+
+    try {
+      // 6 dias corridos depois do nascimento — ainda dentro do prazo, permanece.
+      clock.setForTesting(new Date(bornAt.getTime() + 6 * 24 * 60 * 60 * 1000));
+      const list6d = await incubator.list(owner);
+      expect(list6d.entries.some((v) => v.id === entry.id)).toBe(true);
+      expect(list6d.counts.NASCIDO).toBe(1);
+      expect(await specimenRepo.get(specimenId)).toBeDefined(); // espécime sempre existiu, nunca em risco
+
+      // 8 dias corridos depois — passou dos 7, a ENTRADA some (limpeza
+      // preguiçosa dispara dentro do próprio list()).
+      clock.setForTesting(new Date(bornAt.getTime() + 8 * 24 * 60 * 60 * 1000));
+      const list8d = await incubator.list(owner);
+      expect(list8d.entries.some((v) => v.id === entry.id)).toBe(false);
+      expect(list8d.counts.NASCIDO).toBe(0);
+      expect(list8d.counts.NA_INCUBADORA + list8d.counts.GESTANDO + list8d.counts.PRONTO + list8d.counts.NASCIDO).toBe(0);
+
+      // O ESPÉCIME nunca é afetado — continua no Gene Bank pra sempre, com o
+      // MESMO genótipo/fenótipo/sexo de antes, mesmo com a entrada já apagada.
+      const specimen = await specimenRepo.get(specimenId);
+      expect(specimen).toBeDefined();
+      expect(specimen!.genotype).toEqual(genotype);
+      expect(specimen!.phenotype).toEqual(phenotype);
+    } finally {
+      clock.setForTesting(null);
+    }
+  });
+
+  it("ADR-0023: teto de não-gestadas descarta as mais antigas até caber, nunca uma em gestação nem uma nascida", async () => {
+    const { incubatorRepo, incubator, clock } = build();
+    const owner = "lifecycle-cap-user";
+    const tier = "PHD" as const;
+    const cap = 5;
+    // `createdAt` do adapter in-memory é `new Date()` de verdade (não passa
+    // pelo `Clock` — só a entrada em si não tem regra de negócio sobre
+    // "quando foi criada"; ver `InMemoryIncubatorRepository.create()`).
+    // Espaça as criações em alguns ms reais (não é o mesmo tipo de espera
+    // que o pedido quer evitar — aquela é sobre simular dias/horas de
+    // negócio, isto é só garantir ordem determinística entre timestamps que
+    // senão empatariam no mesmo milissegundo).
+    const tick = () => new Promise((r) => setTimeout(r, 2));
+
+    // GESTANDO e NASCIDA são criadas PRIMEIRO — de propósito as mais
+    // ANTIGAS de todas — pra provar que o teto NUNCA as descarta mesmo
+    // sendo as candidatas "mais velhas" da lista.
+    const gestatingEntry = await makeEntry(incubatorRepo, owner);
+    await incubator.gestate(gestatingEntry.id, owner, tier);
+    await tick();
+    const bornEntry = await makeEntry(incubatorRepo, owner);
+    const gestatedForBirth = await incubator.gestate(bornEntry.id, owner, tier);
+    try {
+      clock.setForTesting(new Date(new Date(gestatedForBirth.gestationEndsAt!).getTime() + 1000));
+      await incubator.born(bornEntry.id, owner, tier);
+    } finally {
+      clock.setForTesting(null);
+    }
+    await tick();
+
+    // 3 excedentes não-gestadas (mais antigas DENTRE as não-gestadas).
+    const oldest = [];
+    for (let i = 0; i < 3; i++) { oldest.push(await makeEntry(incubatorRepo, owner)); await tick(); }
+    // 5 mantidas (as `cap` mais recentes).
+    const kept = [];
+    for (let i = 0; i < cap; i++) { kept.push(await makeEntry(incubatorRepo, owner)); await tick(); }
+
+    const discarded = await enforceNonGestatedCap(incubatorRepo, owner, cap);
+    expect(discarded).toBe(3);
+
+    for (const e of oldest) expect(await incubatorRepo.get(e.id)).toBeUndefined();
+    for (const e of kept) expect(await incubatorRepo.get(e.id)).toBeDefined();
+    expect(await incubatorRepo.get(gestatingEntry.id)).toBeDefined(); // em gestação — nunca descartada, mesmo sendo a mais antiga
+    expect(await incubatorRepo.get(bornEntry.id)).toBeDefined(); // nascida — nunca descartada pelo TETO (só pelo prazo de 7 dias), mesmo sendo a 2ª mais antiga
+
+    const counts = await incubatorRepo.countByState(owner, clock.now());
+    expect(counts.NA_INCUBADORA).toBe(cap);
+    expect(counts.GESTANDO).toBe(1);
+    expect(counts.NASCIDO).toBe(1);
   });
 });

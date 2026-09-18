@@ -44,6 +44,18 @@ export interface StoredSpecimen {
    * `CrossService.execute()` cria o espécime; nunca em fundador.
    */
   includedPortrait?: boolean;
+  /**
+   * Data de criação — OPCIONAL pelo mesmo motivo de `includedPortrait`
+   * acima (não exigir atualizar todo literal de `StoredSpecimen` já
+   * existente, ex.: os 74 fundadores). `undefined` só acontece pra
+   * fundador/legado (nunca criado via `save()`); todo espécime nascido de
+   * cruzamento (`IncubatorService.born()`) tem um valor real, gravado por
+   * `save()`. É o instante do NASCIMENTO usado pelo ciclo de vida da
+   * incubadora (`incubator-lifecycle.ts`) — nenhuma coluna nova precisou
+   * ser criada em `incubator_entries` pra isso (o campo já existia em
+   * `specimens`, só não estava exposto nesta porta).
+   */
+  createdAt?: Date;
 }
 
 export abstract class SpecimenRepository {
@@ -60,6 +72,12 @@ export abstract class SpecimenRepository {
    * duas vezes, mesmo sob chamadas concorrentes.
    */
   abstract claimIncludedPortrait(id: string): Promise<StoredSpecimen | null>;
+  /**
+   * `createdAt` de vários espécimes de uma vez (ciclo de vida da incubadora,
+   * `incubator-lifecycle.ts`) — ids sem `createdAt` (fundador/legado) ficam
+   * de fora do Map, nunca viram uma data inventada.
+   */
+  abstract getCreatedAtBatch(ids: string[]): Promise<Map<string, Date>>;
 }
 
 /**
@@ -206,55 +224,61 @@ export function founderSeeds(): StoredSpecimen[] {
     S("gato-ragdoll", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.4, vigor: 0.45, beleza: 0.7 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^b","He^b"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"], ["Hr","Hr"], ["S","s"]), 4),
     // ── CANINOS (Senior) — Onda 1: 12 raças icônicas ──
     // dog({B,K,A,E,S,R,M,H, Cph,Ec,Cl,Ct,Tl, porte,vigor})
-    S("boerboel", "boerboel", "canine", dog({ B:["B","B"], K:["K^br","K^br"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.8, vigor:0.85 }), 3),
+    // Portadores ocultos (docs/gene-bank/caninos-genetica.md §"Portadores
+    // ocultos por fundador"): SÓ loci de dominância COMPLETA (B/K/A/E/R/D/
+    // Cl/Ct), SEMPRE com o alelo do fundador no TOPO do ranking e o recessivo
+    // como 2º alelo — nenhum fenótipo VISÍVEL muda (provado em
+    // founder-carriers-canine.spec.ts pros 47). Máx. 2 loci por fundador.
+    // Cph/Ec/C/F/M/S (dominância INCOMPLETA) nunca viram portador.
+    S("boerboel", "boerboel", "canine", dog({ B:["B","B"], K:["K^br","k^y"], A:["A^y","a"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.8, vigor:0.85 }), 3),
     S("braco-alemao", "braco-alemao", "canine", dog({ B:["b","b"], K:["k^y","k^y"], A:["a","a"], E:["E","e"], S:["s^p","s^p"], R:["R","R"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.55, vigor:0.7 }), 3),
     S("dobermann", "dobermann", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a^t","a^t"], D:["D","d"], S:["S","S"], Cph:["Cph^d","Cph^d"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.7, vigor:0.8 }), 4),
     // Dogue Alemão — 6 cores (todas Cph^m, Ec^s, gigantes)
-    S("dogue-dourado", "dogue-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
-    S("dogue-tigrado", "dogue-alemao", "canine", dog({ B:["B","B"], K:["K^br","K^br"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
-    S("dogue-preto", "dogue-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a","a"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
-    S("dogue-azul", "dogue-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a","a"], D:["d","d"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 5),
+    S("dogue-dourado", "dogue-alemao", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["A^y","A^y"], D:["D","d"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
+    S("dogue-tigrado", "dogue-alemao", "canine", dog({ B:["B","b"], K:["K^br","k^y"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
+    S("dogue-preto", "dogue-alemao", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a","a"], D:["D","d"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 4),
+    S("dogue-azul", "dogue-alemao", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a","a"], D:["d","d"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 5),
     S("dogue-arlequim", "dogue-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a","a"], M:["M","m"], H:["H","h"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 5),
-    S("dogue-manto", "dogue-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a","a"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 5),
+    S("dogue-manto", "dogue-alemao", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a","a"], E:["E","e"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.95, vigor:0.8 }), 5),
     S("pastor-alemao", "pastor-alemao", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a^t","a^t"], S:["S","S"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^l","Cl^s"], porte:0.7, vigor:0.78 }), 4),
-    S("rottweiler", "rottweiler", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a^t","a^t"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.78, vigor:0.9 }), 4),
-    S("sao-bernardo", "sao-bernardo", "canine", dog({ B:["b","b"], K:["k^y","k^y"], A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], porte:0.95, vigor:0.75 }), 5),
-    S("dogo-argentino", "dogo-argentino", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], E:["e","e"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.75, vigor:0.85 }), 4),
-    S("mastim-ingles", "mastim-ingles", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.98, vigor:0.85 }), 5),
-    S("collie", "collie", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^l"], porte:0.6, vigor:0.6 }), 4),
-    S("border-collie", "border-collie", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["a","a"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^l"], porte:0.5, vigor:0.7 }), 4),
-    S("bulldog-frances", "bulldog-frances", "canine", dog({ B:["B","B"], K:["K^br","K^br"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], Tl:["Tl^b","Tl^b"], porte:0.3, vigor:0.55 }), 3),
-    S("greyhound", "greyhound", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","A^y"], S:["S","S"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.7 }), 4),
+    S("rottweiler", "rottweiler", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a^t","a^t"], E:["E","e"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.78, vigor:0.9 }), 4),
+    S("sao-bernardo", "sao-bernardo", "canine", dog({ B:["b","b"], K:["k^y","k^y"], A:["A^y","a^t"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^s"], porte:0.95, vigor:0.75 }), 5),
+    S("dogo-argentino", "dogo-argentino", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["A^y","a"], E:["e","e"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.75, vigor:0.85 }), 4),
+    S("mastim-ingles", "mastim-ingles", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["A^y","a"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.98, vigor:0.85 }), 5),
+    S("collie", "collie", "canine", dog({ B:["B","B"], K:["k^y","k^y"], A:["A^y","a^t"], S:["s^p","s^p"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^s"], porte:0.6, vigor:0.6 }), 4),
+    S("border-collie", "border-collie", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["a","a"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^s"], porte:0.5, vigor:0.7 }), 4),
+    S("bulldog-frances", "bulldog-frances", "canine", dog({ B:["B","B"], K:["K^br","k^y"], A:["A^y","A^y"], D:["D","d"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], Tl:["Tl^b","Tl^b"], porte:0.3, vigor:0.55 }), 3),
+    S("greyhound", "greyhound", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["A^y","A^y"], D:["D","d"], S:["S","S"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.7 }), 4),
     // ── ONDA 2 — molossos, pastores, sighthounds, spitz, bulldogs, terriers, BR ──
     S("presa-canaria", "presa-canaria", "canine", dog({ K:["K^br","k^y"], A:["A^y","A^y"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.78, vigor:0.85 }), 4),
-    S("cane-corso", "cane-corso", "canine", dog({ A:["a","a"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.75, vigor:0.85 }), 4),
-    S("mastim-napolitano", "mastim-napolitano", "canine", dog({ A:["a","a"], D:["d","d"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.9, vigor:0.75 }), 5),
-    S("bull-mastiff", "bull-mastiff", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.85, vigor:0.85 }), 4),
-    S("kangal", "kangal", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^m","Cph^m"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], Tl:["Tl^c","Tl^c"], porte:0.82, vigor:0.85 }), 4),
-    S("alabai", "alabai", "canine", dog({ A:["A^y","A^y"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.9, vigor:0.85 }), 5),
-    S("pastor-caucaso", "pastor-caucaso", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], porte:0.9, vigor:0.8 }), 5),
-    S("mastim-tibetano", "mastim-tibetano", "canine", dog({ A:["a^t","a^t"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.85, vigor:0.8 }), 5),
+    S("cane-corso", "cane-corso", "canine", dog({ B:["B","b"], A:["a","a"], D:["D","d"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.75, vigor:0.85 }), 4),
+    S("mastim-napolitano", "mastim-napolitano", "canine", dog({ B:["B","b"], A:["a","a"], D:["d","d"], E:["E","e"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.9, vigor:0.75 }), 5),
+    S("bull-mastiff", "bull-mastiff", "canine", dog({ B:["B","b"], A:["A^y","a"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.85, vigor:0.85 }), 4),
+    S("kangal", "kangal", "canine", dog({ B:["B","b"], A:["A^y","A^y"], D:["D","d"], Cph:["Cph^m","Cph^m"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], Tl:["Tl^c","Tl^c"], porte:0.82, vigor:0.85 }), 4),
+    S("alabai", "alabai", "canine", dog({ B:["B","b"], A:["A^y","A^y"], D:["D","d"], S:["S","S"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.9, vigor:0.85 }), 5),
+    S("pastor-caucaso", "pastor-caucaso", "canine", dog({ A:["A^y","a^t"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^s"], porte:0.9, vigor:0.8 }), 5),
+    S("mastim-tibetano", "mastim-tibetano", "canine", dog({ B:["B","b"], A:["a^t","a"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.85, vigor:0.8 }), 5),
     S("cimarron", "cimarron", "canine", dog({ K:["K^br","k^y"], A:["A^y","A^y"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.8 }), 4),
-    S("terra-nova", "terra-nova", "canine", dog({ A:["a","a"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], porte:0.9, vigor:0.75 }), 5),
-    S("pastor-belga-malinois", "pastor-belga-malinois", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.85 }), 4),
-    S("pastor-belga-groenendael", "pastor-belga-groenendael", "canine", dog({ A:["a","a"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^l","Cl^l"], porte:0.6, vigor:0.75 }), 4),
-    S("pastor-serra-estrela", "pastor-serra-estrela", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.7, vigor:0.75 }), 4),
+    S("terra-nova", "terra-nova", "canine", dog({ B:["B","b"], A:["a","a"], E:["E","e"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], porte:0.9, vigor:0.75 }), 5),
+    S("pastor-belga-malinois", "pastor-belga-malinois", "canine", dog({ B:["B","b"], A:["A^y","a"], Cph:["Cph^d","Cph^d"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.85 }), 4),
+    S("pastor-belga-groenendael", "pastor-belga-groenendael", "canine", dog({ B:["B","b"], A:["a","a"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^l","Cl^s"], porte:0.6, vigor:0.75 }), 4),
+    S("pastor-serra-estrela", "pastor-serra-estrela", "canine", dog({ A:["A^y","a"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^s"], Tl:["Tl^c","Tl^c"], porte:0.7, vigor:0.75 }), 4),
     S("pastor-pampeano", "pastor-pampeano", "canine", dog({ A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^s"], porte:0.6, vigor:0.7 }), 3),
-    S("old-english-sheepdog", "old-english-sheepdog", "canine", dog({ A:["a","a"], D:["d","d"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^b","Tl^b"], porte:0.7, vigor:0.65 }), 4),
+    S("old-english-sheepdog", "old-english-sheepdog", "canine", dog({ B:["B","b"], A:["a","a"], D:["d","d"], E:["E","e"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^b","Tl^b"], porte:0.7, vigor:0.65 }), 4),
     S("australian-shepherd", "australian-shepherd", "canine", dog({ A:["a^t","a^t"], M:["M","m"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^s"], porte:0.5, vigor:0.75 }), 4),
-    S("blue-heeler", "blue-heeler", "canine", dog({ A:["a^t","a^t"], R:["R","R"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.5, vigor:0.9 }), 4),
-    S("pastor-shetland", "pastor-shetland", "canine", dog({ A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^l"], porte:0.35, vigor:0.6 }), 4),
+    S("blue-heeler", "blue-heeler", "canine", dog({ B:["B","b"], A:["a^t","a^t"], R:["R","r"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.5, vigor:0.9 }), 4),
+    S("pastor-shetland", "pastor-shetland", "canine", dog({ B:["B","b"], A:["A^y","a^t"], S:["s^p","s^p"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^l","Cl^l"], porte:0.35, vigor:0.6 }), 4),
     S("pit-bull", "pit-bull", "canine", dog({ K:["K^br","k^y"], A:["A^y","A^y"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.5, vigor:0.85 }), 4),
-    S("terrier-brasileiro", "terrier-brasileiro", "canine", dog({ A:["a^t","a^t"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.3, vigor:0.65 }), 3),
-    S("terrier-anao-branco", "terrier-anao-branco", "canine", dog({ A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.2, vigor:0.55 }), 3),
+    S("terrier-brasileiro", "terrier-brasileiro", "canine", dog({ B:["B","b"], A:["a^t","a"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.3, vigor:0.65 }), 3),
+    S("terrier-anao-branco", "terrier-anao-branco", "canine", dog({ B:["B","b"], A:["A^y","a^t"], S:["s^p","s^p"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^s","Cl^s"], porte:0.2, vigor:0.55 }), 3),
     S("bulldog-ingles", "bulldog-ingles", "canine", dog({ K:["K^br","k^y"], A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], Tl:["Tl^b","Tl^b"], porte:0.4, vigor:0.55 }), 4),
-    S("bulldog-americano", "bulldog-americano", "canine", dog({ A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.85 }), 4),
-    S("buldogue-campeiro", "buldogue-campeiro", "canine", dog({ A:["A^y","A^y"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.8 }), 3),
-    S("spitz-alemao", "spitz-alemao", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.18, vigor:0.5 }), 3),
-    S("irish-wolfhound", "irish-wolfhound", "canine", dog({ K:["k^y","k^y"], A:["A^y","A^y"], D:["d","d"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], Ct:["Ct^w","Ct^w"], porte:0.92, vigor:0.7 }), 5),
-    S("whippet", "whippet", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.45, vigor:0.7 }), 3),
-    S("saluki", "saluki", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.7 }), 4),
-    S("afghan-hound", "afghan-hound", "canine", dog({ A:["A^y","A^y"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.6, vigor:0.65 }), 5),
+    S("bulldog-americano", "bulldog-americano", "canine", dog({ B:["B","b"], A:["A^y","a"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.85 }), 4),
+    S("buldogue-campeiro", "buldogue-campeiro", "canine", dog({ B:["B","b"], A:["A^y","a"], S:["s^p","s^p"], Cph:["Cph^b","Cph^b"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.8 }), 3),
+    S("spitz-alemao", "spitz-alemao", "canine", dog({ B:["B","b"], A:["A^y","a"], Cph:["Cph^m","Cph^m"], Ec:["Ec^e","Ec^e"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.18, vigor:0.5 }), 3),
+    S("irish-wolfhound", "irish-wolfhound", "canine", dog({ B:["B","b"], K:["k^y","k^y"], A:["A^y","A^y"], D:["d","d"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], Ct:["Ct^w","Ct^n"], porte:0.92, vigor:0.7 }), 5),
+    S("whippet", "whippet", "canine", dog({ B:["B","b"], A:["A^y","A^y"], D:["D","d"], Cph:["Cph^d","Cph^d"], Ec:["Ec^s","Ec^s"], Cl:["Cl^s","Cl^s"], porte:0.45, vigor:0.7 }), 3),
+    S("saluki", "saluki", "canine", dog({ B:["B","b"], A:["A^y","a^t"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^s","Cl^s"], porte:0.6, vigor:0.7 }), 4),
+    S("afghan-hound", "afghan-hound", "canine", dog({ B:["B","b"], A:["A^y","a"], Cph:["Cph^d","Cph^d"], Ec:["Ec^d","Ec^d"], Cl:["Cl^l","Cl^l"], Tl:["Tl^c","Tl^c"], porte:0.6, vigor:0.65 }), 5),
   ];
   // DECISÃO: "todo fundador tem casal" — gera, POR CÓDIGO (não 74 entradas
   // literais novas), um gêmeo de sexo OPOSTO pra cada fundador-base: mesmo
@@ -302,9 +326,26 @@ export class InMemorySpecimenRepository extends SpecimenRepository {
 
   async save(specimen: StoredSpecimen): Promise<StoredSpecimen> {
     const id = specimen.id || `spec_${++this.seq}`;
-    const withId = { ...specimen, id };
+    const withId = { ...specimen, id, createdAt: specimen.createdAt ?? new Date() };
     this.store.set(id, withId);
     return withId;
+  }
+
+  /**
+   * Mesmo contrato do adapter Drizzle: `Map` id → `createdAt`; id inexistente
+   * fica FORA do Map (nunca erro, nunca data inventada); `ids` vazio → Map
+   * vazio. Único desvio inerente: fundador (semeado direto no `store`, sem
+   * passar por `save()`) não tem `createdAt` aqui e também fica de fora, ao
+   * passo que no Postgres toda linha tem `created_at` — irrelevante pro ciclo
+   * de vida, que só pergunta por espécimes NASCIDOS (sempre via `save()`).
+   */
+  async getCreatedAtBatch(ids: string[]): Promise<Map<string, Date>> {
+    const out = new Map<string, Date>();
+    for (const id of ids) {
+      const createdAt = this.store.get(id)?.createdAt;
+      if (createdAt) out.set(id, createdAt);
+    }
+    return out;
   }
 
   /** Atômico (JS single-thread: sem `await` entre ler e escrever, nada mais roda no meio). */

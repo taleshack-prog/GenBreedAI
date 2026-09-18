@@ -17,6 +17,9 @@ import { TierService } from "../billing/tier.service";
 import { CrossService } from "./cross.service";
 import { CrossDto } from "./dto/cross.dto";
 import { IncubatorRepository } from "../incubator/in-memory.repository";
+import { pruneExpiredBorn, enforceNonGestatedCap } from "../incubator/incubator-lifecycle";
+import { SpecimenRepository } from "../specimens/in-memory.repository";
+import { Clock } from "../common/clock";
 
 @Controller("api/v1/cross")
 export class CrossController {
@@ -25,6 +28,8 @@ export class CrossController {
     private readonly tier: TierService,
     private readonly quota: QuotaService,
     private readonly incubator: IncubatorRepository,
+    private readonly specimens: SpecimenRepository,
+    private readonly clock: Clock,
   ) {}
 
   @Post()
@@ -37,6 +42,11 @@ export class CrossController {
     // cruzar sendo livre, isto é só proteção técnica, não cota de jogo.
     const reservationId = req.crossReservationId!;
     try {
+      const now = this.clock.now();
+      // Limpeza preguiçosa (ADR-0023, item 1 do pedido) — mesma regra do
+      // GET /incubator: sem processo agendado, roda aqui também, ANTES de
+      // gravar as entradas novas (senão contariam pro teto abaixo).
+      await pruneExpiredBorn(this.incubator, this.specimens, user.id, now);
       const { crossId, sireId, damId, method, pack, species, entries } = await this.service.incubate(user.id, tier, dto);
       const created = await Promise.all(entries.map((e) => this.incubator.create({
         ownerId: user.id, crossId, sireId, damId, method,
@@ -45,8 +55,12 @@ export class CrossController {
         fPedigree: e.fPedigree, fixationIndex: e.fixationIndex, aura: e.aura, generation: e.generation,
         sex: e.sex, fertility: e.fertility, haldaneStatus: e.haldaneStatus,
       })));
+      // Teto de 200 não-gestadas (ADR-0023, item 2 do pedido) — só depois de
+      // gravar as novas, pra contá-las; nunca apaga em gestação nem nascida
+      // (o filtro "não gestada" já as exclui por definição).
+      const discardedForCap = await enforceNonGestatedCap(this.incubator, user.id);
       await this.quota.confirm("cross_hourly", reservationId);
-      return { crossId, entries: created };
+      return { crossId, entries: created, discardedForCap };
     } catch (e) {
       await this.quota.release("cross_hourly", reservationId);
       throw e;

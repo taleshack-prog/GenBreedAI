@@ -28,6 +28,7 @@ import { WalletService } from "../economy/wallet.service";
 import { tierPolicy } from "../common/tiers";
 import { Clock } from "../common/clock";
 import { gestationEndFor, gestationHoursForAura } from "./gestation-time";
+import { pruneExpiredBorn, BORN_RETENTION_DAYS } from "./incubator-lifecycle";
 
 export interface IncubatorEntryView {
   id: string; crossId: string; sireId: string; damId: string; method: string;
@@ -49,6 +50,14 @@ export interface IncubatorEntryView {
   gestationHours: number;
   bornSpecimenId: string | null;
   createdAt: string;
+  /**
+   * Ciclo de vida (ADR-0023) — só entradas NASCIDAS têm valor (`null` pra
+   * qualquer outro estado, ou se o `createdAt` do espécime não puder ser
+   * resolvido). Quando a entrada some da incubadora (7 dias corridos desde
+   * o nascimento, ver `incubator-lifecycle.ts`) — o ESPÉCIME em si nunca é
+   * afetado, continua no Gene Bank pra sempre.
+   */
+  expiresAt: string | null;
 }
 
 export interface IncubatorListPage {
@@ -90,8 +99,10 @@ export class IncubatorService {
     return e;
   }
 
-  private toView(e: StoredIncubatorEntry, imageUrl: string | null, now: Date): IncubatorEntryView {
+  /** `bornAt` = `createdAt` do espécime já nascido (só quando resolvível) — usado pra `expiresAt` (ciclo de vida, ADR-0023). */
+  private toView(e: StoredIncubatorEntry, imageUrl: string | null, now: Date, bornAt: Date | null = null): IncubatorEntryView {
     const state = incubatorStateOf(e, now);
+    const expiresAt = bornAt ? new Date(bornAt.getTime() + BORN_RETENTION_DAYS * 24 * 60 * 60 * 1000) : null;
     return {
       id: e.id, crossId: e.crossId, sireId: e.sireId, damId: e.damId, method: e.method,
       pack: e.pack, species: e.species, genotype: e.genotype, phenotype: e.phenotype,
@@ -100,6 +111,7 @@ export class IncubatorService {
       imageUrl, state, gestationEndsAt: e.gestationEndsAt ? e.gestationEndsAt.toISOString() : null,
       gestationHours: gestationHoursForAura(e.aura),
       bornSpecimenId: e.bornSpecimenId, createdAt: e.createdAt.toISOString(),
+      expiresAt: expiresAt ? expiresAt.toISOString() : null,
     };
   }
 
@@ -120,6 +132,10 @@ export class IncubatorService {
   async list(ownerId: string, opts: { limit?: number; cursor?: string; state?: IncubatorState } = {}): Promise<IncubatorListPage> {
     const limit = Math.min(Math.max(Math.floor(opts.limit ?? DEFAULT_PAGE_LIMIT), 1), MAX_PAGE_LIMIT);
     const now = this.clock.now();
+    // Limpeza preguiçosa (ADR-0023, item 1 do pedido — sem processo agendado
+    // na API): apaga as entradas NASCIDAS há mais de 7 dias deste dono ANTES
+    // de listar/contar, senão elas ainda apareceriam nesta mesma resposta.
+    await pruneExpiredBorn(this.repo, this.specimens, ownerId, now);
     const [page, counts] = await Promise.all([
       this.repo.listByOwner(ownerId, { limit, cursor: opts.cursor, state: opts.state, now }),
       this.repo.countByState(ownerId, now),
@@ -127,15 +143,17 @@ export class IncubatorService {
     const entries: IncubatorEntryView[] = [];
     for (const e of page.entries) {
       let imageUrl: string | null = null;
+      let bornAt: Date | null = null;
       if (e.bornSpecimenId) {
         const specimen = await this.specimens.get(e.bornSpecimenId);
         if (specimen) {
+          bornAt = specimen.createdAt ?? null;
           const cacheKey = specimen.cacheKey ?? cacheKeyOf(specimen);
           const st = await stat(cacheKey);
           if (st) imageUrl = publicUrl(cacheKey, st.version);
         }
       }
-      entries.push(this.toView(e, imageUrl, now));
+      entries.push(this.toView(e, imageUrl, now, bornAt));
     }
     return { entries, nextCursor: page.nextCursor, counts };
   }
@@ -243,6 +261,13 @@ export class IncubatorService {
       // O retrato já foi gerado (e pago, via a vaga de gestação) agora mesmo
       // — nenhum "vale" de retrato incluído (ADR-0019) faz sentido de novo.
       includedPortrait: false,
+      // ADR-0023: instante do NASCIMENTO — usado pelo ciclo de vida da
+      // incubadora (`incubator-lifecycle.ts`) pra decidir quando a ENTRADA
+      // expira (7 dias corridos). Via `Clock` (nunca `new Date()` direto),
+      // senão testes não conseguiriam simular o prazo sem esperar de verdade
+      // (adapter Drizzle ignora isto — usa `defaultNow()` do Postgres, que
+      // já é o instante real do INSERT).
+      createdAt: this.clock.now(),
     });
     await this.repo.markBorn(id, stored.id);
     // Mesma recompensa por fixação que `CrossService.execute()` já dava

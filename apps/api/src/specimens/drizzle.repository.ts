@@ -44,6 +44,7 @@ function toStored(r: Row): StoredSpecimen {
     fertility: r.fertility ?? null,
     haldaneStatus: (r.haldaneStatus as StoredSpecimen["haldaneStatus"]) ?? null,
     includedPortrait: r.includedPortrait ?? false,
+    createdAt: r.createdAt,
   };
 }
 
@@ -122,6 +123,16 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
       .where(and(eq(specimens.id, id), eq(specimens.includedPortrait, true)))
       .returning();
     return rows[0] ? toStored(rows[0]) : null;
+  }
+
+  /** Ciclo de vida da incubadora (`incubator-lifecycle.ts`) — 1 query pra todos os ids. */
+  async getCreatedAtBatch(ids: string[]): Promise<Map<string, Date>> {
+    if (ids.length === 0) return new Map();
+    const rows: Array<{ id: string; createdAt: Date }> = await this.db
+      .select({ id: specimens.id, createdAt: specimens.createdAt })
+      .from(specimens)
+      .where(inArray(specimens.id, ids));
+    return new Map(rows.map((r) => [r.id, r.createdAt]));
   }
 
   /** Caminha ancestrais em lotes (BFS) até estabilizar o pedigree. */

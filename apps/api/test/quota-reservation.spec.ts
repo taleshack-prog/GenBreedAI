@@ -23,6 +23,7 @@ import { QuotaService } from "../src/quota/quota.service";
 import { isQuotaUnlimitedDev, resetQuotaUnlimitedDevWarnings } from "../src/quota/quota-unlimited-dev";
 import { TierService } from "../src/billing/tier.service";
 import { SystemClock } from "../src/common/clock";
+import { SpecimenRepository } from "../src/specimens/in-memory.repository";
 import type { CrossDto } from "../src/cross/dto/cross.dto";
 
 // `QuotaService` agora recebe `Clock` (bugfix: "agora" injetável — ver
@@ -46,8 +47,17 @@ const EMPTY_INCUBATE = { crossId: "cx1", sireId: "s", damId: "d", method: "F1" a
 function tierServiceFor(t: Tier): TierService {
   return { resolve: async () => t } as unknown as TierService;
 }
+/** Ciclo de vida (ADR-0023) — `CrossController.create()` agora chama `pruneExpiredBorn`/`enforceNonGestatedCap` antes/depois de gravar; sem entradas de verdade neste arquivo (só testa o contrato de cota), então "nenhuma achada" é o comportamento certo. */
 function fakeIncubatorRepo(): IncubatorRepository {
-  return { create: vi.fn().mockResolvedValue({}) } as unknown as IncubatorRepository;
+  return {
+    create: vi.fn().mockResolvedValue({}),
+    listBornSpecimenIds: vi.fn().mockResolvedValue([]),
+    listOldestNonGestatedBeyondCap: vi.fn().mockResolvedValue([]),
+    deleteMany: vi.fn().mockResolvedValue(0),
+  } as unknown as IncubatorRepository;
+}
+function fakeSpecimenRepo(): SpecimenRepository {
+  return { getCreatedAtBatch: vi.fn().mockResolvedValue(new Map()) } as unknown as SpecimenRepository;
 }
 
 describe("Limite técnico horário de POST /cross (ADR-0020) — QuotaGuard + CrossController", () => {
@@ -85,8 +95,9 @@ describe("Limite técnico horário de POST /cross (ADR-0020) — QuotaGuard + Cr
   function makeController(incubate: CrossService["incubate"]) {
     const service = { incubate } as unknown as CrossService;
     const incubator = fakeIncubatorRepo();
+    const specimens = fakeSpecimenRepo();
     const guard = new QuotaGuard(quota, tier);
-    const controller = new CrossController(service, tier, quota, incubator);
+    const controller = new CrossController(service, tier, quota, incubator, specimens, new SystemClock());
     return { service, incubator, guard, controller };
   }
 

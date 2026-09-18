@@ -4,7 +4,7 @@
  * local, ou PGlite nos testes), mesmo padrão de `specimens/drizzle.
  * repository.ts`.
  */
-import { and, desc, eq, gt, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   IncubatorRepository, type StoredIncubatorEntry, type PackId,
@@ -139,5 +139,40 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.delete(incubatorEntries).where(eq(incubatorEntries.id, id));
+  }
+
+  /** Ciclo de vida (limpeza preguiçosa, `incubator-lifecycle.ts`) — só as 2 colunas que a checagem de expiração precisa. */
+  async listBornSpecimenIds(ownerId: string): Promise<Array<{ id: string; bornSpecimenId: string }>> {
+    const rows: Array<{ id: string; bornSpecimenId: string | null }> = await this.db
+      .select({ id: incubatorEntries.id, bornSpecimenId: incubatorEntries.bornSpecimenId })
+      .from(incubatorEntries)
+      .where(and(eq(incubatorEntries.ownerId, ownerId), isNotNull(incubatorEntries.bornSpecimenId)));
+    return rows.map((r) => ({ id: r.id, bornSpecimenId: r.bornSpecimenId! }));
+  }
+
+  /**
+   * `OFFSET cap` numa lista já ordenada (created_at, id) DESC — os primeiros
+   * `cap` (mais recentes) são "mantidos"; o que sobra depois do offset É o
+   * overflow, direto, sem precisar de um COUNT(*) à parte. Mesmo índice
+   * `incubator_entries_owner_created_idx` (owner_id, created_at) de
+   * `listByOwner` cobre o ORDER BY; o filtro de estado (gestation_started_at/
+   * born_specimen_id IS NULL) é avaliado em cima do resultado já reduzido
+   * pelo índice — adequado pro volume por dono (teto de 200), não precisa de
+   * índice parcial dedicado (item 5 do pedido: nenhuma mudança de schema).
+   */
+  async listOldestNonGestatedBeyondCap(ownerId: string, cap: number): Promise<string[]> {
+    const rows: Array<{ id: string }> = await this.db
+      .select({ id: incubatorEntries.id })
+      .from(incubatorEntries)
+      .where(and(eq(incubatorEntries.ownerId, ownerId), isNull(incubatorEntries.gestationStartedAt), isNull(incubatorEntries.bornSpecimenId)))
+      .orderBy(desc(incubatorEntries.createdAt), desc(incubatorEntries.id))
+      .offset(cap);
+    return rows.map((r) => r.id);
+  }
+
+  async deleteMany(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const rows: Array<{ id: string }> = await this.db.delete(incubatorEntries).where(inArray(incubatorEntries.id, ids)).returning({ id: incubatorEntries.id });
+    return rows.length;
   }
 }

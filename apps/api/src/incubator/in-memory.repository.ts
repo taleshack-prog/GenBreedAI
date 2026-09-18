@@ -96,6 +96,22 @@ export abstract class IncubatorRepository {
   /** Marca `bornSpecimenId` — só quem já checou o prazo de gestação chama isto (gate no service). */
   abstract markBorn(id: string, specimenId: string): Promise<StoredIncubatorEntry | null>;
   abstract delete(id: string): Promise<void>;
+  /**
+   * Ciclo de vida (limpeza preguiçosa, `incubator-lifecycle.ts`) — pares
+   * (id da entrada, id do espécime) de toda entrada NASCIDA do dono, pra
+   * checar expiração pelo `createdAt` do espécime (nenhuma coluna de data de
+   * nascimento própria — ver nota em `StoredSpecimen.createdAt`).
+   */
+  abstract listBornSpecimenIds(ownerId: string): Promise<Array<{ id: string; bornSpecimenId: string }>>;
+  /**
+   * Ids das entradas NÃO GESTADAS (`gestationStartedAt === null` — por
+   * construção nunca nascida também) do dono ALÉM das `cap` mais recentes
+   * (`createdAt` desc) — exatamente as que o teto de 200 (item 2 do pedido)
+   * manda apagar. Nunca inclui entrada em gestação nem nascida.
+   */
+  abstract listOldestNonGestatedBeyondCap(ownerId: string, cap: number): Promise<string[]>;
+  /** Apaga várias de uma vez (ciclo de vida) — devolve quantas de fato existiam e foram apagadas. */
+  abstract deleteMany(ids: string[]): Promise<number>;
 }
 
 const EMPTY_COUNTS = (): IncubatorStateCounts => ({ NA_INCUBADORA: 0, GESTANDO: 0, PRONTO: 0, NASCIDO: 0 });
@@ -175,4 +191,26 @@ export class InMemoryIncubatorRepository extends IncubatorRepository {
   }
 
   async delete(id: string): Promise<void> { this.store.delete(id); }
+
+  async listBornSpecimenIds(ownerId: string): Promise<Array<{ id: string; bornSpecimenId: string }>> {
+    const out: Array<{ id: string; bornSpecimenId: string }> = [];
+    for (const e of this.store.values()) {
+      if (e.ownerId === ownerId && e.bornSpecimenId !== null) out.push({ id: e.id, bornSpecimenId: e.bornSpecimenId });
+    }
+    return out;
+  }
+
+  /** Mesma ordem desc (`createdAt`, id como desempate) de `listByOwner` — as `cap` primeiras são "mantidas", o resto é overflow. */
+  async listOldestNonGestatedBeyondCap(ownerId: string, cap: number): Promise<string[]> {
+    const nonGestated = [...this.store.values()]
+      .filter((e) => e.ownerId === ownerId && e.gestationStartedAt === null && e.bornSpecimenId === null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1));
+    return nonGestated.slice(cap).map((e) => e.id);
+  }
+
+  async deleteMany(ids: string[]): Promise<number> {
+    let n = 0;
+    for (const id of ids) if (this.store.delete(id)) n++;
+    return n;
+  }
 }

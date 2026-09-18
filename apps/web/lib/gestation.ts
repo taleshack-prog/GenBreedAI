@@ -44,3 +44,18 @@ export function gestationRemainingLabel(gestationEndsAt: string, now: Date = new
 export function isGestationReady(gestationEndsAt: string, now: Date = new Date()): boolean {
   return new Date(gestationEndsAt).getTime() <= now.getTime();
 }
+
+/**
+ * "Sai da incubadora em N dias — o espécime fica no Gene Bank" (card
+ * NASCIDO, ADR-0023): texto discreto avisando o prazo de 7 dias corridos
+ * (`expiresAt`, calculado pela API a partir do `createdAt` do espécime já
+ * nascido — ver `incubator-lifecycle.ts`) antes da ENTRADA sumir da
+ * incubadora; o espécime em si nunca é afetado, por isso o texto reforça
+ * isso. Nunca "0 dias"/negativo — no último dia mostra "menos de 1 dia".
+ */
+export function incubatorExitLabel(expiresAt: string, now: Date = new Date()): string {
+  const diffMs = new Date(expiresAt).getTime() - now.getTime();
+  const days = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+  const when = days <= 1 ? "menos de 1 dia" : `${days} dias`;
+  return `Sai da incubadora em ${when} — o espécime fica no Gene Bank`;
+}
