@@ -165,29 +165,24 @@ describe("Incubadora — HTTP (ADR-0021, gestação)", () => {
   });
 
   it("paginação via HTTP (ADR-0021 item 2): limit funciona, nextCursor avança sem repetir, counts vem completo, state inválido → 400", async () => {
-    // BUGFIX (achado em produção): a versão anterior deste teste assumia que
-    // UM cruzamento de `CROSS` (gato-tabby × gato-siames) sempre gera 6
-    // entradas — falso pra ESTE par: os dois fundadores são homozigotos em
-    // TODO loco (achado nesta rodada — todo fundador de gato doméstico é
-    // "raça pura", sem heterozigose nenhuma), então só existe 1 combinação
-    // de fenótipo possível, não 6 (a genética está certa; era a suposição do
-    // teste que estava errada). Paginação não precisa de diversidade
-    // genética pra ser testada — 6 chamadas separadas de POST /cross (cada
-    // uma determinística, sempre a MESMA descrição, mas em linhas
-    // INDEPENDENTES da incubadora) dão um total conhecido e controlado.
+    // ATUALIZADO (rodada de portadores ocultos): gato-tabby × gato-siames
+    // deixou de dar 1 única descrição — agora dá EXATAMENTE 4 (P: 2 saídas
+    // × C: 2 saídas — mesma conta de cross.e2e.spec.ts e founder-carriers.
+    // spec.ts). 1 chamada de POST /cross já basta pra montar um total
+    // conhecido (4) e controlado pra paginação — não precisa mais de 6
+    // chamadas repetidas. `limit=3` divide as 4 entradas em página cheia (3)
+    // + resto (1), testando o caso de página final PARCIAL.
     const headers = AUTH_JUNIOR("incu-page-http-1");
-    for (let i = 0; i < 6; i++) {
-      const r = await post("/api/v1/cross", CROSS, headers);
-      expect(r.json().entries.length).toBe(1); // par sem segregação nenhuma — sempre 1 descrição por chamada
-    }
+    const crossRes = await post("/api/v1/cross", CROSS, headers);
+    expect(crossRes.json().entries.length).toBe(4); // gato-tabby × gato-siames — P(2) × C(2), ver comentário acima
 
-    const p1 = (await get("/api/v1/incubator?limit=4", headers)).json();
-    expect(p1.entries.length).toBe(4);
+    const p1 = (await get("/api/v1/incubator?limit=3", headers)).json();
+    expect(p1.entries.length).toBe(3);
     expect(p1.nextCursor).not.toBeNull();
-    expect(p1.counts.NA_INCUBADORA).toBe(6); // contagem COMPLETA, não só da página (4)
+    expect(p1.counts.NA_INCUBADORA).toBe(4); // contagem COMPLETA, não só da página (3)
 
-    const p2 = (await get(`/api/v1/incubator?limit=4&cursor=${p1.nextCursor}`, headers)).json();
-    expect(p2.entries.length).toBe(2); // 6 no total - 4 já vistas
+    const p2 = (await get(`/api/v1/incubator?limit=3&cursor=${p1.nextCursor}`, headers)).json();
+    expect(p2.entries.length).toBe(1); // 4 no total - 3 já vistas
     expect(p2.nextCursor).toBeNull();
     const p1Ids = new Set(p1.entries.map((e: { id: string }) => e.id));
     expect(p2.entries.every((e: { id: string }) => !p1Ids.has(e.id))).toBe(true); // nenhuma repetida

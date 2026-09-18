@@ -187,17 +187,22 @@ export function founderSeeds(): StoredSpecimen[] {
     // ── GATO DOMÉSTICO (Felis catus) — espécie-estrela do Free, raças variadas ──
     // ── GATO DOMÉSTICO (Felis catus) — raças com genótipo fiel ──
     // fel(A,P,C,W,q,Ma,Bd,He,Ec,Fl,Hr,S)
-    S("gato-tabby", "felis-catus", "feline", fel(["a","a"], R(["P^m","P^m"]), ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.42 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 2),
-    S("gato-siames", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.2, vigor: 0.4, beleza: 0.6 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
-    S("gato-preto", "felis-catus", "feline", fel(["A","A"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.45 }, ["ma","ma"], ["Bd^g","Bd^g"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 2),
+    // ── Portadores ocultos (docs/gene-bank/felinos-genetica.md §"Portadores
+    // ocultos por fundador") — SÓ loci que NÃO definem a raça, e SEMPRE com
+    // o alelo do próprio fundador no lado dominante do ranking daquele loco
+    // (nenhum fenótipo VISÍVEL muda; ver in-memory-founders.spec.ts, que
+    // prova expressPhenotype() idêntico antes/depois pros 12).
+    S("gato-tabby", "felis-catus", "feline", fel(["a","a"], R(["P^m","P^t"]), ["C","c^b"], ["w","w"], { porte: 0.24, vigor: 0.42 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 2),
+    S("gato-siames", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.2, vigor: 0.4, beleza: 0.6 }, ["ma","ma"], ["Bd^s","Bd^g"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
+    S("gato-preto", "felis-catus", "feline", fel(["A","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.45 }, ["ma","ma"], ["Bd^g","Bd^g"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 2),
     S("gato-branco", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["W","w"], { porte: 0.24, vigor: 0.4, beleza: 0.55 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
-    S("gato-maine-coon", "felis-catus", "feline", fel(["a","a"], R(["P^m","P^m"]), ["C","C"], ["w","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^t"], ["Fl^l","Fl^l"]), 4),
-    S("gato-persa", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"]), 4),
-    S("gato-bengala", "felis-catus", "feline", fel(["a","a"], R(["P^s","P^s"]), ["C","C"], ["w","w"], { porte: 0.32, vigor: 0.65, rosetas: 0.7 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
+    S("gato-maine-coon", "felis-catus", "feline", fel(["a","a"], R(["P^m","P^m"]), ["C","C"], ["w","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^n"], ["Fl^l","Fl^s"]), 4),
+    S("gato-persa", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"]), 4),
+    S("gato-bengala", "felis-catus", "feline", fel(["a","a"], R(["P^s","P^t"]), ["C","C"], ["w","w"], { porte: 0.32, vigor: 0.65, rosetas: 0.7 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
     S("gato-birmania", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.3, vigor: 0.4, beleza: 0.7 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"], ["Hr","Hr"], ["S","s"]), 4),
-    S("gato-sphynx", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.26, vigor: 0.45, beleza: 0.5 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^a","He^a"], ["Ec^l","Ec^l"], ["Fl^s","Fl^s"], ["hr","hr"]), 4),
-    S("gato-mau-egipcio", "felis-catus", "feline", fel(["a","a"], R(["P^s","P^s"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.55, rosetas: 0.6 }, ["ma","ma"], ["Bd^g","Bd^g"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 4),
-    S("gato-abissinio", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.6 }, ["ma","ma"], ["Bd^a","Bd^a"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
+    S("gato-sphynx", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.26, vigor: 0.45, beleza: 0.5 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^a","He^a"], ["Ec^l","Ec^n"], ["Fl^s","Fl^s"], ["hr","hr"]), 4),
+    S("gato-mau-egipcio", "felis-catus", "feline", fel(["a","a"], R(["P^s","P^t"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.55, rosetas: 0.6 }, ["ma","ma"], ["Bd^g","Bd^g"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 4),
+    S("gato-abissinio", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.6 }, ["ma","ma"], ["Bd^a","Bd^d"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
     S("gato-ragdoll", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.4, vigor: 0.45, beleza: 0.7 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^b","He^b"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"], ["Hr","Hr"], ["S","s"]), 4),
     // ── CANINOS (Senior) — Onda 1: 12 raças icônicas ──
     // dog({B,K,A,E,S,R,M,H, Cph,Ec,Cl,Ct,Tl, porte,vigor})

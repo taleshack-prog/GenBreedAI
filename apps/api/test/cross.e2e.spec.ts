@@ -92,24 +92,27 @@ describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
     // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016): CROSS (onca-pintada/
     // onca-negra) é WILD_FELINE, fora do pool FREE — FREE receberia 404.
     //
-    // BUGFIX (achado em produção): NÃO dá pra afirmar "6 entradas" aqui —
-    // gato-tabby e gato-siames são cada um homozigoto em TODO loco (achado
-    // nesta rodada: todo fundador de gato doméstico é assim, "raça pura"),
-    // então esse cruzamento só tem 1 combinação de fenótipo possível, sempre
-    // (a genética está certa; a asserção "toBe(6)" antiga é que inventava um
-    // número sem checar se o par permitia). Como NENHUM par de fundadores
-    // de gato doméstico segrega (são todos homozigotos — não existe par
-    // acessível ao FREE que dê mais de 1 opção), este teste mantém o que
-    // sempre verificou de verdade — o resultado mais provável é IDÊNTICO
-    // entre tiers — sem fingir uma contagem que este par não pode dar. A
-    // prova de segregação de verdade (>1, tier-independente) está no teste
-    // seguinte, com um par que realmente segrega (onca-pintada×onca-negra,
-    // fora do pool FREE, por isso comparado entre JUNIOR e PHD).
+    // ATUALIZADO (rodada de portadores ocultos, docs/gene-bank/felinos-
+    // genetica.md §"Portadores ocultos por fundador"): gato-tabby (P^m/P^t,
+    // C/c^b) e gato-siames (Bd^s/Bd^g) deixaram de ser 100% homozigotos —
+    // esse cruzamento agora SEGREGA de verdade. Conta locus por locus (ver
+    // também founder-carriers.spec.ts, que tem a mesma conta):
+    //   P: tabby P^m/P^t × siames P^t/P^t → 1/2 "listras" (P^m domina),
+    //      1/2 "uniforme" → 2 saídas.
+    //   C: tabby C/c^b × siames c^s/c^s → 1/2 "pleno" (C domina c^s), 1/2
+    //      "sépia" (c^b domina c^s) → 2 saídas.
+    //   Bd: tabby Bd^d/Bd^d (dominante fixo) × siames Bd^s/Bd^g → SEMPRE
+    //      "dourado" (Bd^d domina os dois alelos do siames) — não soma saída.
+    //   Demais loci: sem heterozigose relevante nesse par — 1 saída cada.
+    // Total: P(2) × C(2) = 4 — NUNCA 6 (não existe par de gato doméstico
+    // que chegue a 6 só com os portadores aprovados; ver relatório da rodada
+    // de portadores). A prova de segregação de verdade tier-independente
+    // (com um par que NÃO é gato doméstico) está no teste seguinte.
     const fixed = { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed: "e2e-fixed" };
     const phd = (await post(fixed, { "x-user-id": "p1", "x-user-tier": "PHD" })).json();
     const free = (await post(fixed, { "x-user-id": "f1", "x-user-tier": "FREE" })).json();
-    expect(phd.entries.length).toBe(1);
-    expect(free.entries.length).toBe(1);
+    expect(phd.entries.length).toBe(4);
+    expect(free.entries.length).toBe(4);
     expect(free.entries[0].genotype).toEqual(phd.entries[0].genotype);
     expect(free.entries[0].phenotype).toEqual(phd.entries[0].phenotype);
     expect(free.entries[0].sex).toBe(phd.entries[0].sex);

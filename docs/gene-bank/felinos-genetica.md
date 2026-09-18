@@ -108,6 +108,61 @@ si no Free) e diferem apenas no genótipo.
 variedade em **todos os loci** (tabby/mackerel/spotted, cores B/D, pontos/albino C,
 branco W, manchas S), permitindo o jogo mendeliano completo dentro da espécie.
 
+## Portadores ocultos por fundador
+
+**Motivo:** até esta decisão, 9 dos 12 fundadores de `felis-catus` eram
+homozigotos em **todo** loco — cruzar fundador × fundador (o único cruzamento
+possível na primeira semana de um jogador Free) sempre dava **1 única**
+combinação de fenótipo possível (nenhuma variação de Mendel pra ver, nenhuma
+escolha real entre as 6 opções da incubadora, nenhum Punnett interessante).
+Isso contradizia o parágrafo acima ("carrega variedade em todos os loci"),
+que já era a intenção documentada desde a ADR-0010 — só nunca foi
+implementada por completo.
+
+**Regra seguida em toda escolha abaixo:** o alelo NOVO entra sempre do lado
+**recessivo** do ranking de dominância daquele loco, atrás do alelo que já
+define a raça — o fundador continua parecendo EXATAMENTE igual (portador é
+invisível por definição; nenhum loco de dominância INCOMPLETA — `He`, `Ma`
+— foi tocado, porque nesses todo heterozigoto já é um fenótipo visível
+próprio, nunca "oculto"). Prova formal: `apps/api/test/founder-carriers.
+spec.ts` compara `expressPhenotype()` de cada um dos 12 fundadores, ANTES
+(genótipo antigo hardcoded no teste) e DEPOIS (genótipo atual) — os dois
+batem `loci` por `loci`.
+
+| Fundador | Loco(s) alterado(s) | Genótipo antes → depois | Alelo recessivo carregado | Por quê |
+|---|---|---|---|---|
+| gato-tabby | P, C | P^m/P^m → **P^m/P^t** · C/C → **C/c^b** | uniforme (ticked) · sépia | Gato de rua/mestiço descende de linhagens muito misturadas — plausível carregar padrão e cor recessivos sem nunca expressá-los |
+| gato-siames | Bd | Bd^s/Bd^s → **Bd^s/Bd^g** | fundo cinza | Tom de fundo é independente do padrão pontos (C); ancestralidade cruzada plausível |
+| gato-preto | A | A/A → **A/a** | não-melanístico | Gato preto sólido é classicamente heterozigoto na vida real — raramente "puro"; A/a continua preto porque A é dominante |
+| gato-maine-coon | Ec, Fl | Ec^t/Ec^t → **Ec^t/Ec^n** · Fl^l/Fl^l → **Fl^l/Fl^s** | orelhas normais · pelo curto | Raça originada de gatos de celeiro de pelo/orelha mistos na Nova Inglaterra — carregar as versões recessivas é histórico/plausível |
+| gato-persa | Fl | Fl^l/Fl^l → **Fl^l/Fl^s** | pelo curto | Raças de pelo longo historicamente cruzadas com shorthair |
+| gato-bengala | P | P^s/P^s → **P^s/P^t** | uniforme (ticked) | Origem documentada da raça inclui cruzas com linhagens ticked (Abyssinian) |
+| gato-sphynx | Ec | Ec^l/Ec^l → **Ec^l/Ec^n** | orelhas normais | Tamanho de orelha nunca foi tão fixado quanto a calvície (Hr) na origem da raça — `Hr` continua `hr/hr`, define a raça, nunca mexido |
+| gato-mau-egipcio | P | P^s/P^s → **P^s/P^t** | uniforme (ticked) | Relatos de ancestralidade ticked na origem da raça |
+| gato-abissinio | Bd | Bd^a/Bd^a → **Bd^a/Bd^d** | fundo dourado | Abyssinian tem variantes de tom documentadas (ruddy/sorrel/blue/fawn) |
+
+**gato-branco (`W/w`), gato-birmania (`S/s`) e gato-ragdoll (`S/s`)** já eram
+portadores **antes** desta decisão (não fazem parte da mudança desta rodada,
+mas são exatamente o padrão que os outros 9 passaram a seguir).
+
+**Combinações resultantes (conferido em teste, não só calculado à mão):**
+ragdoll × maine-coon passa a gerar mais de 4 combinações distintas de
+fenótipo; gato-tabby × gato-siames (o par que causou o bug em produção —
+sempre dava 1 combinação só) passa a gerar mais de 1.
+
+### Caninos — portadores JÁ existentes, nunca documentados (não alterados nesta rodada)
+
+O pack canino **já tinha** portadores ocultos desde antes desta decisão —
+nunca registrados aqui. Achados nesta investigação, listados só pra
+constar (nenhum genótipo canino foi tocado — ver `docs/gene-bank/
+caninos-genetica.md`, que também não os documentava):
+
+- **dobermann**: `B/b` (chocolate oculto) + `D/d` (diluído/azul oculto) — bate com genética real de Dobermann (chocolate e azul são cores reconhecidas da raça).
+- **pastor-alemao**: `Cl^l/Cl^s` (pelo longo oculto) — bate com o "long-haired GSD", variante recessiva real e documentada da raça.
+- **dogue-arlequim**: `M/m` (merle) + `H/h` (harlequin) — intencional, produz o padrão "arlequim" via a regra de epistasia H-sobre-M já existente no pack; `M/M` é letal (`lethals`), risco genético real já modelado.
+- **braco-alemao**: `E/e` (creme/vermelho oculto atrás de extensão normal).
+- **Onda 2** (não documentada em `caninos-genetica.md`): `K^br/k^y` (brindle oculto) em presa-canaria, cimarron, pit-bull e bulldog-ingles; `Cl^l/Cl^s` (pelo longo oculto) em pastor-pampeano.
+
 ## Compatibilidade com o TDD existente
 - O loco **A** mantém o significado do arco Pumajaguar (melanismo dominante); os
   golden tests do TDD §4.5 (que usam só A) permanecem válidos e verdes.
