@@ -31,7 +31,7 @@ export interface TierPolicy {
    * pago pela vaga de gestação). Esgotado → créditos avulsos.
    */
   monthlyExtraImages: number;
-  /** Bônus QUINZENAL (+1 crédito de imagem) liberado a partir deste tier (ADR-0021 — era semanal, ADR-0019). */
+  /** Bônus QUINZENAL (+1 crédito — 1 crédito = 1 nascimento extra) liberado a partir deste tier (ADR-0021 — era semanal, ADR-0019). */
   biweeklyBonus: boolean;
   /** Profundidade de árvore genealógica exposta pela API (TDD §8). */
   lineageDepth: number | "full";

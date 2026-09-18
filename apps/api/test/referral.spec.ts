@@ -31,7 +31,7 @@ describe("Referral (viralização anti-fraude)", () => {
     expect(r.credited).toBe(0);
   });
 
-  it("crédito de imagem é consumível", async () => {
+  it("crédito (1 crédito = 1 nascimento extra) é consumível", async () => {
     const link = await ref.getOrCreateLink("alice");
     await ref.recordEvent(link.code, "bob", "install");
     expect(await wallet.consumeImageCredit("alice")).toBe(true);

@@ -5,7 +5,7 @@ import { WalletRepository, type Wallet } from "./wallet.repository";
 export type { Wallet };
 export const FREEZE_COST = { catalisadores: 20 };
 export const THAW_COST = { biomassa: 10000 };
-/** Janela do bônus de crédito de imagem (ADR-0021 — 15 dias corridos, era 7/semanal na ADR-0019). */
+/** Janela do bônus de crédito (1 crédito = 1 nascimento extra; ADR-0021 — 15 dias corridos, era 7/semanal na ADR-0019). */
 const BIWEEKLY_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 @Injectable()
@@ -29,14 +29,14 @@ export class WalletService {
     return next;
   }
 
-  /** Credita créditos de imagem (referral/compra). */
+  /** Credita créditos (referral/compra) — 1 crédito = 1 nascimento extra. */
   async creditImageCredits(owner: string, n: number): Promise<Wallet> {
     const w = await this.repo.get(owner);
     const next: Wallet = { ...w, imageCredits: (w.imageCredits ?? 0) + n };
     await this.repo.save(owner, next);
     return next;
   }
-  /** Consome 1 crédito de imagem; false se não houver. */
+  /** Consome 1 crédito; false se não houver. */
   async consumeImageCredit(owner: string): Promise<boolean> {
     const w = await this.repo.get(owner);
     if ((w.imageCredits ?? 0) <= 0) return false;
@@ -44,8 +44,9 @@ export class WalletService {
     return true;
   }
   /**
-   * Imagem quinzenal (engajamento, ADR-0021 — era semanal, ADR-0019): +1
-   * crédito de imagem, no máximo 1x a cada 15 dias corridos. Janela MÓVEL
+   * Bônus quinzenal (engajamento, ADR-0021 — era semanal, ADR-0019): +1
+   * crédito (1 crédito = 1 nascimento extra), no máximo 1x a cada 15 dias
+   * corridos. Janela MÓVEL
    * (timestamp, não bucket de calendário — 15 não divide um calendário em
    * buckets limpos como semana/mês dividem): compara `now` contra o
    * `lastBiweekly` gravado, igual à janela `rolling7d` já usada em

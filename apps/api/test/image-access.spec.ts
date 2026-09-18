@@ -101,12 +101,12 @@ describe("Acesso a retrato de espécime — dono/fundador/pool, cota do payerId 
     }
   });
 
-  it("FREE sem cota (limite 0) nem crédito de imagem → 403 com a mensagem atual", async () => {
+  it("FREE sem cota (limite 0) nem crédito → 403 com a mensagem atual", async () => {
     process.env.FAL_KEY = "test-fake-key"; // precisa estar "ligado" pra cota valer (senão cai em modo procedural, grátis)
     let caught: unknown;
     try { await svc.generate("gato-tabby", "user-free-1", "FREE"); } catch (e) { caught = e; }
     expect(caught).toBeInstanceOf(ForbiddenException);
-    expect((caught as Error).message).toContain("Sem cota mensal nem créditos de imagem");
+    expect((caught as Error).message).toContain("Sem cota mensal nem créditos");
   });
 
   it("gerar retrato de espécime de OUTRO usuário (não fundador) → 404", async () => {

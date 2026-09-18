@@ -215,14 +215,14 @@ describe("Incubadora — instanciação direta (fallback de crédito, gestaçõe
     prob: 1, fPedigree: 0, fixationIndex: 0, aura, generation: 1, sex: "M" as const, fertility: null, haldaneStatus: null,
   });
 
-  it("sem birthQuota (esgotada), com crédito de imagem → gesta usando o crédito (não lança 429) e debita o crédito; sem nenhum dos dois → lança", async () => {
+  it("sem birthQuota (esgotada), com crédito → gesta usando o crédito (não lança 429) e debita o crédito; sem nenhum dos dois → lança", async () => {
     const { incubatorRepo, wallet, incubator } = build();
     const owner = "credit-user";
 
     // Esgota a birthQuota do FREE (1/rolling7d) gestando uma 1ª entrada de verdade.
     const first = await makeEntry(incubatorRepo, owner);
     await incubator.gestate(first.id, owner, "FREE");
-    // Concede 1 crédito de imagem (fonte real: referral/compra/bônus quinzenal — aqui, direto).
+    // Concede 1 crédito (1 crédito = 1 nascimento extra; fonte real: referral/compra/bônus quinzenal — aqui, direto).
     await wallet.creditImageCredits(owner, 1);
     const creditsBefore = (await wallet.get(owner)).imageCredits ?? 0;
 

@@ -1,11 +1,12 @@
 /**
- * Compra de créditos de imagem (pack avulso) e assinaturas (recorrente).
- * Pack: createCheckout (cria cobrança) → confirm (paga; no gateway real vem
- * por webhook) → credita a carteira. Anti-fraude: só credita 1x por intent
- * (idempotente, via payment_intents — ver PaymentIntentsRepository.claimCredit).
- * Assinatura: subscribe (cria Checkout Session mode=subscription) → o ciclo
- * de vida inteiro (criação, renovação, cancelamento, falha de cobrança) é
- * tratado só pelo webhook, nunca por poll do cliente.
+ * Compra de créditos (1 crédito = 1 nascimento extra) e assinaturas
+ * (recorrente). Pack: createCheckout (cria cobrança) → confirm (paga; no
+ * gateway real vem por webhook) → credita a carteira. Anti-fraude: só
+ * credita 1x por intent (idempotente, via payment_intents — ver
+ * PaymentIntentsRepository.claimCredit). Assinatura: subscribe (cria
+ * Checkout Session mode=subscription) → o ciclo de vida inteiro (criação,
+ * renovação, cancelamento, falha de cobrança) é tratado só pelo webhook,
+ * nunca por poll do cliente.
  */
 import { BadRequestException, Injectable } from "@nestjs/common";
 import type Stripe from "stripe";
@@ -43,10 +44,27 @@ export class BillingService {
 
   packs() { return CREDIT_PACKS; }
 
+  /**
+   * BUGFIX (achado nesta rodada): `StripePaymentProvider.createIntent()`
+   * lança um `Error` genérico (não um `HttpException`) quando o `lookup_key`
+   * não resolve pra nenhum Price ATIVO no Stripe — ex.: pacote arquivado
+   * (trocado por um `_v2`) mas `credit-packs.ts` ainda apontando pro antigo.
+   * Sem este `try/catch`, esse `Error` cru subia até o filtro padrão do
+   * Nest, que devolve 500 com mensagem genérica ("Internal server error")
+   * — o jogador nunca via POR QUE a compra falhou, e o log real só existia
+   * no stdout do servidor. Agora vira 400 com mensagem acionável pro
+   * jogador; o motivo técnico completo continua logado.
+   */
   async createCheckout(userId: string, packId: string): Promise<PaymentIntent> {
     const pack = findPack(packId);
     if (!pack) throw new BadRequestException("Pacote inválido.");
-    return this.payments.createIntent(userId, packId, pack.priceBRL);
+    try {
+      return await this.payments.createIntent(userId, packId, pack.priceBRL);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(`[BillingService.createCheckout] falha ao criar checkout pra packId=${packId}:`, e);
+      throw new BadRequestException("Não foi possível iniciar a compra deste pacote agora. Tente novamente em instantes.");
+    }
   }
 
   /**

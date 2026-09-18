@@ -217,8 +217,8 @@ export const wallets = pgTable("wallets", {
   biomassa: integer("biomassa").notNull().default(125480),
   lastDaily: text("last_daily"),
   /**
-   * Última data (YYYY-MM-DD) em que o bônus QUINZENAL de crédito de imagem
-   * foi resgatado (ADR-0021 — era `lastWeekly`/`last_weekly`, semanal, ADR-
+   * Última data (YYYY-MM-DD) em que o bônus QUINZENAL de crédito (1 crédito
+   * = 1 nascimento extra) foi resgatado (ADR-0021 — era `lastWeekly`/`last_weekly`, semanal, ADR-
    * 0019; renomeado pra não sugerir semana sob a nova janela de 15 dias
    * corridos). Comparação é por TIMESTAMP/rolling-window em `wallet.service.ts`
    * (`claimBiweekly`), não por igualdade de bucket calendário como o antigo

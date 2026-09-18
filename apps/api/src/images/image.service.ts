@@ -170,9 +170,9 @@ export class ImageService {
     if (willUseFal && !skipQuota) {
       const ok = await this.quota.tryConsume(payerId, tier);
       if (!ok) {
-        // Cota esgotada → tenta um crédito de imagem (referral/compra/semanal).
+        // Cota esgotada → tenta um crédito (referral/compra/bônus quinzenal — 1 crédito = 1 nascimento extra, ou 1 retrato extra aqui).
         const credit = await this.wallet.consumeImageCredit(payerId);
-        if (!credit) throw new ForbiddenException("Sem cota mensal nem créditos de imagem. Indique amigos para ganhar créditos, colete o bônus semanal, ou compre créditos.");
+        if (!credit) throw new ForbiddenException("Sem cota mensal nem créditos. Indique amigos para ganhar créditos, colete o bônus quinzenal, ou compre créditos.");
       }
     }
 

@@ -18,7 +18,7 @@ import { ClockModule } from "../common/clock.module";
  * precisaria de volta deste módulo por `IncubatorService`, que ninguém usa
  * lá). `ImageModule` — gera o retrato na revelação. `SpecimensModule` —
  * persiste o espécime ao nascer. `QuotaModule` — cota de revelação.
- * `EconomyModule` — crédito de imagem (fallback) e custo de congelar.
+ * `EconomyModule` — crédito (fallback, 1 crédito = 1 nascimento extra) e custo de congelar.
  * `TierModule` — resolve o tier efetivo (nunca do JWT cru). `ClockModule` —
  * fornece `Clock` (bugfix: `IncubatorService` não usa mais `new Date()`
  * direto pro prazo de gestação, ver `common/clock.ts`).

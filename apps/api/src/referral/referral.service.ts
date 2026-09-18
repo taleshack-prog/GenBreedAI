@@ -1,7 +1,7 @@
 /**
  * Motor de indicação (viralização — TDD ReferralLink). Crédito ESCALONADO por
  * profundidade de engajamento (anti-fraude): clique=0, instalou=+1, D1=+1,
- * D7=+2, converteu=+15 créditos de imagem. Cada marco credita 1x por indicado.
+ * D7=+2, converteu=+15 créditos (1 crédito = 1 nascimento extra). Cada marco credita 1x por indicado.
  */
 import { Injectable } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";

@@ -14,19 +14,25 @@ describe("Compra de créditos (billing)", () => {
     billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
   });
 
-  it("pacotes: 10/50/100 com preços corretos", () => {
+  it("pacotes: 10/30/60 com id, preço e stripeLookupKey corretos (catálogo _v2 — pack-50/pack-100 saíram)", () => {
     const p = billing.packs();
-    expect(p.map((x) => x.credits)).toEqual([10, 50, 100]);
-    expect(p.find((x) => x.id === "pack-50")!.priceBRL).toBe(20);
+    expect(p).toEqual([
+      { id: "pack-10", credits: 10, priceBRL: 5.9, label: "10 créditos", stripeLookupKey: "pack_10_v2" },
+      { id: "pack-30", credits: 30, priceBRL: 14.9, label: "30 créditos", stripeLookupKey: "pack_30_v2" },
+      { id: "pack-60", credits: 60, priceBRL: 29.9, label: "60 créditos", stripeLookupKey: "pack_60_v2" },
+    ]);
+    expect(p.find((x) => x.id === "pack-50")).toBeUndefined();
+    expect(p.find((x) => x.id === "pack-100")).toBeUndefined();
+    expect(p.some((x) => x.stripeLookupKey === "pack_10" || x.stripeLookupKey === "pack_50" || x.stripeLookupKey === "pack_100")).toBe(false);
   });
 
   it("checkout → confirm credita os créditos", async () => {
-    const intent = await billing.createCheckout("u", "pack-50");
+    const intent = await billing.createCheckout("u", "pack-60");
     expect(intent.status).toBe("PENDING");
     const r = await billing.confirm("u", intent.id);
     expect(r.status).toBe("PAID");
-    expect(r.creditsAdded).toBe(50);
-    expect((await wallet.get("u")).imageCredits).toBe(50);
+    expect(r.creditsAdded).toBe(60);
+    expect((await wallet.get("u")).imageCredits).toBe(60);
   });
 
   it("idempotente: confirmar 2x não credita em dobro", async () => {

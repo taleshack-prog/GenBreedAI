@@ -27,8 +27,8 @@ function checkoutCompletedEvent(sessionOverrides: Record<string, unknown> = {}) 
         object: "checkout.session",
         payment_status: "paid",
         client_reference_id: "alice",
-        metadata: { userId: "alice", packId: "pack-50" },
-        amount_total: 2000,
+        metadata: { userId: "alice", packId: "pack-30" },
+        amount_total: 1490,
         ...sessionOverrides,
       },
     },
@@ -50,14 +50,14 @@ describe("Webhook Stripe (billing) — POST /billing/webhook", () => {
     const { rawBody, signature } = sign(checkoutCompletedEvent());
     const r = await billing.handleWebhook(rawBody, signature);
     expect(r).toEqual({ received: true });
-    expect((await wallet.get("alice")).imageCredits).toBe(50);
+    expect((await wallet.get("alice")).imageCredits).toBe(30);
   });
 
   it("idempotente: reenvio do mesmo evento (retry do Stripe) não credita 2x", async () => {
     const { rawBody, signature } = sign(checkoutCompletedEvent());
     await billing.handleWebhook(rawBody, signature);
     await billing.handleWebhook(Buffer.from(rawBody), signature); // reenvio idêntico
-    expect((await wallet.get("alice")).imageCredits).toBe(50);
+    expect((await wallet.get("alice")).imageCredits).toBe(30);
   });
 
   it("assinatura inválida → BadRequestException (400)", async () => {

@@ -143,8 +143,9 @@ export class IncubatorService {
   /**
    * POST /incubator/:id/gestate (ADR-0021, item 3). É AQUI que a vaga de
    * `birthQuota` é consumida (reserva atômica, mesmo padrão do antigo
-   * `reveal()`, ADR-0020: sem vaga usa 1 crédito de imagem; sem nenhum dos
-   * dois, 429 com `nextAvailableAt`). Nenhuma imagem é gerada aqui — só marca
+   * `reveal()`, ADR-0020: sem vaga usa 1 crédito — 1 crédito = 1 nascimento
+   * extra; sem nenhum dos dois, 429 com `nextAvailableAt`). Nenhuma imagem é
+   * gerada aqui — só marca
    * `gestationStartedAt`/`gestationEndsAt` (prazo pela aura, `gestation-
    * time.ts`). Entrada já em gestação ou já nascida → 400.
    */
@@ -163,7 +164,7 @@ export class IncubatorService {
         throw new HttpException(
           {
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: "Sem vaga de gestação nem créditos de imagem. Indique amigos, colete o bônus quinzenal, ou compre créditos.",
+            message: "Sem vaga de gestação nem créditos. Indique amigos, colete o bônus quinzenal, ou compre créditos.",
             error: "Too Many Requests",
             nextAvailableAt: nextAt ? nextAt.toISOString() : null,
           },
