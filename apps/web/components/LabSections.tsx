@@ -1,7 +1,7 @@
 "use client";
 
 import type { ApiSpecimen } from "../lib/api";
-import { buildGrid, topHybrids, familyOf, type Hybrid } from "../lib/lab";
+import { buildGrid, type Family } from "../lib/lab";
 
 /** Quadro de Punnett por gametas com miniaturas + % reais (mockup Image 2). */
 export function PunnettGridView({ sire, dam }: { sire: ApiSpecimen; dam: ApiSpecimen }) {
@@ -39,8 +39,8 @@ function FragmentRow({
   label, cells, family,
 }: {
   label: string;
-  cells: { genotype: import("@genbreedai/shared").Genotype; prob: number; base: string }[];
-  family: import("../lib/appearance").Family;
+  cells: { genotype: import("@genbreedai/shared").Genotype; prob: number }[];
+  family: Family;
 }) {
   return (
     <>
@@ -79,54 +79,6 @@ export function InbreedingGauge({ f }: { f: number }) {
         <span>0</span><span>0,06</span><span>0,125</span><span>0,25</span><span>0,50+</span>
       </div>
       <div className={`mt-3 text-center font-display text-sm font-bold uppercase ${tone}`}>{risk}</div>
-    </div>
-  );
-}
-
-const QTL_ABBR: Record<string,string> = { porte:"POR", vigor:"VIG", beleza:"BEL", temperamento:"TMP", rosetas:"ROS" };
-
-/** Prévia das 3 opções mais prováveis, com setas por atributo (mockup Image 2). */
-export function HybridPreview({ sire, dam }: { sire: ApiSpecimen; dam: ApiSpecimen }) {
-  const hybrids = topHybrids(sire, dam, 3);
-  const mid: Record<string, number> = {};
-  for (const k of Object.keys(sire.genotype.qtl)) mid[k] = ((sire.genotype.qtl[k] ?? 0) + (dam.genotype.qtl[k] ?? 0)) / 2;
-  return (
-    <div>
-      <h3 className="mb-3 font-display text-xs font-bold uppercase text-cyan">Prévia das 3 opções mais prováveis</h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {hybrids.map((h, i) => <HybridCard key={i} h={h} idx={i + 1} family={familyOf(sire.pack)} mid={mid} />)}
-      </div>
-      <p className="mt-2 text-center text-[0.7rem] text-ink-muted">As probabilidades são estimadas e podem variar após a síntese.</p>
-    </div>
-  );
-}
-
-function HybridCard({ h, idx, family, mid }: { h: Hybrid; idx: number; family: import("../lib/appearance").Family; mid: Record<string, number> }) {
-  const qtl = h.genotype.qtl;
-  return (
-    <div className="rounded-card border border-cyan/25 bg-bg-800 p-2">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="grid h-5 w-5 place-items-center rounded-full border border-cyan/50 font-mono text-[0.65rem] text-cyan">{idx}</span>
-        <span className="rounded bg-purple/20 px-1.5 py-0.5 font-mono text-[0.65rem] text-purple">{(h.prob * 100).toFixed(0)}%</span>
-      </div>
-      <div className="grid min-h-[60px] place-items-center rounded bg-bg-900/60 p-2 text-center">
-        <span className="font-mono text-[0.6rem] text-cyan/80">
-          {Object.entries(h.genotype.loci).slice(0, 4).map(([k, v]) => `${k}:${v[0]}${v[1]}`).join("  ")}
-        </span>
-      </div>
-      <div className="mt-2 grid grid-cols-4 gap-1">
-        {Object.entries(qtl).slice(0,4).map(([k, vv]) => {
-          const v = vv ?? 0, m = mid[k] ?? 0.5, lbl = QTL_ABBR[k] ?? k.slice(0,3).toUpperCase();
-          const arrow = v > m + 0.01 ? "↑" : v < m - 0.01 ? "↓" : "=";
-          const tone = arrow === "↑" ? "text-ok" : arrow === "↓" ? "text-crit" : "text-ink-muted";
-          return (
-            <div key={k} className="text-center">
-              <div className="font-mono text-[0.55rem] text-ink-muted">{lbl}</div>
-              <div className={`font-display text-sm font-bold ${tone}`}>{arrow}</div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

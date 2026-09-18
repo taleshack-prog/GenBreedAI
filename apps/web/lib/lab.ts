@@ -2,7 +2,9 @@
 import { gameteFrequencies, punnettLocus, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
 import type { Genotype } from "@genbreedai/shared";
 import type { ApiSpecimen } from "./api";
-import { deriveAppearance, type Family } from "./appearance";
+
+/** Antes vinha de "./appearance" (desenho procedural, removido) — só o tipo sobrevive, ainda usado por PunnettGrid. */
+export type Family = "feline" | "canine";
 
 const packOf = (pack: string) => (pack === "canine" ? CANINE_PACK : FELINE_PACK);
 export const familyOf = (pack: string): Family => (pack === "canine" ? "canine" : "feline");
@@ -42,7 +44,7 @@ function gametes(g: Genotype, loci: string[]): Gamete[] {
   }
   return out;
 }
-export interface GridCell { genotype: Genotype; prob: number; base: string }
+export interface GridCell { genotype: Genotype; prob: number }
 export interface PunnettGrid {
   loci: string[]; cols: Gamete[]; rows: Gamete[]; cells: GridCell[][]; family: Family;
   /** Loci sem variação possível (nenhum pai heterozigoto nele) — por isso não aparecem no quadro. */
@@ -61,24 +63,9 @@ export function buildGrid(sire: ApiSpecimen, dam: ApiSpecimen): PunnettGrid {
       else childLoci[l] = [sire.genotype.loci[l]![0], dam.genotype.loci[l]?.[0] ?? sire.genotype.loci[l]![1]];
     }
     const genotype: Genotype = { loci: childLoci, qtl: sire.genotype.qtl };
-    return { genotype, prob: c.prob * r.prob, base: deriveAppearance(family, genotype, true).base };
+    return { genotype, prob: c.prob * r.prob };
   }));
   return { loci, cols, rows, cells, family, fixedLoci, extraSegregatingLoci };
-}
-export interface Hybrid { genotype: Genotype; prob: number; label: string }
-export function topHybrids(sire: ApiSpecimen, dam: ApiSpecimen, n = 3): Hybrid[] {
-  const loci = Object.keys(sire.genotype.loci).filter((l) => dam.genotype.loci[l]);
-  let combos: Array<{ loci: Record<string, [string, string]>; prob: number }> = [{ loci: {}, prob: 1 }];
-  for (const locus of loci) {
-    const dist = [...punnettLocus(sire.genotype.loci[locus]!, dam.genotype.loci[locus]!).entries()];
-    const next: typeof combos = [];
-    for (const cur of combos) for (const [key, p] of dist) { const [a, b] = key.split("/"); next.push({ loci: { ...cur.loci, [locus]: [a!, b!] }, prob: cur.prob * p }); }
-    combos = next.sort((x, y) => y.prob - x.prob).slice(0, 24);
-  }
-  const qtl = sire.genotype.qtl;
-  // "Opção" (neutro) — prévia de combinação de genótipo, não depende de a
-  // cruza ser interespecífica ou não (achado do relatório de "híbrido" fixo).
-  return combos.slice(0, n).map((c, i) => ({ genotype: { loci: c.loci, qtl }, prob: c.prob, label: `Opção ${i + 1}` }));
 }
 export function compatibility(sire: ApiSpecimen, dam: ApiSpecimen): number {
   const shared = Object.keys(sire.genotype.loci).filter((l) => dam.genotype.loci[l]);
