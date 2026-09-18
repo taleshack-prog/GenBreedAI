@@ -69,6 +69,17 @@ export type Tier = "FREE" | "JUNIOR" | "SENIOR" | "PHD";
 // TierService no backend (ver getMyTier()). Limpa a chave antiga, se existir,
 // pra nenhuma sessão salva continuar mandando um tier "de teste" arbitrário.
 if (typeof window !== "undefined") localStorage.removeItem("gb:tier");
+/**
+ * Sempre inclui `content-type: application/json` — por isso TODA chamada de
+ * `fetch` que usa `demoHeaders()` com método POST/DELETE precisa mandar um
+ * `body` não-vazio junto (mesmo sem nada pra enviar, `body: "{}"`). Fastify
+ * recusa uma requisição que declara esse content-type sem corpo nenhum
+ * ("body cannot be empty when content-type is set to 'application/json'",
+ * `FST_ERR_CTP_EMPTY_JSON_BODY`) — bug real em produção em `gestateEntry`/
+ * `bornEntry`/`discardEntry`, que mandavam o header sem body. Ver teste
+ * `__tests__/api-request-body.test.ts`, que cobre TODAS as funções desta
+ * lista contra essa combinação.
+ */
 function demoHeaders(): Record<string, string> {
   const base: Record<string, string> = { "content-type": "application/json" };
   if (typeof window !== "undefined") {
@@ -217,7 +228,7 @@ export async function listIncubator(): Promise<IncubatorEntry[]> {
  * devolve `nextAvailableAt`.
  */
 export async function gestateEntry(id: string): Promise<IncubatorEntry> {
-  const res = await fetch(`/api/v1/incubator/${id}/gestate`, { method: "POST", headers: demoHeaders() });
+  const res = await fetch(`/api/v1/incubator/${id}/gestate`, { method: "POST", headers: demoHeaders(), body: "{}" });
   if (!res.ok) {
     if (res.status === 429) {
       const body = await res.json().catch(() => null) as { message?: string; nextAvailableAt?: string | null } | null;
@@ -230,13 +241,13 @@ export async function gestateEntry(id: string): Promise<IncubatorEntry> {
 }
 /** Materializa o espécime depois do prazo de gestação — grátis, gera a imagem agora (a vaga já foi paga em gestar). Antes do prazo → 400. */
 export async function bornEntry(id: string): Promise<{ specimen: ApiSpecimen }> {
-  const res = await fetch(`/api/v1/incubator/${id}/born`, { method: "POST", headers: demoHeaders() });
+  const res = await fetch(`/api/v1/incubator/${id}/born`, { method: "POST", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, `Falha ao fazer nascer (${res.status}).`);
   return res.json();
 }
 /** Descarta a descrição (perde, sem volta) — a confirmação é responsabilidade de quem chama. */
 export async function discardEntry(id: string): Promise<void> {
-  const res = await fetch(`/api/v1/incubator/${id}`, { method: "DELETE", headers: demoHeaders() });
+  const res = await fetch(`/api/v1/incubator/${id}`, { method: "DELETE", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, `Falha ao descartar (${res.status}).`);
 }
 
