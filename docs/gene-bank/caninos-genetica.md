@@ -29,6 +29,25 @@ mendelianos, como no felino) para que as raças fiquem distintas e HERDÁVEIS.
 Cor/padrão (loci originais) definem a pelagem; os loci morfológicos definem
 estrutura (crânio, orelhas, cauda, pelo). O QTL `porte` define a escala.
 
+## Loco S (malhado branco) — dominância INCOMPLETA (ADR-0022)
+
+**Atualizado:** 2026-09-18 · **ADR-0022**
+**Motivo:** em cães reais, o heterozigoto do loco S costuma mostrar branco
+residual (peito, patas, ponta da cauda) — sinal visual de que o animal
+carrega piebald. A dominância completa anterior escondia essa pista: `S/s^p`
+saía idêntico a `S/S`.
+
+| Genótipo | Alelos (dominância) | Fenótipo |
+|---|---|---|
+| `S/S` | `S`(sólido) > `s^p`(piebald) — dom. INCOMPLETA | sólido |
+| `S/s^p` | heterozigoto | **branco residual** (peito, patas, ponta da cauda) |
+| `s^p/s^p` | homozigoto recessivo | piebald |
+
+Nenhum dos 74 fundadores caninos era `S/s^p` antes desta mudança (todos
+`S/S` ou `s^p/s^p`) — nenhum fundador muda de aparência. Afeta apenas
+filhotes `S/s^p` gerados por cruzamento (ex.: `dogue-manto` `s^p/s^p` ×
+`dogue-tigrado` `S/S` → 100% da prole `S/s^p`, branco residual).
+
 ## Onda 1 — 12 raças icônicas (presets)
 
 | Raça (slug) | porte | Cph | Ec | Cl | Tl | Cor/padrão |

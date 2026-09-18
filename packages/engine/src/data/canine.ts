@@ -17,8 +17,10 @@ export const CANINE_PACK: SpeciesPack = {
       phenotypeByAllele: { "A^y": "fulvo/sable", "a^t": "tan-points", a: "não-agouti" }, mutationRate: µ },
     E: { name: "E", alleles: ["E", "e"], dominance: "COMPLETE", dominanceRank: ["E", "e"],
       phenotypeByAllele: { E: "extensão-normal", e: "creme/vermelho" }, mutationRate: µ },
-    S: { name: "S", alleles: ["S", "s^p"], dominance: "COMPLETE", dominanceRank: ["S", "s^p"],
-      phenotypeByAllele: { S: "sólido", "s^p": "piebald" }, mutationRate: µ },
+    // ADR-0022: dominância COMPLETA → INCOMPLETA — heterozigoto mostra branco
+    // residual (peito, patas, ponta da cauda), sinal visual de que carrega s^p.
+    S: { name: "S", alleles: ["S", "s^p"], dominance: "INCOMPLETE", dominanceRank: ["S", "s^p"],
+      phenotypeByAllele: { S: "sólido", "s^p": "piebald" }, heteroPhenotype: { "S|s^p": "branco residual" }, mutationRate: µ },
     R: { name: "R", alleles: ["R", "r"], dominance: "COMPLETE", dominanceRank: ["R", "r"],
       phenotypeByAllele: { R: "roan", r: "sem-roan" }, mutationRate: µ },
     F: { name: "F", alleles: ["F", "f"], dominance: "INCOMPLETE", dominanceRank: ["F", "f"],

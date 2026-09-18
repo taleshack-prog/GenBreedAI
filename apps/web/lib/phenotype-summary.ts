@@ -38,6 +38,7 @@ export function phenoSummary(loci: Record<string, string>): string {
     if (loci.B && loci.B !== "preto/roan") parts.push(loci.B.split("/")[0]!); // liver/chocolate
     if (loci.F && loci.F !== "liso") parts.push(loci.F); // ondulado/cacheado
     if (loci.S === "piebald") parts.push("piebald");
+    else if (loci.S === "branco residual") parts.push("branco residual");
     if (loci.E === "creme/vermelho") parts.push("creme");
     return parts.length ? parts.join(" · ") : "Pelagem padrão";
   }

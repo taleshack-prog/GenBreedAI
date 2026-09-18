@@ -14,7 +14,7 @@ describe("phenoSummary — canino (BUG: .includes(\"merle\") casava com \"não-m
     const loci = {
       A: "fulvo/sable", // A^y dominante (dominanceRank canine.ts)
       K: "brindle/tigrado", // K^br dominante
-      S: "sólido", // S dominante sobre s^p (dominanceRank ["S","s^p"])
+      S: "branco residual", // ADR-0022: S/s^p agora é dominância INCOMPLETA (heteroPhenotype "S|s^p")
       M: "não-merle", // m/m homozigoto
       H: "sem-harlequin", B: "preto/roan", E: "extensão-normal", F: "liso",
     };
@@ -24,7 +24,7 @@ describe("phenoSummary — canino (BUG: .includes(\"merle\") casava com \"não-m
 
   it("mesma prole exibe Brindle (K^br) e Fulvo (A^y) juntos — independentes; o pack (canine.ts) NÃO tem regra de epistasia K-sobre-A, só H-sobre-M", () => {
     const loci = {
-      A: "fulvo/sable", K: "brindle/tigrado", S: "sólido", M: "não-merle",
+      A: "fulvo/sable", K: "brindle/tigrado", S: "branco residual", M: "não-merle",
       H: "sem-harlequin", B: "preto/roan", E: "extensão-normal", F: "liso",
     };
     const label = phenoSummary(loci);
@@ -54,19 +54,24 @@ describe("phenoSummary — canino (BUG: .includes(\"merle\") casava com \"não-m
     expect(label).not.toContain("Merle");
   });
 
-  it("S homozigoto piebald (s^p/s^p) exibe 'piebald'; S/s^p heterozigoto NÃO — S é dominante sobre s^p neste pack (dominanceRank canine.ts: [\"S\",\"s^p\"]), então o heterozigoto some COMO SÓLIDO, não malhado", () => {
-    // Nota (BUG 2, item 5 do pedido): "prole S/s^p exibe malhado branco" não
-    // é o comportamento correto do motor pra ESTE pack — S/s^p é sólido
-    // (dominância completa). Não escrevi esse teste como pedido porque
-    // contradiria expressPhenotype() tal como documentado; se a intenção é
-    // S/s^p aparentar malhado (dominância incompleta, como em D/E reais),
-    // isso é mudança de MOTOR (dominance: "COMPLETE" → outra coisa em
-    // canine.ts) e precisa de confirmação antes de qualquer alteração.
+  it("ADR-0022: S/S sólido (nada no rótulo); S/s^p heterozigoto exibe 'branco residual' (dominância agora INCOMPLETA, canine.ts); s^p/s^p homozigoto exibe 'piebald'", () => {
+    // Decisão revertida nesta rodada (ADR-0022): até aqui, S/s^p saía
+    // idêntico a S/S ('sólido', dominância COMPLETA) — o heterozigoto não
+    // dava nenhuma pista visual de carregar s^p. canine.ts agora declara S
+    // como INCOMPLETE com heteroPhenotype["S|s^p"]="branco residual", e esse
+    // valor precisa do próprio branch aqui (fixed-list de phenoSummary) —
+    // sem ele, "branco residual" cairia no `else` genérico e sumiria do
+    // rótulo, do mesmo jeito que "sólido" sempre sumiu.
+    const homoSolid = { A: "não-agouti", K: "permite-agouti", S: "sólido", M: "não-merle", H: "sem-harlequin" };
+    expect(phenoSummary(homoSolid)).not.toContain("piebald");
+    expect(phenoSummary(homoSolid)).not.toContain("branco residual");
+
+    const hetero = { A: "não-agouti", K: "permite-agouti", S: "branco residual", M: "não-merle", H: "sem-harlequin" };
+    expect(phenoSummary(hetero)).toContain("branco residual");
+    expect(phenoSummary(hetero)).not.toContain("piebald");
+
     const homoPiebald = { A: "não-agouti", K: "permite-agouti", S: "piebald", M: "não-merle", H: "sem-harlequin" };
     expect(phenoSummary(homoPiebald)).toContain("piebald");
-
-    const heteroSolid = { A: "não-agouti", K: "permite-agouti", S: "sólido", M: "não-merle", H: "sem-harlequin" };
-    expect(phenoSummary(heteroSolid)).not.toContain("piebald");
   });
 });
 

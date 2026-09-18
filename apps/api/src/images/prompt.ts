@@ -72,6 +72,7 @@ function coatCanine(loci: Record<string, string>): string {
   if (loci.K === "brindle/tigrado") parts.push("with a PROMINENT ALL-OVER dark brindle tiger-stripe pattern covering the whole body (distinctly brindle, NOT solid)");
   if (loci.M === "merle") parts.push("with a merle dappled pattern");
   if (loci.S === "piebald") parts.push("with irregular white piebald spotting");
+  else if (loci.S === "branco residual") parts.push("with small white markings on chest, paws and tail tip");
   if (loci.R === "roan") parts.push("with dense roan ticking (many small dark flecks) over the white areas, like a pointer");
   if (loci.F === "cacheado") parts.push("dense curly fur");
   else if (loci.F === "ondulado") parts.push("wavy fur");
