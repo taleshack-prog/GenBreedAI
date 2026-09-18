@@ -148,8 +148,10 @@ describe("Incubadora — HTTP (ADR-0021, gestação)", () => {
     const headers = AUTH_JUNIOR("incu-discard-1");
     const entry = await crossOne(headers);
     expect((await del(`/api/v1/incubator/${entry.id}`, headers)).statusCode).toBe(200);
+    // GET /incubator devolve {entries, nextCursor, counts} (ADR-0021 item 2,
+    // paginação) — não mais um array cru.
     const list = (await get("/api/v1/incubator", headers)).json();
-    expect(list.find((e: { id: string }) => e.id === entry.id)).toBeUndefined();
+    expect(list.entries.find((e: { id: string }) => e.id === entry.id)).toBeUndefined();
   });
 
   it("FREE (birthQuota 1/7dias): gestar 1ª entrada passa; gestar OUTRA entrada sem vaga nem crédito → 429 com nextAvailableAt", async () => {
@@ -160,6 +162,27 @@ describe("Incubadora — HTTP (ADR-0021, gestação)", () => {
     const blocked = await post(`/api/v1/incubator/${e2.id}/gestate`, undefined, headers);
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().nextAvailableAt).not.toBeNull();
+  });
+
+  it("paginação via HTTP (ADR-0021 item 2): limit funciona, nextCursor avança sem repetir, counts vem completo, state inválido → 400", async () => {
+    const headers = AUTH_JUNIOR("incu-page-http-1");
+    const crossRes = await post("/api/v1/cross", CROSS, headers);
+    expect(crossRes.json().entries.length).toBe(6); // JUNIOR: 6 opções (decisão desta rodada — igual pra todo tier)
+
+    const p1 = (await get("/api/v1/incubator?limit=4", headers)).json();
+    expect(p1.entries.length).toBe(4);
+    expect(p1.nextCursor).not.toBeNull();
+    expect(p1.counts.NA_INCUBADORA).toBe(6); // contagem COMPLETA, não só da página (4)
+
+    const p2 = (await get(`/api/v1/incubator?limit=4&cursor=${p1.nextCursor}`, headers)).json();
+    expect(p2.entries.length).toBe(2); // 6 no total - 4 já vistas
+    expect(p2.nextCursor).toBeNull();
+    const p1Ids = new Set(p1.entries.map((e: { id: string }) => e.id));
+    expect(p2.entries.every((e: { id: string }) => !p1Ids.has(e.id))).toBe(true); // nenhuma repetida
+    expect(p2.counts).toEqual(p1.counts); // contagem idêntica em qualquer página
+
+    const badState = await get("/api/v1/incubator?state=NAO_EXISTE", headers);
+    expect(badState.statusCode).toBe(400);
   });
 });
 
@@ -215,8 +238,10 @@ describe("Incubadora — instanciação direta (fallback de crédito, gestaçõe
     for (const e of entries) results.push(await incubator.gestate(e.id, owner, "PHD"));
     expect(results.every((r) => r.state === "GESTANDO")).toBe(true);
     // Todas seguem gestando simultaneamente — nenhuma foi afetada pelas outras.
+    // `list()` devolve {entries, nextCursor, counts} desde a paginação (item 2).
     const list = await incubator.list(owner);
-    expect(list.filter((e) => e.state === "GESTANDO").length).toBe(3);
+    expect(list.entries.filter((e) => e.state === "GESTANDO").length).toBe(3);
+    expect(list.counts.GESTANDO).toBe(3);
   });
 
   it("determinismo: o genótipo/fenótipo/sexo do espécime nascido é EXATAMENTE o que foi incubado (sem recalcular)", async () => {

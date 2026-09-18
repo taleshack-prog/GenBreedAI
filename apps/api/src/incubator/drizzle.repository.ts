@@ -1,11 +1,15 @@
 /**
- * Adapter Drizzle da porta IncubatorRepository (ADR-0020, gestação ADR-0021).
- * Driver-agnóstico (pg → Neon/local, ou PGlite nos testes), mesmo padrão de
- * `specimens/drizzle.repository.ts`.
+ * Adapter Drizzle da porta IncubatorRepository (ADR-0020, gestação ADR-0021,
+ * paginação ADR-0021 item 2 desta rodada). Driver-agnóstico (pg → Neon/
+ * local, ou PGlite nos testes), mesmo padrão de `specimens/drizzle.
+ * repository.ts`.
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { IncubatorRepository, type StoredIncubatorEntry, type PackId } from "./in-memory.repository";
+import {
+  IncubatorRepository, type StoredIncubatorEntry, type PackId,
+  type IncubatorListOptions, type IncubatorListResult, type IncubatorStateCounts, type IncubatorState,
+} from "./in-memory.repository";
 import { incubatorEntries } from "../db/schema";
 
 type Row = typeof incubatorEntries.$inferSelect;
@@ -23,6 +27,22 @@ function toStored(r: Row): StoredIncubatorEntry {
     frozen: r.frozen, createdAt: r.createdAt,
   };
 }
+
+/** Mesma definição de estado que `incubatorStateOf()` (in-memory) — em SQL, pra filtrar/contar sem trazer tudo pra memória. */
+function stateCondition(state: IncubatorState, now: Date) {
+  switch (state) {
+    case "NA_INCUBADORA":
+      return and(isNull(incubatorEntries.gestationStartedAt), isNull(incubatorEntries.bornSpecimenId));
+    case "GESTANDO":
+      return and(isNotNull(incubatorEntries.gestationStartedAt), isNull(incubatorEntries.bornSpecimenId), gt(incubatorEntries.gestationEndsAt, now));
+    case "PRONTO":
+      return and(isNotNull(incubatorEntries.gestationStartedAt), isNull(incubatorEntries.bornSpecimenId), lte(incubatorEntries.gestationEndsAt, now));
+    case "NASCIDO":
+      return isNotNull(incubatorEntries.bornSpecimenId);
+  }
+}
+
+const ALL_STATES: IncubatorState[] = ["NA_INCUBADORA", "GESTANDO", "PRONTO", "NASCIDO"];
 
 export class DrizzleIncubatorRepository extends IncubatorRepository {
   // `db` é tipado como any para permitir tanto node-postgres quanto PGlite.
@@ -46,9 +66,52 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
     return rows[0] ? toStored(rows[0]) : undefined;
   }
 
-  async listByOwner(ownerId: string): Promise<StoredIncubatorEntry[]> {
-    const rows: Row[] = await this.db.select().from(incubatorEntries).where(eq(incubatorEntries.ownerId, ownerId));
-    return rows.map(toStored);
+  /**
+   * Paginação por keyset (created_at, id), os dois DESC — não por OFFSET
+   * (OFFSET degrada com o tamanho da tabela e pode pular/repetir linha se
+   * alguém descartar uma entrada entre duas páginas; keyset não tem esse
+   * problema). Busca `limit + 1` linhas pra saber se há próxima página sem
+   * precisar de um COUNT(*) à parte.
+   */
+  async listByOwner(ownerId: string, opts: IncubatorListOptions): Promise<IncubatorListResult> {
+    const conditions = [eq(incubatorEntries.ownerId, ownerId)];
+    if (opts.state) conditions.push(stateCondition(opts.state, opts.now)!);
+
+    if (opts.cursor) {
+      const cursorRows: Row[] = await this.db.select().from(incubatorEntries).where(eq(incubatorEntries.id, opts.cursor));
+      const cursorRow = cursorRows[0];
+      // Cursor não existe mais (entrada descartada entre páginas) — página
+      // vazia, nunca reinicia do topo (evitaria repetir entradas já vistas
+      // pelo cliente) — mesma regra do adapter in-memory.
+      if (!cursorRow) return { entries: [], nextCursor: null };
+      conditions.push(
+        or(
+          lt(incubatorEntries.createdAt, cursorRow.createdAt),
+          and(eq(incubatorEntries.createdAt, cursorRow.createdAt), lt(incubatorEntries.id, cursorRow.id)),
+        )!,
+      );
+    }
+
+    const rows: Row[] = await this.db.select().from(incubatorEntries)
+      .where(and(...conditions))
+      .orderBy(desc(incubatorEntries.createdAt), desc(incubatorEntries.id))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const page = hasMore ? rows.slice(0, opts.limit) : rows;
+    return { entries: page.map(toStored), nextCursor: hasMore ? page[page.length - 1]!.id : null };
+  }
+
+  /** 4 COUNT(*) (um por estado) — simples e claro; escala bem pro tamanho de incubadora de 1 usuário. */
+  async countByState(ownerId: string, now: Date): Promise<IncubatorStateCounts> {
+    const counts = { NA_INCUBADORA: 0, GESTANDO: 0, PRONTO: 0, NASCIDO: 0 } as IncubatorStateCounts;
+    for (const state of ALL_STATES) {
+      const rows: Array<{ count: number }> = await this.db.select({ count: sql<number>`count(*)::int` })
+        .from(incubatorEntries)
+        .where(and(eq(incubatorEntries.ownerId, ownerId), stateCondition(state, now)!));
+      counts[state] = rows[0]?.count ?? 0;
+    }
+    return counts;
   }
 
   /**

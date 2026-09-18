@@ -116,9 +116,9 @@ describe("CrossService (TDD B/K/M + gate por tier)", () => {
       .rejects.toThrow();
   });
 
-  it("PhD vê mais opções que Senior (top-12)", async () => {
+  it("DECISÃO desta rodada: quantidade de opções não varia mais por tier — PhD também vê 6 (era 12)", async () => {
     const phd = await svc.options("PHD", { sireId: "gato-tabby", damId: "gato-siames", method: "F1" });
-    expect(phd.maxOptions).toBe(12);
+    expect(phd.maxOptions).toBe(6);
   });
 
   it("CÃO × CÃO (raças) NÃO é interespecífico → fértil (sem Haldane) e vira CÃO", async () => {

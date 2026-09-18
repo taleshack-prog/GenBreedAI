@@ -78,9 +78,27 @@ function engineSpecies(pack: string, species: string): string {
 
 const PACK_BY_FAMILY: Record<string, typeof CANINE_PACK> = { feline: FELINE_PACK, canine: CANINE_PACK };
 
-/** Quantas opções o tier vê para escolher (analítico; não altera probabilidade). */
-function optionCount(tier: Tier): number { return tier === "PHD" ? 12 : 6; }
-/** A partir de Senior o jogador ESCOLHE o fenótipo. */
+/**
+ * Quantas descrições de fenótipo saem de CADA cruzamento — IGUAL pra todo
+ * tier (decisão desta rodada: a diferença entre planos passa a ser espécies
+ * e nascimentos, nunca quantidade/escolha de opção). Era `optionCount(tier)`
+ * (6 pra todo tier menos PHD, que via 12) — a variação por tier SAIU;
+ * mantido como função (não uma constante crua) só pra não mudar a
+ * assinatura dos 4 call-sites que já chamam `optionCount(tier)` — `tier`
+ * continua sendo passado, só não influencia mais o resultado.
+ */
+function optionCount(_tier: Tier): number { return 6; }
+/**
+ * ÓRFÃO (achado nesta rodada, não removido): nenhuma tela da web chama
+ * `POST /cross/options` nem `POST /gene-bank/synthesize` (os dois únicos
+ * consumidores de `canChoose`/`resolveChoice`/`execute()` com `choiceKey`) —
+ * a incubadora (`POST /cross` → `incubate()`) nunca usou `canChoose`; todo
+ * tier já podia gestar QUALQUER entrada livremente (achado já reportado na
+ * rodada anterior). Esta decisão ("escolha não varia mais por plano")
+ * reforça que esse eixo nunca devia ter existido nesta camada — mantido só
+ * porque removê-lo é uma mudança maior (controller + gene-bank + testes)
+ * fora do pedido literal desta rodada; reportar se quiser que eu remova.
+ */
 function canChoose(tier: Tier): boolean { return tier === "SENIOR" || tier === "PHD"; }
 
 export interface CrossResponse { specimen: StoredSpecimen; cacheKey: string; engine: CrossResult["specimen"]; }

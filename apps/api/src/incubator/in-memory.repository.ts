@@ -1,8 +1,9 @@
 /**
  * Porta de persistência da incubadora (ADR-0020, campos de gestação ADR-
- * 0021) — mesmo padrão de `specimens/in-memory.repository.ts` (porta
- * assíncrona + adapter in-memory para dev/testes sem DB; `drizzle.
- * repository.ts` implementa a MESMA porta pra Postgres, ver ADR-0006).
+ * 0021, paginação ADR-0021 item 2 desta rodada) — mesmo padrão de
+ * `specimens/in-memory.repository.ts` (porta assíncrona + adapter in-memory
+ * para dev/testes sem DB; `drizzle.repository.ts` implementa a MESMA porta
+ * pra Postgres, ver ADR-0006).
  */
 import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -43,10 +44,46 @@ export interface StoredIncubatorEntry {
   createdAt: Date;
 }
 
+/**
+ * Estado de uma entrada (ADR-0021 item 6, "PRONTO" adicionado nesta rodada,
+ * item 2: a contagem por estado pedida inclui "pronto" como bucket próprio,
+ * então passou a ser um estado de verdade — calculado, nunca gravado —
+ * junto de GESTANDO, não mais um recorte só do lado do cliente).
+ */
+export type IncubatorState = "NA_INCUBADORA" | "GESTANDO" | "PRONTO" | "NASCIDO";
+
+/** Único lugar que decide o estado de uma entrada — usado pelo adapter in-memory E pelo service (`toView`), nunca duplicado. */
+export function incubatorStateOf(e: Pick<StoredIncubatorEntry, "bornSpecimenId" | "gestationStartedAt" | "gestationEndsAt">, now: Date): IncubatorState {
+  if (e.bornSpecimenId !== null) return "NASCIDO";
+  if (e.gestationStartedAt !== null) {
+    return e.gestationEndsAt !== null && e.gestationEndsAt.getTime() <= now.getTime() ? "PRONTO" : "GESTANDO";
+  }
+  return "NA_INCUBADORA";
+}
+
+export interface IncubatorListOptions {
+  /** Já validado/clampado pelo service (1-60) antes de chegar aqui. */
+  limit: number;
+  /** id da última entrada da página anterior — próxima página começa DEPOIS dela (ADR-0021 item 2). */
+  cursor?: string;
+  state?: IncubatorState;
+  /** "Agora" pro cálculo de PRONTO — vem do `Clock` do service, nunca `new Date()` aqui. */
+  now: Date;
+}
+export interface IncubatorListResult {
+  entries: StoredIncubatorEntry[];
+  /** `null` = não há próxima página. */
+  nextCursor: string | null;
+}
+export type IncubatorStateCounts = Record<IncubatorState, number>;
+
 export abstract class IncubatorRepository {
   abstract create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry>;
   abstract get(id: string): Promise<StoredIncubatorEntry | undefined>;
-  abstract listByOwner(ownerId: string): Promise<StoredIncubatorEntry[]>;
+  /** Paginado (ADR-0021 item 2) — ordenado por `createdAt` desc, `id` desc como desempate estável. */
+  abstract listByOwner(ownerId: string, opts: IncubatorListOptions): Promise<IncubatorListResult>;
+  /** Contagem COMPLETA por estado (ADR-0021 item 2) — independe de `limit`/`cursor`, nunca só da página atual. */
+  abstract countByState(ownerId: string, now: Date): Promise<IncubatorStateCounts>;
   /**
    * Reivindica a vaga de gestação — atômico: só grava `gestationStartedAt`/
    * `gestationEndsAt` se a entrada ainda não estiver gestando nem nascida
@@ -60,6 +97,8 @@ export abstract class IncubatorRepository {
   abstract markBorn(id: string, specimenId: string): Promise<StoredIncubatorEntry | null>;
   abstract delete(id: string): Promise<void>;
 }
+
+const EMPTY_COUNTS = (): IncubatorStateCounts => ({ NA_INCUBADORA: 0, GESTANDO: 0, PRONTO: 0, NASCIDO: 0 });
 
 @Injectable()
 export class InMemoryIncubatorRepository extends IncubatorRepository {
@@ -76,8 +115,38 @@ export class InMemoryIncubatorRepository extends IncubatorRepository {
 
   async get(id: string): Promise<StoredIncubatorEntry | undefined> { return this.store.get(id); }
 
-  async listByOwner(ownerId: string): Promise<StoredIncubatorEntry[]> {
-    return [...this.store.values()].filter((e) => e.ownerId === ownerId);
+  /**
+   * Ordena por `createdAt` desc — `Array.sort` é estável (ES2019+), então
+   * empates de `createdAt` (comum em teste, `new Date()` no mesmo ms) caem
+   * de volta na ordem de inserção do Map; ainda assim, desempata
+   * explicitamente por `id` desc, pra bater byte-a-byte com o `ORDER BY
+   * created_at DESC, id DESC` do adapter Drizzle (mesma ordem nos dois).
+   */
+  async listByOwner(ownerId: string, opts: IncubatorListOptions): Promise<IncubatorListResult> {
+    let all = [...this.store.values()].filter((e) => e.ownerId === ownerId);
+    if (opts.state) all = all.filter((e) => incubatorStateOf(e, opts.now) === opts.state);
+    all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1));
+
+    let startIdx = 0;
+    if (opts.cursor) {
+      const idx = all.findIndex((e) => e.id === opts.cursor);
+      // Cursor não encontrado (entrada descartada entre páginas) — melhor
+      // devolver página vazia do que reiniciar do topo (evitaria repetir
+      // entradas já vistas).
+      startIdx = idx === -1 ? all.length : idx + 1;
+    }
+    const entries = all.slice(startIdx, startIdx + opts.limit);
+    const hasMore = startIdx + opts.limit < all.length;
+    return { entries, nextCursor: hasMore ? (entries[entries.length - 1]?.id ?? null) : null };
+  }
+
+  async countByState(ownerId: string, now: Date): Promise<IncubatorStateCounts> {
+    const counts = EMPTY_COUNTS();
+    for (const e of this.store.values()) {
+      if (e.ownerId !== ownerId) continue;
+      counts[incubatorStateOf(e, now)]++;
+    }
+    return counts;
   }
 
   /** Sem `await` entre ler e escrever — atômico por construção (JS single-thread). */

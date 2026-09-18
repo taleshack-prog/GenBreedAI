@@ -94,9 +94,12 @@ describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
     const fixed = { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed: "e2e-fixed" };
     const phd = (await post(fixed, { "x-user-id": "p1", "x-user-tier": "PHD" })).json();
     const free = (await post(fixed, { "x-user-id": "f1", "x-user-tier": "FREE" })).json();
-    // PHD vê até 12 opções, FREE até 6 — mas a ORDEM (por probabilidade) e o
-    // resultado da 1ª (mais provável) têm que ser IDÊNTICOS: a probabilidade
-    // do motor não muda por tier.
+    // DECISÃO (rodada de "escolha não varia por plano"): PHD e FREE veem a
+    // MESMA quantidade agora (6 — era até 12 pro PHD). A ORDEM (por
+    // probabilidade) e o resultado da 1ª (mais provável) têm que ser
+    // IDÊNTICOS: a probabilidade do motor não muda por tier.
+    expect(phd.entries.length).toBe(6);
+    expect(free.entries.length).toBe(6);
     expect(free.entries[0].genotype).toEqual(phd.entries[0].genotype);
     expect(free.entries[0].phenotype).toEqual(phd.entries[0].phenotype);
     expect(free.entries[0].sex).toBe(phd.entries[0].sex);

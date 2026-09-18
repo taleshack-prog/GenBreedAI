@@ -203,12 +203,16 @@ export async function thawSpecimen(id: string): Promise<{ specimen: ApiSpecimen;
  * NASCER (grátis, gera a imagem agora). Não existe mais revelar avulso nem
  * congelar descrição.
  */
+/** "PRONTO" (prazo de gestação já vencido, mas ainda não nasceu) é estado do SERVIDOR desde esta rodada — não mais um recorte calculado no cliente. */
+export type IncubatorState = "NA_INCUBADORA" | "GESTANDO" | "PRONTO" | "NASCIDO";
+export type IncubatorStateCounts = Record<IncubatorState, number>;
+
 export interface IncubatorEntry extends IncubatorDescription {
   crossId: string; sireId: string; damId: string; method: string; pack: PackId; species: string;
   fPedigree: number; fixationIndex: number; generation: number;
   fertility: number | null; haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
   imageUrl: string | null;
-  state: "NA_INCUBADORA" | "GESTANDO" | "NASCIDO";
+  state: IncubatorState;
   /** ISO — `null` fora de gestação. */
   gestationEndsAt: string | null;
   /** Tempo total (h) previsto pela aura — sempre presente, mesmo antes de gestar. */
@@ -216,8 +220,27 @@ export interface IncubatorEntry extends IncubatorDescription {
   bornSpecimenId: string | null;
   createdAt: string;
 }
-export async function listIncubator(): Promise<IncubatorEntry[]> {
-  const res = await fetch("/api/v1/incubator", { headers: demoHeaders(), cache: "no-store" });
+
+/** Uma página de `GET /incubator` — paginação por cursor + contagem COMPLETA por estado (nunca só da página atual). */
+export interface IncubatorPage {
+  entries: IncubatorEntry[];
+  /** `null` = não há próxima página. */
+  nextCursor: string | null;
+  counts: IncubatorStateCounts;
+}
+
+/**
+ * `limit` (padrão 24, máx. 60 — a API clampa se vier maior), `cursor` (id
+ * da última entrada da página JÁ carregada — pra pedir a PRÓXIMA) e `state`
+ * (filtro aplicado no SERVIDOR, nunca mais no cliente).
+ */
+export async function listIncubator(opts: { limit?: number; cursor?: string; state?: IncubatorState } = {}): Promise<IncubatorPage> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  if (opts.state) params.set("state", opts.state);
+  const qs = params.toString();
+  const res = await fetch(`/api/v1/incubator${qs ? `?${qs}` : ""}`, { headers: demoHeaders(), cache: "no-store" });
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar a incubadora.");
   return res.json();
 }

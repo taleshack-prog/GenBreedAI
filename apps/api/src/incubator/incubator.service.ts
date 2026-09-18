@@ -16,7 +16,10 @@
  */
 import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from "@nestjs/common";
 import type { Tier } from "@genbreedai/shared";
-import { IncubatorRepository, type StoredIncubatorEntry } from "./in-memory.repository";
+import {
+  IncubatorRepository, incubatorStateOf, type StoredIncubatorEntry,
+  type IncubatorState, type IncubatorStateCounts,
+} from "./in-memory.repository";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { ImageService, cacheKeyOf } from "../images/image.service";
 import { stat, publicUrl } from "../images/storage";
@@ -32,14 +35,32 @@ export interface IncubatorEntryView {
   prob: number; fPedigree: number; fixationIndex: number; aura: number; generation: number;
   sex: string; fertility: number | null; haldaneStatus: string | null;
   imageUrl: string | null;
-  /** ADR-0021 item 6. */
-  state: "NA_INCUBADORA" | "GESTANDO" | "NASCIDO";
+  /**
+   * ADR-0021 item 6 — "PRONTO" (prazo de gestação já vencido, mas ainda não
+   * nasceu) virou estado de verdade nesta rodada (item 2: a contagem por
+   * estado pedida tem "pronto" como bucket próprio) — antes era um recorte
+   * só do lado do cliente (`GESTANDO` + comparar `gestationEndsAt` com
+   * `Date.now()` na hora de renderizar); agora o server já resolve, com o
+   * mesmo `Clock` usado em `gestate()`/`born()`.
+   */
+  state: IncubatorState;
   gestationEndsAt: string | null;
   /** Tempo previsto pela aura (item 6) — sempre presente, independe do estado (útil pra UI mostrar "vai levar Xh" antes de gestar). */
   gestationHours: number;
   bornSpecimenId: string | null;
   createdAt: string;
 }
+
+export interface IncubatorListPage {
+  entries: IncubatorEntryView[];
+  /** `null` = não há próxima página (ADR-0021 item 2). */
+  nextCursor: string | null;
+  /** Contagem COMPLETA por estado — sempre as 4, independe de `limit`/`cursor`/`state` do pedido. */
+  counts: IncubatorStateCounts;
+}
+
+const DEFAULT_PAGE_LIMIT = 24;
+const MAX_PAGE_LIMIT = 60;
 
 @Injectable()
 export class IncubatorService {
@@ -69,9 +90,8 @@ export class IncubatorService {
     return e;
   }
 
-  private toView(e: StoredIncubatorEntry, imageUrl: string | null): IncubatorEntryView {
-    const state: IncubatorEntryView["state"] =
-      e.bornSpecimenId !== null ? "NASCIDO" : e.gestationStartedAt !== null ? "GESTANDO" : "NA_INCUBADORA";
+  private toView(e: StoredIncubatorEntry, imageUrl: string | null, now: Date): IncubatorEntryView {
+    const state = incubatorStateOf(e, now);
     return {
       id: e.id, crossId: e.crossId, sireId: e.sireId, damId: e.damId, method: e.method,
       pack: e.pack, species: e.species, genotype: e.genotype, phenotype: e.phenotype,
@@ -85,15 +105,27 @@ export class IncubatorService {
 
   /**
    * GET /api/v1/incubator — tudo que a web precisa: descrição completa +
-   * estado. Só entradas NASCIDAS têm imagem (não existe imagem antes do
-   * nascimento neste modelo, ADR-0021) — derivada do espécime já nascido
+   * estado, PAGINADO (ADR-0021 item 2, rodada de paginação). `limit`
+   * clampado em [1, 60] (padrão 24); `cursor` = id da última entrada da
+   * página anterior; `state` filtra no SERVIDOR (nunca mais no cliente). A
+   * contagem por estado (`counts`) é sempre COMPLETA — nunca só da página
+   * atual, senão a UI não saberia quantas entradas existem em cada estado
+   * além do que já carregou.
+   *
+   * Só entradas NASCIDAS têm imagem (não existe imagem antes do nascimento
+   * neste modelo, ADR-0021) — derivada do espécime já nascido
    * (`bornSpecimenId`), nunca de uma `imageCacheKey` própria da entrada (essa
    * coluna saiu do schema, ver ADR-0021 item 5).
    */
-  async list(ownerId: string): Promise<IncubatorEntryView[]> {
-    const entries = await this.repo.listByOwner(ownerId);
-    const out: IncubatorEntryView[] = [];
-    for (const e of entries) {
+  async list(ownerId: string, opts: { limit?: number; cursor?: string; state?: IncubatorState } = {}): Promise<IncubatorListPage> {
+    const limit = Math.min(Math.max(Math.floor(opts.limit ?? DEFAULT_PAGE_LIMIT), 1), MAX_PAGE_LIMIT);
+    const now = this.clock.now();
+    const [page, counts] = await Promise.all([
+      this.repo.listByOwner(ownerId, { limit, cursor: opts.cursor, state: opts.state, now }),
+      this.repo.countByState(ownerId, now),
+    ]);
+    const entries: IncubatorEntryView[] = [];
+    for (const e of page.entries) {
       let imageUrl: string | null = null;
       if (e.bornSpecimenId) {
         const specimen = await this.specimens.get(e.bornSpecimenId);
@@ -103,9 +135,9 @@ export class IncubatorService {
           if (st) imageUrl = publicUrl(cacheKey, st.version);
         }
       }
-      out.push(this.toView(e, imageUrl));
+      entries.push(this.toView(e, imageUrl, now));
     }
-    return out;
+    return { entries, nextCursor: page.nextCursor, counts };
   }
 
   /**
@@ -162,7 +194,7 @@ export class IncubatorService {
       throw new BadRequestException("Esta descrição já está gestando.");
     }
     if (reservationId) await this.quota.confirm("birth", reservationId);
-    return this.toView(claimed, null);
+    return this.toView(claimed, null, this.clock.now());
   }
 
   /**

@@ -23,28 +23,20 @@ export interface PlanInfo {
 // prefixo "Nascimentos:" — a rodada anterior tinha esse prefixo, este
 // pedido pediu só a frase solta).
 //
-// tools: nº de descrições de fenótipo por cruzamento (enumerateOffspring) —
-// CONFERIDO contra o código desta rodada (cross.service.ts#incubate,
-// optionCount()): 6 pra FREE/JUNIOR/SENIOR, 12 pro PHD — contagem batia e
-// continua batendo, não mudou nada aqui.
-//
-// DISCREPÂNCIA REPORTADA (não corrigida, por não inventar regra que o
-// código não impõe): o pedido descreve "fenótipo sorteado no Free e Junior"
-// vs. "escolhe entre N opções" no Senior/PhD. O código ATUAL não tem mais
-// essa trava — `CrossService.incubate()` (usado por POST /cross desde a
-// ADR-0020/incubadora) materializa as N opções pra TODO tier na incubadora,
-// e `IncubatorService.gestate()` não tem nenhum gate de "canChoose": todo
-// tier pode gestar QUALQUER uma das suas N descrições, livremente. Não há
-// sorteio que restrinja Free/Junior a uma única opção pré-escolhida. Por
-// isso o campo `tools` abaixo continua descrevendo só a CONTAGEM (fato
-// verificável), sem alegar "sorteio" nem "você escolhe" pra nenhum tier —
-// ver docs/adr/0020-incubadora-e-cota-de-revelacao.md pro histórico dessa
-// mudança de comportamento (era sorteio/escolha explícitos na ADR-0019).
+// tools: DECISÃO desta rodada — a escolha de fenótipo deixou de variar por
+// plano. Todo tier recebe 6 descrições por cruzamento (nº de opções também
+// deixou de variar — era `optionCount(tier)`: 6 pra FREE/JUNIOR/SENIOR, 12
+// pro PHD; virou uma constante única, 6 pra todos, `cross.service.ts`) e
+// escolhe livremente qual gestar na incubadora — isso já era verdade no
+// código (`IncubatorService.gestate()` nunca teve gate de tier; ver a
+// "discrepância" reportada na rodada anterior, agora resolvida por esta
+// decisão em vez de por uma trava nova). Texto IGUAL pros 4 planos, exato
+// como pedido — nenhum tier promete escolha exclusiva.
 export const PLANS: PlanInfo[] = [
-  { id: "FREE", label: "Free", month: 0, year: null, crosses: "Cruzamentos ilimitados", images: "1 nascimento a cada 7 dias", tools: "6 descrições por cruzamento", pool: "Gatos domésticos (Felis catus) — cruzamentos entre raças", accent: "#9E9E9E" },
-  { id: "JUNIOR", label: "Junior", month: 19.9, year: 218.9, crosses: "Cruzamentos ilimitados", images: "3 nascimentos a cada 7 dias", tools: "6 descrições por cruzamento", pool: "+ Felinos selvagens (onça, leão, tigre, serval…) e cruzamentos entre espécies", accent: "#00F0FF" },
-  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "Cruzamentos ilimitados", images: "1 nascimento por dia", tools: "6 descrições por cruzamento", pool: "+ Caninos", accent: "#BF00FF", featured: true },
-  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "Cruzamentos ilimitados", images: "3 nascimentos por dia", tools: "12 descrições por cruzamento", pool: "Todas as espécies do catálogo (gatos, felinos selvagens e cães)", accent: "#F5C542" },
+  { id: "FREE", label: "Free", month: 0, year: null, crosses: "Cruzamentos ilimitados", images: "1 nascimento a cada 7 dias", tools: "6 opções de fenótipo por cruzamento, você escolhe qual gestar", pool: "Gatos domésticos (Felis catus) — cruzamentos entre raças", accent: "#9E9E9E" },
+  { id: "JUNIOR", label: "Junior", month: 19.9, year: 218.9, crosses: "Cruzamentos ilimitados", images: "3 nascimentos a cada 7 dias", tools: "6 opções de fenótipo por cruzamento, você escolhe qual gestar", pool: "+ Felinos selvagens (onça, leão, tigre, serval…) e cruzamentos entre espécies", accent: "#00F0FF" },
+  { id: "SENIOR", label: "Senior", month: 39.9, year: 438.9, crosses: "Cruzamentos ilimitados", images: "1 nascimento por dia", tools: "6 opções de fenótipo por cruzamento, você escolhe qual gestar", pool: "+ Caninos", accent: "#BF00FF", featured: true },
+  { id: "PHD", label: "PhD", month: 89.9, year: 988.9, crosses: "Cruzamentos ilimitados", images: "3 nascimentos por dia", tools: "6 opções de fenótipo por cruzamento, você escolhe qual gestar", pool: "Todas as espécies do catálogo (gatos, felinos selvagens e cães)", accent: "#F5C542" },
 ];
 
 /** Linha comum a todo plano (item 3 do pedido) — igual em todos, não entra em `PlanInfo` pra não duplicar 4×. */
