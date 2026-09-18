@@ -9,6 +9,7 @@ import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { ImageService } from "../src/images/image.service";
 import { buildPrompt, traitVector } from "../src/images/prompt";
+import { SPECIES_INFO } from "@genbreedai/shared";
 
 // storage.ts local (sem R2) grava/lê em IMAGE_STORAGE_DIR — em teste, SEMPRE
 // uma pasta temporária própria (nunca apps/web/public/assets/generated, que
@@ -90,6 +91,54 @@ describe("Pipeline de imagem (TDD §5)", () => {
     expect(brindle).not.toBe(liver);
     expect(brindle).toContain("brindle");
     expect(liver).toContain("tan points");
+  });
+
+  it("BUGFIX (produção): híbrido tigre-branco×leão macho com juba parcial nomeia as duas espécies e a juba, nunca 'adult Bengal tiger'", async () => {
+    const { buildPrompt } = await import("../src/images/prompt");
+    const hybrid = {
+      id: "hb", ownerId: "demo", pack: "feline" as const, species: "panthera-tigris-branco×panthera-leo",
+      genotype: { loci: { P: ["P^m", "P^m"] as [string, string], Ma: ["Ma", "ma"] as [string, string] }, qtl: {} },
+      generation: 1, sireId: "tigre-branco", damId: "leao", method: "F1" as const,
+      fPedigree: 0, fixationIndex: 0, aura: 2, cacheKey: null,
+      sex: "M" as const, fertility: null, haldaneStatus: null,
+    };
+    const p = buildPrompt(hybrid);
+    // As duas espécies-mãe, nomeadas — não um "híbrido genérico" sem âncora.
+    expect(p).toContain("Tigre-branco");
+    expect(p).toContain("Leão");
+    // A juba (fenótipo calculado) aparece — o traço de leão não pode sumir.
+    expect(p.toLowerCase()).toContain("mane");
+    // NUNCA o descritor de espécie PURA (travaria o resultado num tigre comum).
+    expect(p).not.toContain("adult Bengal tiger");
+    expect(p).not.toContain("unmistakably a lion");
+  });
+
+  it("híbrido com 3+ espécies (canino) nomeia todas, na ordem do species", async () => {
+    const { buildPrompt } = await import("../src/images/prompt");
+    const triHybrid = {
+      id: "tri", ownerId: "demo", pack: "canine" as const, species: "boerboel×braco-alemao×dobermann",
+      genotype: { loci: { B: ["B", "B"] as [string, string] }, qtl: {} }, generation: 1,
+      sireId: "x", damId: "y", method: "F1" as const, fPedigree: 0, fixationIndex: 0, aura: 2, cacheKey: null,
+      sex: null, fertility: null, haldaneStatus: null,
+    };
+    const p = buildPrompt(triHybrid);
+    expect(p).toContain("mixed-breed domestic dog");
+    expect(p).toContain("Boerboel");
+    expect(p).toContain("Braço Alemão");
+    expect(p).toContain("Dobermann");
+    // Ordem de aparição em `species` preservada — "A, B and C", não só 2 dos 3.
+    const iBoerboel = p.indexOf("Boerboel");
+    const iBraco = p.indexOf("Braço Alemão");
+    const iDobermann = p.indexOf("Dobermann");
+    expect(iBoerboel).toBeLessThan(iBraco);
+    expect(iBraco).toBeLessThan(iDobermann);
+  });
+
+  it("espécime PURO (não-híbrido): prompt inalterado por este bugfix — tigre-branco sozinho continua citando o descritor de espécie pura", async () => {
+    const tigreBranco = (await repo.get("tigre-branco"))!;
+    const p = buildPrompt(tigreBranco);
+    expect(p).toContain("Tigre-branco");
+    expect(p).toContain(SPECIES_INFO["panthera-tigris-branco"]!.descriptor);
   });
 
   it("leoa (leao-femea): prompt nunca menciona juba/'Leão'/macho; leão: prompt menciona juba", async () => {

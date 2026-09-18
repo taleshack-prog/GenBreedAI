@@ -3,6 +3,21 @@
  * usa o descritor anatômico da espécie. Para HÍBRIDOS o FENÓTIPO dirige a pelagem
  * (padrão/melanismo/cor/albino/branco) sobre um corpo felino genérico — assim o
  * retrato reflete a SELEÇÃO do jogador (ex.: rosetas → rosetas), não o parental.
+ *
+ * BUGFIX (achado em produção): híbrido felino chegou a sair como uma espécie
+ * pura comum (tigre-branco×leão saiu como tigre listrado comum, sem NENHUM
+ * traço de leão) — a versão anterior deliberadamente OMITIA os nomes das
+ * espécies-mãe no prompt híbrido felino (pra não enviesar o FLUX pro
+ * parental menor, ex. serval), mas isso deixou o prompt vago demais: sem
+ * nenhuma âncora textual pro segundo parental, o modelo deriva pro felino
+ * mais "óbvio" pelo padrão de pelagem (listras → tigre), ignorando pistas
+ * mais sutis (a cláusula de juba). Correção: NOMEAR as duas (ou mais)
+ * espécies explicitamente como um cruzamento — nunca o `descriptor` de
+ * SPECIES_INFO (que descreve a espécie PURA inteira, ex. "adult Bengal
+ * tiger...", e travaria o resultado numa espécie só de novo), só o par
+ * nome-comum/científico, igual ao que a rota não-híbrida já usa. O visual
+ * em si continua 100% do fenótipo calculado (`coat`/`morphClause`/
+ * `physiqueAdj`) — nunca dos descritores fixos de espécie.
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
 import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, DOG_BREEDS } from "@genbreedai/shared";
@@ -122,6 +137,13 @@ function baseTone(loci: Record<string, string>): string {
   return (loci.Bd && map[loci.Bd]) ? map[loci.Bd]! : "golden-tan";
 }
 
+/** "A" / "A and B" / "A, B and C" — nomeia TODOS os componentes de um híbrido, na ordem em que aparecem em `species` (item 4 do pedido). */
+function joinWithAnd(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 /** Semente numérica determinística a partir da cacheKey. */
 export function numericSeed(cacheKey: string): number {
   let h = 2166136261 >>> 0;
@@ -172,21 +194,31 @@ export function buildPrompt(s: StoredSpecimen): string {
 
   let subject: string;
   if (isHybrid) {
-    const parents = s.species.split("×").map((slug) => SPECIES_INFO[slug]?.common ?? slug).filter(Boolean);
+    // NUNCA `SPECIES_INFO[slug].descriptor` aqui — descreve a espécie PURA
+    // inteira (item 3 do pedido: nada de "adult Bengal tiger" pra um
+    // híbrido). Só o par nome-comum/científico identifica cada parental;
+    // quem desenha o visual é sempre `coat`/`morphClause`/`physiqueAdj`
+    // (fenótipo calculado), nunca o descritor fixo — item 2.
+    const speciesLabels = s.species.split("×").map((slug) => {
+      const info = SPECIES_INFO[slug];
+      return info ? `${info.common} (${info.scientific})` : slug;
+    });
     if (s.pack === "canine") {
       const dogParents = s.species.split("×").map((slug) => DOG_BREEDS[slug]?.name ?? SPECIES_INFO[slug]?.common ?? slug).filter(Boolean);
       subject =
-        `a photorealistic ${physiqueAdj} mixed-breed domestic dog (a cross between ${dogParents.join(" and ")})${morphClause}, ` +
+        `a photorealistic ${physiqueAdj} mixed-breed domestic dog (a cross between ${joinWithAnd(dogParents)})${morphClause}, ` +
         `four-legged canine body, dog anatomy, wearing ${coat}`;
     } else {
-      // Híbrido felino → GRANDE FELINO dirigido pelo FENÓTIPO. Não citamos os pais
-      // no visual (enviesava o FLUX para o parental menor, ex.: serval). A pelagem
-      // (padrão) é a característica definidora.
-      const kind = (q.porte ?? 0.5) >= 0.6 ? "wild big cat" : "cat";
+      // Híbrido felino: NOMEIA as espécies-mãe (item 1 — sem isso o modelo
+      // não tem âncora textual pro parental "menos óbvio" e deriva pra uma
+      // espécie pura, ver bugfix no comentário do topo do arquivo) e deixa
+      // claro que o fenótipo calculado (`coat`) tem prioridade sobre a
+      // aparência típica de qualquer uma delas.
+      const kind = (q.porte ?? 0.5) >= 0.6 ? "big cat" : "cat";
       subject =
-        `a fictional but photorealistic ${physiqueAdj} ${kind}, a novel hybrid feline${morphClause}, ` +
-        `proportionate feline body, four legs and a long tail, standing tall. ` +
-        `Its coat: ${coat}`;
+        `a fictional but photorealistic ${physiqueAdj} hybrid ${kind}, a crossbreed between ${joinWithAnd(speciesLabels)}, ` +
+        `blending visual traits of both parent species${morphClause}, proportionate feline body, four legs and a long tail, standing tall. ` +
+        `Its coat and features (these take priority over either parent species' typical look): ${coat}`;
     }
   } else {
     const info = speciesInfo(s.species);
