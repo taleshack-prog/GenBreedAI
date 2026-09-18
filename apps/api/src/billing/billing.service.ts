@@ -73,9 +73,20 @@ export class BillingService {
    * crédito mesmo sob retries de webhook (Stripe reenvia por até 3 dias) ou
    * restart do container — diferente do antigo `Set` em memória, que zerava
    * a cada deploy e permitia crédito duplicado.
+   *
+   * Mesmo tratamento de `createCheckout`: `this.payments.confirm()` pode
+   * lançar um `Error` cru do SDK do Stripe (ex.: sessão inexistente/expirada
+   * na Stripe) — sem o try/catch, virava 500 genérico pro jogador.
    */
   async confirm(userId: string, intentId: string): Promise<{ status: string; creditsAdded: number; wallet: unknown }> {
-    const intent = await this.payments.confirm(intentId);
+    let intent: PaymentIntent;
+    try {
+      intent = await this.payments.confirm(intentId);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(`[BillingService.confirm] falha ao confirmar pagamento intentId=${intentId}:`, e);
+      throw new BadRequestException("Não foi possível confirmar este pagamento agora. Tente novamente em instantes.");
+    }
     if (intent.status !== "PAID") return { status: intent.status, creditsAdded: 0, wallet: await this.wallet.get(userId) };
     const pack = findPack(intent.packId);
     if (!pack) throw new BadRequestException("Pacote inválido.");
@@ -90,6 +101,12 @@ export class BillingService {
    * retorna o checkoutUrl — quem cria/atualiza a linha em `subscriptions` é
    * SEMPRE o webhook, nunca este método (o pagamento só acontece no
    * checkout do Stripe).
+   *
+   * Mesmo tratamento de `createCheckout` (achado ao varrer o resto de
+   * billing): `createSubscriptionCheckout()` lança um `Error` cru quando o
+   * `lookup_key` do plano (tier/intervalo) não resolve pra nenhum Price
+   * ATIVO no Stripe (ex.: arquivado) — sem o try/catch, virava 500 genérico
+   * pro jogador na hora de assinar.
    */
   async subscribe(userId: string, tier: Tier, interval: SubscriptionInterval): Promise<{ checkoutUrl: string }> {
     if (!(this.payments instanceof StripePaymentProvider)) throw new BadRequestException("Assinaturas exigem Stripe configurado (STRIPE_SECRET_KEY ausente).");
@@ -99,8 +116,14 @@ export class BillingService {
     // Reusa o Customer Stripe do usuário se ele já tiver um (de uma
     // assinatura anterior) — Customers duplicados quebram o portal.
     const existingCustomerId = await this.subscriptions.findCustomerIdForUser(userId);
-    const checkoutUrl = await this.payments.createSubscriptionCheckout(userId, tier, interval, existingCustomerId);
-    return { checkoutUrl };
+    try {
+      const checkoutUrl = await this.payments.createSubscriptionCheckout(userId, tier, interval, existingCustomerId);
+      return { checkoutUrl };
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error(`[BillingService.subscribe] falha ao criar checkout de assinatura pra userId=${userId} tier=${tier} interval=${interval}:`, e);
+      throw new BadRequestException("Não foi possível iniciar esta assinatura agora. Tente novamente em instantes.");
+    }
   }
 
   /** GET /billing/subscription — assinatura mais recente do usuário (qualquer status), pra UI exibir. */

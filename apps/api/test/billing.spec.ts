@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { BadRequestException } from "@nestjs/common";
 import { BillingService } from "../src/billing/billing.service";
+import { StripePaymentProvider } from "../src/billing/payment.provider";
 import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { InMemoryPaymentIntentsRepository } from "../src/billing/payment-intents.repository";
@@ -61,6 +63,25 @@ describe("Compra de créditos (billing)", () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_fake";
     const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
     await expect(b.subscribe("u", "SENIOR", "WEEK" as never)).rejects.toThrow(/[Ii]ntervalo/);
+  });
+
+  describe("subscribe: falha do Stripe vira 400 acionável, não 500 (mesmo bug de createCheckout, corrigido também aqui)", () => {
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it("Price arquivado/lookup_key sem Price ATIVO (Stripe devolve lista vazia) → BadRequestException com mensagem acionável", async () => {
+      process.env.STRIPE_SECRET_KEY = "sk_test_fake";
+      const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
+      const provider = (b as unknown as { payments: StripePaymentProvider }).payments;
+      const stripe = (provider as unknown as { stripe: { prices: { list: unknown } } }).stripe;
+      vi.spyOn(stripe.prices as never, "list").mockResolvedValue({ data: [] } as never);
+
+      let caught: unknown;
+      try { await b.subscribe("u", "SENIOR", "MONTH"); } catch (e) { caught = e; }
+      expect(caught).toBeInstanceOf(BadRequestException);
+      expect((caught as Error).message).toMatch(/Não foi possível iniciar esta assinatura/);
+      // Nunca o Error cru do Stripe ("Preço Stripe não encontrado...") vazando pro jogador.
+      expect((caught as Error).message).not.toMatch(/lookup_key/);
+    });
   });
 
   it("getSubscription: null quando o usuário nunca assinou", async () => {
