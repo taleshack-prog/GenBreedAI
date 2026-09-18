@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getImage, generateImage, ApiError, type ApiSpecimen } from "../lib/api";
+import { getImage, generateImage, getReferral, ApiError, type ApiSpecimen } from "../lib/api";
 import { displayName, displaySci } from "../lib/display";
 import { SexBadge } from "./SexBadge";
 import { getUser } from "../lib/auth";
+import { buildPublicSpecimenUrl, buildShareMessage, buildWhatsAppUrl } from "../lib/share";
 
 /** BarraRaridade (Design System §6): 5 estrelas preenchidas conforme raridade. */
 function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
@@ -37,7 +38,27 @@ export function CapsuleCard({
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<{ message: string; status?: number } | null>(null);
+  const [sharing, setSharing] = useState(false);
   const router = useRouter();
+
+  /**
+   * Mesmo comportamento/texto/link da tela de revelação (`app/app/reveal/
+   * [id]/page.tsx`) — reusa as MESMAS funções puras de `lib/share.ts`, só
+   * busca o código de indicação NA HORA do clique (em vez de no mount da
+   * tela) pra não disparar `getReferral()` uma vez por card numa lista
+   * inteira (Gene Bank/Espécies podem renderizar dezenas de cards).
+   */
+  async function onShare(e: React.MouseEvent, s: ApiSpecimen) {
+    e.stopPropagation();
+    setSharing(true);
+    let ref: string | null = null;
+    try { ref = (await getReferral()).code; } catch { /* segue sem ref — link ainda funciona */ }
+    setSharing(false);
+    const url = buildPublicSpecimenUrl(s.id, ref);
+    const message = buildShareMessage(displayName(s), s.aura);
+    if (navigator.share) navigator.share({ title: "GenBreedAI", text: message, url }).catch(() => {});
+    else window.open(buildWhatsAppUrl(message, url), "_blank");
+  }
 
   async function genImage(e: React.MouseEvent, force: boolean) {
     e.stopPropagation();
@@ -73,6 +94,9 @@ export function CapsuleCard({
   // genótipo, API rejeita com 403). Botão ↻ some nos outros casos; gerar
   // pela 1ª vez continua liberado p/ fundador (é o próprio bug corrigido).
   const canRegen = !!specimen && specimen.method !== "FOUNDER" && specimen.ownerId === getUser()?.id;
+  // Compartilhar: do usuário (dono) E já com retrato — item 6 do pedido.
+  // Fundador nunca bate (ownerId é do usuário-seed, nunca o do usuário logado).
+  const canShare = !!specimen && !!aiUrl && specimen.ownerId === getUser()?.id;
 
   const critico = !!specimen && specimen.fPedigree > 0.2;
   const alerta = !!specimen && !critico && specimen.fPedigree > 0.15;
@@ -88,6 +112,26 @@ export function CapsuleCard({
       className={`relative block w-full rounded-2xl p-3 text-left transition ${neon}`}
       style={{ background: "#0B1420", border: `1px solid ${cor}4D` }}
     >
+      {canShare && specimen && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => onShare(e, specimen)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onShare(e as unknown as React.MouseEvent, specimen); } }}
+          title="Compartilhar no WhatsApp"
+          className="absolute left-2 top-2 z-20 grid h-7 w-7 cursor-pointer place-items-center rounded-full border bg-bg-900/80 transition hover:scale-110"
+          style={{ borderColor: `${cor}66`, color: cor }}
+        >
+          {sharing ? (
+            <span className="text-[0.6rem]">…</span>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+              <line x1="8.6" y1="10.5" x2="15.4" y2="6.5" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />
+            </svg>
+          )}
+        </span>
+      )}
       {specimen && showGenome && (
         <span
           role="button"

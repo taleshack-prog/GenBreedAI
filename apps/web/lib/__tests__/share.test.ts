@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { buildPublicSpecimenUrl, auraStarsText, buildShareMessage, buildWhatsAppUrl, absoluteImageUrl, stripCacheBustQuery, PUBLIC_SHARE_ORIGIN } from "../share";
+import { displayName } from "../display";
 
 describe("buildPublicSpecimenUrl — ref preservado", () => {
   it("sem ref → só a URL base", () => {
@@ -69,6 +70,39 @@ describe("absoluteImageUrl", () => {
   });
   it("relativa (sem R2, disco local) — prefixa com o domínio canônico", () => {
     expect(absoluteImageUrl("/assets/generated/abc.png")).toBe("https://genbreed.com.br/assets/generated/abc.png");
+  });
+});
+
+describe("compartilhar pelo CapsuleCard (Gene Bank etc.) é IDÊNTICO ao da tela de revelação", () => {
+  // Mesmo espécime (mesmo id/species/aura), representando as duas telas —
+  // ambas chamam as MESMAS funções puras de lib/share.ts (CapsuleCard.tsx
+  // só busca o `ref` num momento diferente — no clique, não no mount — mas
+  // a montagem do link/mensagem em si não muda em nada entre as telas).
+  const specimen = { id: "sp_hibrido_1", species: "panthera-tigris-branco×panthera-leo", aura: 4 };
+  const ref = "ABC123";
+
+  it("URL pública: mesma saída nas duas telas", () => {
+    const fromGeneBank = buildPublicSpecimenUrl(specimen.id, ref);
+    const fromReveal = buildPublicSpecimenUrl(specimen.id, ref);
+    expect(fromGeneBank).toBe(fromReveal);
+    expect(fromGeneBank).toBe("https://genbreed.com.br/f/sp_hibrido_1?ref=ABC123");
+  });
+
+  it("mensagem: mesmo displayName (nunca o slug), mesma aura em estrelas, nas duas telas", () => {
+    const name = displayName(specimen); // mesma cadeia resolveDisplayName usada nas duas telas
+    const fromGeneBank = buildShareMessage(name, specimen.aura);
+    const fromReveal = buildShareMessage(name, specimen.aura);
+    expect(fromGeneBank).toBe(fromReveal);
+    expect(fromGeneBank).not.toContain(specimen.species);
+  });
+
+  it("wa.me final: idêntico nas duas telas, pro mesmo espécime/ref", () => {
+    const name = displayName(specimen);
+    const url = buildPublicSpecimenUrl(specimen.id, ref);
+    const message = buildShareMessage(name, specimen.aura);
+    const fromGeneBank = buildWhatsAppUrl(message, url);
+    const fromReveal = buildWhatsAppUrl(message, url);
+    expect(fromGeneBank).toBe(fromReveal);
   });
 });
 

@@ -62,8 +62,10 @@ export default async function PublicSpecimenPage({ params, searchParams }: { par
   if (!specimen) notFound();
 
   const image = absoluteImageUrl(specimen.imageUrl);
-  // Preserva o `ref` da URL de chegada até o signup — item 1 do pedido.
-  const signupHref = ref ? `/signup?ref=${encodeURIComponent(ref)}` : "/signup";
+  // Preserva o `ref` da URL de chegada nos DOIS botões (item 2 do pedido).
+  const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+  const landingHref = `/${refQuery}`;
+  const signupHref = `/signup${refQuery}`;
 
   return (
     <main className="mx-auto min-h-screen max-w-xl px-4 pb-16 pt-10 text-center">
@@ -76,12 +78,33 @@ export default async function PublicSpecimenPage({ params, searchParams }: { par
       </div>
       <h1 className="mb-2 font-display text-2xl font-black uppercase text-ink">{specimen.displayName}</h1>
       <p className="mb-6 font-mono text-lg text-purple">{auraStarsText(specimen.aura)}</p>
-      <Link
-        href={signupHref}
-        className="inline-block rounded-xl bg-ok px-6 py-3.5 font-display font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110"
-      >
-        Criar meu criadouro
-      </Link>
+
+      {/* O que é o GenBreedAI (item 1) — quem cai aqui vindo do WhatsApp, sem
+          contexto nenhum, precisa entender que é um jogo antes de qualquer
+          botão. Texto sóbrio de propósito: sem promessa de ganho, sem
+          jargão de marketing — só o que o jogo de fato é. */}
+      <div className="mb-6 space-y-2.5 rounded-card border border-white/10 bg-bg-800/60 p-4 text-left text-sm leading-snug text-ink-muted">
+        <p>Genética real: dominância, recessividade, epistasia e herança ligada ao sexo — como na biologia.</p>
+        <p>Cruze espécies, acompanhe a gestação e veja o filhote nascer com retrato gerado por IA.</p>
+        <p>Monte linhagens, fixe características e construa seu criadouro.</p>
+      </div>
+
+      <div className="space-y-3">
+        <Link
+          href={landingHref}
+          className="block w-full rounded-xl bg-ok px-6 py-3.5 font-display font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110"
+        >
+          Conhecer o GenBreedAI
+        </Link>
+        <Link
+          href={signupHref}
+          className="block w-full rounded-xl border border-cyan/40 px-6 py-3 font-display text-sm uppercase tracking-wide text-cyan transition hover:bg-cyan/10"
+        >
+          Criar meu criadouro
+        </Link>
+      </div>
+
+      <p className="mt-8 text-[0.7rem] text-ink-muted">Você chegou aqui pelo convite de um criador.</p>
     </main>
   );
 }
