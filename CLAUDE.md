@@ -63,7 +63,7 @@ com cache determinístico.
 | `docs/errata/fase0-errata.md` | Correções textuais da Fase 0 ao TDD/Gene-Bank |
 | `docs/audit/fase0-audit.md`, `fase0-audit-v2.md` | Pareceres da Fase 0 (05/09 e 06/09) — ver seção 6 |
 | `docs/specialists/especialista-genetica-aplicada.md` | Prompt de sistema do auditor científico |
-| `DEPLOY.md` | Passo a passo de infra. **Parcialmente desatualizado** (ver seção 10) |
+| `DEPLOY.md` | Infra e operação: variáveis de ambiente (obrigatórias e proibidas), sequência de mudança com migração, Stripe. Atualizado em 2026-09-18 (seção 10 resume) |
 
 ## 4. Estrutura do monorepo
 
@@ -118,8 +118,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 2. **Moderação de imagem própria** não existe (`moderate()` aprova sempre; regra 5 da seção 2).
 3. **`pnpm lint` é no-op** (há `eslint.config.js` na raiz, mas nenhum script o executa).
 4. **TDD §6/§7 desatualizadas** frente ao código (tiers, cotas, bônus, chat descrito mas inexistente).
-5. **`DEPLOY.md` desatualizado** (checkout "stub", `FAL_MODEL=flux/dev`, `db:reset` para semear, `vercel.json` inexistente).
-6. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+5. **`IMAGE_QUOTA_UNLIMITED` sem trava de produção** (diferente de `QUOTA_UNLIMITED_DEV`): decisão pendente de aplicar o mesmo guarda.
+6. **Referral:** `ReferralService.recordEvent()` (install/D1/D7/convert) não tem chamador encontrado no código, apesar do comentário
+   do controller dizer que é chamado no cadastro e no webhook — marcos podem não estar sendo creditados (a investigar).
+7. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
 ## 7. Convenções de código
@@ -204,8 +206,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   não está documentado no repo)**: `pnpm --filter @genbreedai/api db:migrate` com a `DATABASE_URL` alvo. `db:generate`
   gera a migração a partir do `schema.ts`.
 - **`db:reset` é destrutivo:** apaga TODOS os espécimes e cruzamentos e re-semeia os fundadores. Trava: exige
-  `ALLOW_DB_RESET=yes-destroy-all-data` e, se o host for Neon, também `ALLOW_DB_RESET_REMOTE=yes`. Não use em banco com dados
-  de jogadores (o passo "db:reset semeia os fundadores" do `DEPLOY.md` está obsoleto).
+  `ALLOW_DB_RESET=yes-destroy-all-data` e, se o host for Neon, também `ALLOW_DB_RESET_REMOTE=yes`. **Só para ambiente local
+  vazio** — nunca em banco com dados de jogadores. Para semear fundadores use `db:seed` (aditivo, `onConflictDoNothing`).
+  Ordem de uma mudança com migração: backup no Neon → `db:migrate` em produção → conferir schema → merge na `main` → verificar
+  a API (detalhes em `DEPLOY.md`).
 - **`db:backfill-sex`:** dry-run por padrão; `--apply` só grava com `--confirm-host=<host igual ao de DATABASE_URL>`.
 - **`images:regenerate-founders`:** dry-run por padrão; `--apply` exige `--confirm-bucket=<bucket real>` e `--max=N` acima de 10 retratos.
 - **Flags de cota:** `QUOTA_UNLIMITED_DEV` (e o nome antigo `CROSS_QUOTA_UNLIMITED`) é **ignorada quando

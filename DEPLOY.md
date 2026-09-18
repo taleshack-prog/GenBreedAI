@@ -1,71 +1,160 @@
-# Deploy do GenBreedAI — passo a passo (genbreed.com.br)
+# Deploy do GenBreedAI (genbreed.com.br)
+
+Guia de infraestrutura e operação. Estado conferido contra o código em 2026-09-18. Itens marcados **(informado)** vêm do
+responsável do produto e não são verificáveis pelo repositório.
+
+> ## ⚠️ `db:reset` APAGA os espécimes de todos os jogadores
+> `pnpm --filter @genbreedai/api db:reset` apaga **TODOS os espécimes e cruzamentos** do banco e re-semeia só os
+> fundadores. **Só serve para um ambiente LOCAL vazio.** Nunca use em produção nem em qualquer banco com dados de jogadores.
+> A trava (`ALLOW_DB_RESET=yes-destroy-all-data`, e `ALLOW_DB_RESET_REMOTE=yes` para host Neon) existe, mas não é motivo para
+> usar o comando: **para semear fundadores use `db:seed`** (aditivo, não apaga nada).
 
 Arquitetura em produção:
 - **Web** (Next.js) → **Vercel**
-- **API** (NestJS) → **Railway** (via Docker)
-- **Banco** (Postgres) → **Neon** (já em uso)
-- **Imagens** (PNG da IA) → **Cloudflare R2** (bucket + CDN)
-- **Domínio** → genbreed.com.br (Vercel para o site; subdomínio para imagens)
+- **API** (NestJS + Fastify) → **Railway** (Docker: `apps/api/Dockerfile` + `railway.json`)
+- **Banco** (PostgreSQL) → **Neon**
+- **Imagens** (PNG da IA, FLUX.2 pro) → **Cloudflare R2** (bucket + URL pública)
+- **Pagamentos** → **Stripe (live, informado)** — checkout de pacotes, assinaturas e webhook
+- **Domínio** → genbreed.com.br (Vercel para o site; subdomínio opcional para imagens)
 
-O web fala com a API por um **proxy same-origin** (`/api/*` → API_URL), então não há CORS.
+O web fala com a API por um **proxy same-origin** (`/api/*` → API), então não há CORS.
+
+**Deploy automático:** cada merge na `main` faz deploy no Vercel e no Railway **(informado — não há workflow de CI no repo)**.
+**A migração de banco NUNCA roda sozinha no deploy** (o container só inicia; `main.ts` não migra). Ver seção 7.
 
 ---
 
-## 1) Neon (banco) — já existe
-Você já tem a `DATABASE_URL` da Neon. Guarde-a. Depois do deploy da API, rode as migrações uma vez (passo 4.4).
+## 1) Neon (banco)
+Guarde a `DATABASE_URL` do projeto. Toda mudança de schema é aplicada **à mão, antes do deploy que a exige**, com backup
+(seção 7). Banco novo e vazio: seção 8.
 
 ## 2) Cloudflare R2 (imagens)
 1. Painel Cloudflare → **R2** → **Create bucket** → nome `genbreed-images`.
-2. No bucket → **Settings** → **Public access**: habilite **R2.dev subdomain** (ou conecte um domínio custom, ex.: `img.genbreed.com.br`). Copie a **Public URL** (algo como `https://pub-xxxx.r2.dev` ou o subdomínio custom).
-3. Cloudflare → **R2** → **Manage R2 API Tokens** → **Create API token** (permissão *Object Read & Write* no bucket). Anote **Access Key ID**, **Secret Access Key** e o **Account ID** (aparece na URL do painel / em R2).
-4. Você terá: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=genbreed-images`, `R2_PUBLIC_URL=<a public URL do passo 2>`.
+2. No bucket → **Settings** → **Public access**: habilite **R2.dev subdomain** (ou conecte um domínio custom, ex.:
+   `img.genbreed.com.br`). Copie a **Public URL**.
+3. **R2** → **Manage R2 API Tokens** → **Create API token** (*Object Read & Write* no bucket). Anote **Access Key ID**,
+   **Secret Access Key** e o **Account ID**.
+4. Você terá as cinco variáveis: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`.
+   **Todas as cinco são necessárias** — ver a seção 3 para o que acontece se faltar uma.
 
-## 3) Segredos que você vai precisar
-- `DATABASE_URL` (Neon)
-- `AUTH_SECRET` — gere: `openssl rand -hex 32`
-- `FAL_KEY` (fal.ai)
-- `FAL_MODEL=fal-ai/flux/dev` e (opcional) `FAL_MODEL_PHD=fal-ai/flux-pro/v1.1`
-- R2_* (passo 2)
-- (opcional Google) `GOOGLE_CLIENT_ID`
-- **Produção:** `AUTH_DEV_HEADERS=false`, `IMAGE_QUOTA_UNLIMITED=false`, `CROSS_QUOTA_UNLIMITED=false`
+## 3) Variáveis de ambiente
 
-## 4) API no Railway
-1. railway.com → **New Project** → **Deploy from GitHub repo** → selecione `GenBreedAI`.
-2. Em **Settings** do serviço:
-   - **Root Directory**: `/` (raiz do repo)
-   - **Build**: Dockerfile → **Dockerfile Path**: `apps/api/Dockerfile`
-   - (o `railway.json` na raiz já aponta isso)
-3. **Variables** (Environment): cole todos os segredos do passo 3 (DATABASE_URL, AUTH_SECRET, FAL_KEY, FAL_MODEL, FAL_MODEL_PHD, R2_*, GOOGLE_CLIENT_ID, e os três `*_UNLIMITED=false`/`AUTH_DEV_HEADERS=false`). O Railway injeta `PORT` sozinho.
-4. Deploy. Quando subir, **rode as migrações uma vez** (Railway → Shell do serviço, ou local apontando a mesma DATABASE_URL):
-   ```
-   pnpm --filter @genbreedai/api db:migrate
-   pnpm --filter @genbreedai/api db:reset       # semeia os fundadores
-   pnpm --filter @genbreedai/api images:seed     # (opcional) pré-gera retratos → vão pro R2
-   ```
-5. Copie a **URL pública da API** (ex.: `https://genbreedai-api.up.railway.app`).
+### 3.1 API (Railway) — obrigatórias em produção e o efeito de cada uma faltar
+
+| Variável | Para quê | Se faltar |
+|---|---|---|
+| `DATABASE_URL` | Postgres (Neon) | **Silencioso e perigoso:** todos os módulos caem para repositórios em MEMÓRIA. A API sobe "normal", mas nada persiste — tudo some a cada restart/deploy. |
+| `AUTH_SECRET` | Assina/valida o JWT (gere: `openssl rand -hex 32`) | A API usa um segredo padrão **inseguro** (`dev-insecure-secret-change-me`, sem trava): qualquer um consegue forjar sessão de qualquer usuário. |
+| `FAL_KEY` | fal.ai (geração de retrato) | Modo procedural: nascimentos ficam **sem retrato de IA**; nada é cobrado nem gerado. |
+| `FAL_MODEL` | Modelo de imagem. Opcional; padrão `fal-ai/flux-2-pro`, o **mesmo para todo tier** | Usa o padrão. **Não defina `FAL_MODEL_PHD`** — é ignorada (aviso no log). |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | Storage de imagens no R2 | Se **qualquer uma das cinco** faltar (em especial `R2_PUBLIC_URL`), o storage cai para o **disco local do container**: as imagens somem no próximo deploy/restart e as URLs não apontam para o R2. |
+| `STRIPE_SECRET_KEY` | Chave **live** (`sk_live_…`) do Stripe | O billing cai no **provider stub de dev** (não cobra de verdade); assinaturas e webhook ficam indisponíveis. |
+| `STRIPE_WEBHOOK_SECRET` | Verifica a assinatura de `POST /api/v1/billing/webhook` | O webhook responde 400: pagamentos feitos no Stripe **nunca creditam** pacote nem ativam/atualizam assinatura. |
+| `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` | Retorno do Checkout | O Checkout redireciona para `http://localhost:3000/...` (padrão de dev): o cliente paga e volta para o localhost. Use as URLs de `genbreed.com.br` (ex.: `/app/profile?billing=success&session_id={CHECKOUT_SESSION_ID}` e `/app/profile?billing=cancel`). |
+| `GOOGLE_CLIENT_ID` | Login Google (opcional) | O login Google responde 400 ("não configurado"); e-mail/senha segue funcionando. |
+| `NODE_ENV=production` | Já definido no `Dockerfile` — **não sobrescreva** | É o que faz o código ignorar `QUOTA_UNLIMITED_DEV`. |
+| `PORT` | O Railway injeta | — |
+
+### 3.2 Web (Vercel)
+- `API_URL` — **opcional**: em produção o `next.config.mjs` já aponta por padrão para a API pública do Railway. Defina só se a
+  URL da API mudar (sem `/api` no fim).
+- `NEXT_PUBLIC_GOOGLE_CLIENT_ID` — opcional; sem ela o botão de login Google não aparece.
+
+### 3.3 Variáveis que NÃO podem existir em produção
+
+| Variável | O que libera indevidamente | O código ignora em produção? |
+|---|---|---|
+| `QUOTA_UNLIMITED_DEV` | Desliga **toda** cota: o limite técnico de 60 cruzamentos/hora **e** as vagas de nascimento — nascimentos ilimitados, ou seja, custo de imagem sem teto | **Sim** (`NODE_ENV=production`), com aviso no log — mesmo assim não deve existir |
+| `CROSS_QUOTA_UNLIMITED` | Nome antigo, **mesmo efeito** que a anterior (depreciada) | **Sim**, idem |
+| `IMAGE_QUOTA_UNLIMITED` | Cota mensal de retratos extras **ilimitada**: regenerar retrato sem limite e sem gastar crédito, com gasto de fal.ai sem teto | **NÃO** — hoje só a ausência/`false` protege |
+| `AUTH_DEV_HEADERS` | Aceita `x-user-id` sem senha nem JWT (qualquer um age como qualquer usuário, inclusive o dono dos fundadores) e `x-user-tier` (declara um tier pago sem assinatura) | **NÃO** |
+| `BILLING_STUB_ENABLED` | Habilita `POST /api/v1/billing/confirm` (confirmação manual). Sem `STRIPE_SECRET_KEY` (provider stub) isso **aprova qualquer pagamento** e credita de graça; com Stripe só consulta a sessão, mas expõe uma rota que não deve existir em produção | **NÃO** |
+| `ALLOW_DB_RESET`, `ALLOW_DB_RESET_REMOTE` | Destravam o `db:reset` (apaga espécimes). Só se definem na linha de comando de um reset **local** | **NÃO** (são a própria trava) |
+
+Na dúvida: **remova a variável** (não a defina como `false`).
+
+## 4) API no Railway (primeira vez)
+1. railway.com → **New Project** → **Deploy from GitHub repo** → `GenBreedAI`.
+2. Em **Settings** do serviço: **Root Directory** `/` (raiz), **Build** Dockerfile em `apps/api/Dockerfile` (o `railway.json` já aponta isso).
+3. **Variables**: as da seção 3.1. Nenhuma da 3.3.
+4. Deploy. Depois aplique o schema e os fundadores (seção 8).
+5. Copie a URL pública da API (ex.: `https://…up.railway.app`).
 
 ## 5) Web no Vercel
 1. vercel.com → **Add New Project** → importe `GenBreedAI`.
-2. **Root Directory**: `apps/web` (o `vercel.json` na raiz já define build/install; se o Vercel pedir, use Root = apps/web).
-3. **Environment Variables**:
-   - `API_URL` = a URL da API do Railway (passo 4.5) — **sem** `/api` no fim.
-   - (opcional) `NEXT_PUBLIC_GOOGLE_CLIENT_ID` = mesmo client id do Google.
+2. **Root Directory**: `apps/web`. **Não existe `vercel.json` neste repo** — build e install vêm da configuração do projeto no Vercel
+   (a confirmar no painel).
+3. Variáveis da seção 3.2 (normalmente nenhuma é necessária).
 4. Deploy.
 
 ## 6) Domínio genbreed.com.br
-1. Vercel → projeto web → **Settings** → **Domains** → adicione `genbreed.com.br` (e `www`). Siga as instruções de DNS (aponte no seu registrador para a Vercel).
-2. (Imagens) se usar domínio custom no R2 (`img.genbreed.com.br`), configure o CNAME no Cloudflare conforme o passo 2.
+1. Vercel → projeto web → **Settings** → **Domains** → adicione `genbreed.com.br` (e `www`) e siga o DNS.
+2. (Imagens) se usar domínio custom no R2 (`img.genbreed.com.br`), configure o CNAME no Cloudflare e use-o em `R2_PUBLIC_URL`.
 
-## 7) Checklist final (produção)
-- [ ] `AUTH_DEV_HEADERS=false` (sem isso, qualquer um vira "demo").
-- [ ] `IMAGE_QUOTA_UNLIMITED=false` e `CROSS_QUOTA_UNLIMITED=false` (cotas ativas = margem protegida).
+## 7) Sequência de uma mudança com migração
+
+Use esta ordem sempre que o `apps/api/src/db/schema.ts` mudar:
+
+1. **Backup no Neon** do banco de produção antes de qualquer alteração (ex.: um branch do Neon criado a partir de produção, ou o
+   procedimento de backup do time — **informado; não está documentado no repo**). Confirme que o backup existe.
+2. **`db:migrate` em produção** — com a `DATABASE_URL` de produção no ambiente (shell local ou shell do Railway):
+   ```
+   pnpm --filter @genbreedai/api db:migrate
+   ```
+   As migrações ficam em `apps/api/drizzle/` (geradas por `db:generate` a partir do `schema.ts`, commitadas junto do código).
+   Como o código antigo continua no ar até o passo 4, prefira migrações **aditivas** (coluna/tabela nova) — renomear ou apagar
+   coluna derruba a versão antiga durante a janela.
+3. **Conferir o schema** no banco: as tabelas/colunas novas existem (ex.: `\d nome_da_tabela` no psql ou o editor SQL do Neon) e a
+   última linha de `drizzle.__drizzle_migrations` corresponde à migração aplicada.
+4. **Merge na `main`** → deploy automático no Vercel e no Railway (**informado**).
+5. **Verificar a API no ar:** não há rota de health dedicada. Confira (a) o deploy do Railway concluído e sem erro/`ABORTADO` nos
+   logs (e sem o aviso `[quota] … IGNORADA`, que indica variável proibida presente); (b) `GET /api/v1/billing/packs` responde
+   200 com os 3 pacotes; (c) no site: login e a tela da incubadora carregam.
+
+Se o passo 2 ou 3 falhar: **não faça o merge**. Restaure pelo backup do passo 1 se o banco ficou inconsistente.
+
+## 8) Banco novo ou vazio: schema + fundadores
+```
+pnpm --filter @genbreedai/api db:migrate   # cria/atualiza o schema
+pnpm --filter @genbreedai/api db:seed      # semeia os fundadores (ADITIVO: onConflictDoNothing, não apaga nada)
+```
+`db:seed` é idempotente: pode rodar de novo sem risco — insere só os fundadores que ainda não existem e **não altera** os já
+existentes (nem os retratos, nem os dados de jogadores). Fundador que já existe com genótipo diferente do código **não** é
+atualizado por ele; isso exige uma decisão explícita, nunca `db:reset`.
+
+Retratos dos fundadores (custo de fal.ai; exige `FAL_KEY` e as cinco `R2_*`):
+```
+pnpm --filter @genbreedai/api images:regenerate-founders --missing                                   # dry-run (padrão): só lista
+pnpm --filter @genbreedai/api images:regenerate-founders --missing --apply --confirm-bucket=<bucket> --max=<N>
+```
+`images:seed` também gera os retratos que faltam, mas sem dry-run. Prefira `regenerate-founders`.
+
+## 9) Stripe (produção)
+- **Webhook:** endpoint `https://<API>/api/v1/billing/webhook`, com o segredo em `STRIPE_WEBHOOK_SECRET`. Eventos tratados:
+  `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.
+- **Catálogo por `lookup_key`** (o código nunca usa `price_id`; a chave precisa existir e estar **ativa** no Stripe, senão a
+  compra responde 400):
+  - pacotes de crédito: `pack_10_v2` (R$ 5,90), `pack_30_v2` (R$ 14,90), `pack_60_v2` (R$ 29,90);
+  - assinaturas: `junior_mensal`, `junior_anual`, `senior_mensal`, `senior_anual`, `phd_mensal`, `phd_anual`.
+- Preços em BRL. Arquivar um Price no Stripe exige antes atualizar `apps/api/src/billing/credit-packs.ts` /
+  `subscription-plans.ts`.
+
+## 10) Checklist final (produção)
+- [ ] Backup do Neon feito e migração aplicada **antes** do merge (seção 7).
+- [ ] `DATABASE_URL` definido (senão a API roda em memória e perde tudo).
 - [ ] `AUTH_SECRET` forte e único.
-- [ ] Migrações rodadas (db:migrate).
-- [ ] R2_* corretos (teste: gere um retrato e confirme a URL apontando pro R2).
-- [ ] `API_URL` no Vercel apontando pro Railway.
-- [ ] Domínio propagado (pode levar minutos/horas).
+- [ ] **Nenhuma** variável da seção 3.3 existe no Railway.
+- [ ] As **cinco** `R2_*` definidas (teste: gere um retrato e confirme que a URL aponta para o R2).
+- [ ] `FAL_KEY` definido; `FAL_MODEL` indefinido ou `fal-ai/flux-2-pro`.
+- [ ] `STRIPE_SECRET_KEY` (live), `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL` e `STRIPE_CANCEL_URL` definidos; webhook cadastrado no Stripe.
+- [ ] `lookup_key`s do catálogo Stripe ativas (seção 9).
+- [ ] `API_URL` do web coerente com a URL da API (ou o padrão do `next.config.mjs` ainda válido).
+- [ ] Domínio propagado.
 
 ## Notas
-- **Imagens:** com R2_* definidos, o `storage.ts` grava/serve do bucket automaticamente; sem eles, cai no disco local (só dev).
-- **Pagamento:** o checkout está em modo stub (aprova na hora). Para cobrar de verdade, implemente `PixPaymentProvider`/`StripePaymentProvider` em `apps/api/src/billing/payment.provider.ts` e ligue em `resolvePaymentProvider()`.
-- **Referral D1/D7/convert:** os marcos install já disparam no cadastro; D1/D7/convert automáticos são o próximo passo (hoje via endpoint `/referral/event`).
+- **Imagens:** só com as cinco `R2_*` o `storage.ts` grava/serve do bucket; sem elas cai no disco local do container (só dev).
+- **Referral:** `POST /referral/event` **não existe mais** — os marcos (install/D1/D7/convert) não têm rota pública; o código
+  afirma que são creditados internamente (cadastro e webhook de pagamento), mas isso **está a confirmar** (não há chamador
+  encontrado no código).
+- **Nunca** aponte `DATABASE_URL` de produção para um script destrutivo (`db:reset`) nem para `db:backfill-sex --apply` sem ler o
+  cabeçalho do script (`--confirm-host=<host igual ao de DATABASE_URL>` é obrigatório).
