@@ -4,6 +4,7 @@ import type { Tier } from "@genbreedai/shared";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
 import { BillingService } from "./billing.service";
 import type { SubscriptionInterval } from "./subscription-plans";
+import { isDevFlagEnabled } from "../common/dev-flags";
 
 @Controller("api/v1/billing")
 export class BillingController {
@@ -21,7 +22,12 @@ export class BillingController {
   @Post("confirm")
   @UseGuards(AuthGuard)
   confirm(@CurrentUser() user: AuthenticatedUser, @Body() body: { intentId: string }) {
-    if (process.env.BILLING_STUB_ENABLED !== "true") {
+    // Confirmação MANUAL: só dev/teste (o StubPaymentProvider aprova tudo, e
+    // mesmo com Stripe o chamador creditaria a própria carteira com o intentId
+    // de qualquer sessão paga). Em PRODUÇÃO a flag é ignorada (dev-flags.ts) — o
+    // crédito real vem só do webhook do Stripe. A web só chama /confirm sem
+    // `checkoutUrl` (stub de dev), então nada legítimo depende disto em prod.
+    if (!isDevFlagEnabled("BILLING_STUB_ENABLED")) {
       throw new ForbiddenException("Confirmação manual desabilitada.");
     }
     return this.billing.confirm(user.id, body.intentId);

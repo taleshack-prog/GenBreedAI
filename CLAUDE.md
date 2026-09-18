@@ -118,11 +118,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 2. **Moderação de imagem própria** não existe (`moderate()` aprova sempre; regra 5 da seção 2).
 3. **`pnpm lint` é no-op** (há `eslint.config.js` na raiz, mas nenhum script o executa).
 4. **TDD §6/§7 desatualizadas** frente ao código (tiers, cotas, bônus, chat descrito mas inexistente).
-5. **`IMAGE_QUOTA_UNLIMITED` sem trava de produção** (diferente de `QUOTA_UNLIMITED_DEV`): decisão pendente de aplicar o mesmo guarda.
-6. **Referral — D1 e D7 NÃO implementados** (ADR-0024): dependem de tarefa agendada (não há cron/fila) ou de avaliação preguiçosa +
+5. **Referral — D1 e D7 NÃO implementados** (ADR-0024): dependem de tarefa agendada (não há cron/fila) ou de avaliação preguiçosa +
    definição de "retornou" (login? bônus diário? nascimento?). As colunas `d1`/`d7` existem sem escritor; a tela mostra "em breve".
    O vínculo no cadastro e a conversão (assinatura) JÁ funcionam, server-side; só a conversão paga.
-7. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+6. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
 ## 7. Convenções de código
@@ -219,12 +218,12 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   a API (detalhes em `DEPLOY.md`).
 - **`db:backfill-sex`:** dry-run por padrão; `--apply` só grava com `--confirm-host=<host igual ao de DATABASE_URL>`.
 - **`images:regenerate-founders`:** dry-run por padrão; `--apply` exige `--confirm-bucket=<bucket real>` e `--max=N` acima de 10 retratos.
-- **Flags de cota:** `QUOTA_UNLIMITED_DEV` (e o nome antigo `CROSS_QUOTA_UNLIMITED`) é **ignorada quando
-  `NODE_ENV=production`**, com aviso no log. `IMAGE_QUOTA_UNLIMITED` (cota mensal de retratos extras) **não tem essa
-  trava** — mantenha `false` em produção. `AUTH_DEV_HEADERS` deve ser `false` em produção.
+- **Flags de dev** (`common/dev-flags.ts`, `isDevFlagEnabled` — a função ÚNICA; flag nova de dev usa ela): `QUOTA_UNLIMITED_DEV` (e o
+  alias depreciado `CROSS_QUOTA_UNLIMITED`), `IMAGE_QUOTA_UNLIMITED`, `AUTH_DEV_HEADERS` e `BILLING_STUB_ENABLED` são **ignoradas quando
+  `NODE_ENV=production`**, mesmo definidas, com aviso no log 1x por processo. Mesmo assim, não as defina em produção (`DEPLOY.md` §3.3).
 - **Segredos/env** (ver `apps/api/.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `FAL_KEY`, `FAL_MODEL`, `R2_*`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`/`STRIPE_CANCEL_URL`, `GOOGLE_CLIENT_ID`.
-  Sem `STRIPE_SECRET_KEY` o billing cai no provider stub de dev; `BILLING_STUB_ENABLED` nunca `true` em produção.
+  Sem `STRIPE_SECRET_KEY` o billing cai no provider stub de dev (sem cobrança real).
   **`AUTH_SECRET` é obrigatório em produção:** sem ele a API assina JWT com um segredo padrão inseguro
   (`auth.service.ts`, sem trava contra isso).
 

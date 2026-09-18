@@ -16,6 +16,7 @@ import { Injectable } from "@nestjs/common";
 import type { Tier } from "@genbreedai/shared";
 import { SubscriptionsRepository } from "./subscriptions.repository";
 import { GrantedTiersRepository } from "./granted-tiers.repository";
+import { isDevFlagEnabled } from "../common/dev-flags";
 
 @Injectable()
 export class TierService {
@@ -35,7 +36,7 @@ export class TierService {
     if (sub) return sub.tier;
     const grant = await this.grants.findActiveForUser(userId);
     if (grant) return grant.tier;
-    if (devHint && process.env.AUTH_DEV_HEADERS === "true") return devHint;
+    if (devHint && isDevFlagEnabled("AUTH_DEV_HEADERS")) return devHint;
     return "FREE";
   }
 }

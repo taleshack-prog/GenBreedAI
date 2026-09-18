@@ -62,14 +62,24 @@ Guarde a `DATABASE_URL` do projeto. Toda mudança de schema é aplicada **à mã
 
 ### 3.3 Variáveis que NÃO podem existir em produção
 
-| Variável | O que libera indevidamente | O código ignora em produção? |
+As quatro flags de dev abaixo (mais o alias depreciado) passam por **uma função só** — `isDevFlagEnabled`
+(`apps/api/src/common/dev-flags.ts`): com `NODE_ENV=production` (já definido no `Dockerfile`) a variável é **IGNORADA mesmo definida
+como `true`**, com um aviso no log 1x por processo (`[dev-flag] … foi IGNORADA`). Isso é rede de segurança contra erro — **elas
+continuam não devendo existir em produção**; se o aviso aparecer nos logs do Railway, remova a variável.
+
+| Variável | O que liberaria indevidamente | O código ignora em produção? |
 |---|---|---|
-| `QUOTA_UNLIMITED_DEV` | Desliga **toda** cota: o limite técnico de 60 cruzamentos/hora **e** as vagas de nascimento — nascimentos ilimitados, ou seja, custo de imagem sem teto | **Sim** (`NODE_ENV=production`), com aviso no log — mesmo assim não deve existir |
-| `CROSS_QUOTA_UNLIMITED` | Nome antigo, **mesmo efeito** que a anterior (depreciada) | **Sim**, idem |
-| `IMAGE_QUOTA_UNLIMITED` | Cota mensal de retratos extras **ilimitada**: regenerar retrato sem limite e sem gastar crédito, com gasto de fal.ai sem teto | **NÃO** — hoje só a ausência/`false` protege |
-| `AUTH_DEV_HEADERS` | Aceita `x-user-id` sem senha nem JWT (qualquer um age como qualquer usuário, inclusive o dono dos fundadores) e `x-user-tier` (declara um tier pago sem assinatura) | **NÃO** |
-| `BILLING_STUB_ENABLED` | Habilita `POST /api/v1/billing/confirm` (confirmação manual). Sem `STRIPE_SECRET_KEY` (provider stub) isso **aprova qualquer pagamento** e credita de graça; com Stripe só consulta a sessão, mas expõe uma rota que não deve existir em produção | **NÃO** |
-| `ALLOW_DB_RESET`, `ALLOW_DB_RESET_REMOTE` | Destravam o `db:reset` (apaga espécimes). Só se definem na linha de comando de um reset **local** | **NÃO** (são a própria trava) |
+| `QUOTA_UNLIMITED_DEV` | Desliga **toda** cota: o limite técnico de 60 cruzamentos/hora **e** as vagas de nascimento — nascimentos ilimitados, ou seja, custo de imagem sem teto | **Sim** |
+| `CROSS_QUOTA_UNLIMITED` | Nome antigo, **mesmo efeito** que a anterior (depreciada) | **Sim** |
+| `IMAGE_QUOTA_UNLIMITED` | Cota mensal de retratos extras **ilimitada**: regenerar retrato sem limite e sem gastar crédito, com gasto de fal.ai sem teto | **Sim** (a partir de 2026-09-18) |
+| `AUTH_DEV_HEADERS` | Aceita `x-user-id` sem senha nem JWT (qualquer um age como qualquer usuário, inclusive o dono dos fundadores) e `x-user-tier` (declara um tier pago sem assinatura — qualquer pessoa vira PhD de graça) | **Sim** (a partir de 2026-09-18) |
+| `BILLING_STUB_ENABLED` | Habilita `POST /api/v1/billing/confirm` (confirmação manual). Sem `STRIPE_SECRET_KEY` (provider stub) isso **aprova qualquer pagamento** e credita de graça; com Stripe, deixa o chamador creditar a **própria** carteira com o `intentId` de qualquer sessão paga | **Sim** (a partir de 2026-09-18) |
+| `ALLOW_DB_RESET`, `ALLOW_DB_RESET_REMOTE` | Destravam o `db:reset` (apaga espécimes). Só se definem na linha de comando de um reset **local** | **Não** (são a própria trava — nunca ficam no ambiente permanente) |
+
+Efeito de o código ignorar em produção: `AUTH_DEV_HEADERS` → o cabeçalho de dev responde 401 e `x-user-tier` não promove ninguém;
+`IMAGE_QUOTA_UNLIMITED` → a cota mensal de retratos extras continua contando; `BILLING_STUB_ENABLED` → `/billing/confirm` responde 403
+(o crédito real vem só do webhook do Stripe; a web não chama `/confirm` quando há `checkoutUrl`). Fora de produção (dev/teste) as
+flags valem como sempre — o `.env.example` local as usa.
 
 Na dúvida: **remova a variável** (não a defina como `false`).
 

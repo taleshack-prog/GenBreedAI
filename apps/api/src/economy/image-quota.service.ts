@@ -14,6 +14,7 @@ import type { Tier } from "@genbreedai/shared";
 import { imageQuota } from "../db/schema";
 import { createDb } from "../db/client";
 import { tierPolicy } from "../common/tiers";
+import { isDevFlagEnabled } from "../common/dev-flags";
 
 /** Cota de retratos EXTRAS (prévia/regenerar) — NÃO conta o retrato incluído no cruzamento (ADR-0019). */
 export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyExtraImages ?? 0; }
@@ -53,12 +54,12 @@ export class ImageQuotaService {
     return this.mem.get(`${owner}|${m}`) ?? 0;
   }
   async remaining(owner: string, tier: string): Promise<number> {
-    if (process.env.IMAGE_QUOTA_UNLIMITED === "true") return 9999;
+    if (isDevFlagEnabled("IMAGE_QUOTA_UNLIMITED")) return 9999; // DEV — em produção é ignorada
     return Math.max(0, monthlyImageLimit(tier) - (await this.used(owner)));
   }
   /** Tenta consumir 1 imagem da cota; retorna false se esgotou (precisa crédito). */
   async tryConsume(owner: string, tier: string): Promise<boolean> {
-    if (process.env.IMAGE_QUOTA_UNLIMITED === "true") return true; // modo DEV: cota ilimitada
+    if (isDevFlagEnabled("IMAGE_QUOTA_UNLIMITED")) return true; // modo DEV: cota ilimitada — em produção é ignorada
     const limit = monthlyImageLimit(tier);
     const m = ym();
     const cur = await this.used(owner);

@@ -2,7 +2,9 @@
  * Guard de autenticação. Produção: valida JWT Bearer (emitido pelo AuthService).
  * Dev: se AUTH_DEV_HEADERS=true, aceita x-user-id (+ x-user-tier opcional) —
  * usado por testes e ferramentas locais; a web não manda mais x-user-tier
- * (removido o antigo seletor de "tier de teste"). Sem credencial válida → 401.
+ * (removido o antigo seletor de "tier de teste"). Em PRODUÇÃO a flag é sempre
+ * ignorada (`isDevFlagEnabled`, com aviso no log) — senão qualquer um agiria
+ * como qualquer usuário e declararia tier pago. Sem credencial válida → 401.
  */
 import {
   CanActivate, ExecutionContext, Injectable, UnauthorizedException, createParamDecorator, Optional,
@@ -10,6 +12,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import type { Tier } from "@genbreedai/shared";
 import { AuthService } from "../auth/auth.service";
+import { isDevFlagEnabled } from "./dev-flags";
 
 export interface AuthenticatedUser { id: string; tier: Tier; }
 const VALID_TIERS: Tier[] = ["FREE", "JUNIOR", "SENIOR", "PHD"];
@@ -38,7 +41,7 @@ export class AuthGuard implements CanActivate {
     // devHint pro TierService (que só o usa se não houver assinatura/concessão
     // real para o id, e mesmo assim só com AUTH_DEV_HEADERS=true). Ausente ou
     // inválido → devHint "FREE" (menor privilégio), nunca PHD por omissão.
-    if (process.env.AUTH_DEV_HEADERS === "true") {
+    if (isDevFlagEnabled("AUTH_DEV_HEADERS")) {
       const id = req.headers["x-user-id"];
       if (typeof id === "string" && id.length > 0) {
         const tierHeader = req.headers["x-user-tier"];
