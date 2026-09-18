@@ -48,3 +48,16 @@ export function absoluteImageUrl(url: string | null): string | null {
   if (/^https?:\/\//.test(url)) return url;
   return `${PUBLIC_SHARE_ORIGIN}${url.startsWith("/") ? url : `/${url}`}`;
 }
+
+/**
+ * Remove a query string (hoje sempre só `?v=<versão>`, o cache-bust de
+ * `storage.ts#publicUrl`) — só pra uso em META TAGS (og:image/twitter:image),
+ * nunca na URL usada de verdade na página (`<img src>` continua com `?v=`,
+ * que é o que garante a imagem atualizar quando o retrato é regenerado).
+ * Alguns leitores de prévia (WhatsApp incluso, em alguns clientes/versões)
+ * ignoram ou cacheiam mal uma og:image com query string.
+ */
+export function stripCacheBustQuery(url: string): string {
+  const i = url.indexOf("?");
+  return i === -1 ? url : url.slice(0, i);
+}

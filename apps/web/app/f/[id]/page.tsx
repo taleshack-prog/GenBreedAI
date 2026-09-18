@@ -14,7 +14,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getPublicSpecimen } from "../../../lib/server-api";
-import { auraStarsText, buildPublicSpecimenUrl, absoluteImageUrl, PUBLIC_SHARE_ORIGIN } from "../../../lib/share";
+import { auraStarsText, buildPublicSpecimenUrl, absoluteImageUrl, stripCacheBustQuery, PUBLIC_SHARE_ORIGIN } from "../../../lib/share";
 
 // Prévia genérica quando o espécime ainda não tem retrato gerado — melhor
 // que o WhatsApp não mostrar imagem nenhuma. Asset já existente em /public.
@@ -34,14 +34,24 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
   const title = `${specimen.displayName} — GenBreedAI`;
   const description = `${specimen.displayName} ${auraStarsText(specimen.aura)} — criado no GenBreedAI. Cria o teu criadouro!`;
-  const image = absoluteImageUrl(specimen.imageUrl) ?? FALLBACK_OG_IMAGE;
   const url = buildPublicSpecimenUrl(specimen.id, null);
+
+  // Retrato real: PNG quadrado 1024×1024 (fal.ai, resolution "square_hd" —
+  // ver image.service.ts). Sem retrato ainda: cai no fallback (JPG, dimensão
+  // desconhecida — NUNCA declara 1024×1024 pra um arquivo que não é isso).
+  // Meta tags só: `stripCacheBustQuery` tira o `?v=` do cache-busting (a
+  // página em si, mais abaixo, continua usando a URL COM `?v=`).
+  const hasPortrait = absoluteImageUrl(specimen.imageUrl) !== null;
+  const ogImageUrl = stripCacheBustQuery(absoluteImageUrl(specimen.imageUrl) ?? FALLBACK_OG_IMAGE);
+  const ogImage = hasPortrait
+    ? { url: ogImageUrl, width: 1024, height: 1024, type: "image/png", alt: specimen.displayName }
+    : { url: ogImageUrl, type: "image/jpeg", alt: specimen.displayName };
 
   return {
     title,
     description,
-    openGraph: { title, description, images: [image], url, type: "website", siteName: "GenBreedAI" },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
+    openGraph: { title, description, images: [ogImage], url, type: "website", siteName: "GenBreedAI" },
+    twitter: { card: "summary_large_image", title, description, images: [{ url: ogImageUrl, alt: specimen.displayName }] },
   };
 }
 

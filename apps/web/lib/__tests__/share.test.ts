@@ -3,7 +3,7 @@
  * URL, sem rede; displayName no lugar do slug; ref preservado.
  */
 import { describe, it, expect } from "vitest";
-import { buildPublicSpecimenUrl, auraStarsText, buildShareMessage, buildWhatsAppUrl, absoluteImageUrl, PUBLIC_SHARE_ORIGIN } from "../share";
+import { buildPublicSpecimenUrl, auraStarsText, buildShareMessage, buildWhatsAppUrl, absoluteImageUrl, stripCacheBustQuery, PUBLIC_SHARE_ORIGIN } from "../share";
 
 describe("buildPublicSpecimenUrl — ref preservado", () => {
   it("sem ref → só a URL base", () => {
@@ -69,5 +69,16 @@ describe("absoluteImageUrl", () => {
   });
   it("relativa (sem R2, disco local) — prefixa com o domínio canônico", () => {
     expect(absoluteImageUrl("/assets/generated/abc.png")).toBe("https://genbreed.com.br/assets/generated/abc.png");
+  });
+});
+
+describe("stripCacheBustQuery — item 7: URL do retrato chega com '?v=' (storage.ts#publicUrl)", () => {
+  it("remove o '?v=<versão>' (cache-bust de publicUrl)", () => {
+    expect(stripCacheBustQuery("https://genbreed.com.br/assets/generated/abc.png?v=1737000000")).toBe(
+      "https://genbreed.com.br/assets/generated/abc.png",
+    );
+  });
+  it("URL sem query string — devolve como está", () => {
+    expect(stripCacheBustQuery("https://genbreed.com.br/hero-tigre-albino.jpg")).toBe("https://genbreed.com.br/hero-tigre-albino.jpg");
   });
 });
