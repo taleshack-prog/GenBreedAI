@@ -2,176 +2,271 @@
 
 Guia de contexto para o agente de código (Claude Code) neste repositório.
 
-Leia este arquivo inteiro antes de qualquer tarefa. Ele define regras não negociáveis.
+Leia este arquivo inteiro antes de qualquer tarefa. Ele é lido como contrato: as regras da seção 2 são não negociáveis.
+Última conferência contra o código e os ADRs: 2026-09-18. Itens que não foi possível confirmar no repo estão marcados
+como **(informado)** ou **(a confirmar)** — não trate esses como fato verificado.
 
 ---
 
-## 1. O que é este projeto
+## 1. Identidade e fase
 
-GenBreedAI: game de genética aplicada a animais (mobile PWA + web PC). O jogador cruza espécies, estuda herança mendeliana e quantitativa real e tenta fixar fenótipos desejados — ou falha. Imagens geradas por IA com pipeline híbrido (procedural + IA com cache determinístico).
+GenBreedAI (genbreed.com.br): game de genética aplicada a animais (web PC + mobile). O jogador cruza espécies, estuda
+herança mendeliana e quantitativa real e tenta fixar fenótipos — ou falha. Imagens de retrato geradas por IA (FLUX.2 pro),
+com cache determinístico.
 
-## 2. Documentos de referência — FONTE ÚNICA DE VERDADE
+**O projeto está EM PRODUÇÃO**, com cobrança real:
 
-| Arquivo | Papel | Quando ler |
+| Peça | Onde |
+|---|---|
+| Web (Next.js) | Vercel — proxy same-origin `/api/*` → API (`apps/web/next.config.mjs`; `API_URL`, com padrão apontando pro Railway em produção) |
+| API (NestJS + Fastify) | Railway, via `apps/api/Dockerfile` + `railway.json` |
+| Banco (PostgreSQL) | Neon |
+| Imagens | Cloudflare R2 (disco local só em dev, quando `R2_*` não está definido) |
+| Pagamentos | Stripe (Checkout de pacotes, assinaturas e webhook) — **live (informado)**; não verificável pelo código |
 
-|---|---|---|
+- Nada de "fase de construção": não existe mais o bloqueio "sem UI/API até a auditoria". Features novas são mergeáveis
+  desde que respeitem a seção 2 e a Definition of Done (seção 11).
+- A Fase 0 do motor (`packages/engine`) está implementada. A **auditoria formal do motor atual está PENDENTE** — ver
+  seção 6 (pendência registrada, não bloqueio).
 
-| `docs/TDD-GenBreedAI.md` | Spec de engenharia executável: stack, modelo de dados, motor genético, golden tests, API, regras por tier, não-escopo | SEMPRE. Fonte canônica de implementação |
+## 2. Regras não negociáveis
 
-| `docs/PRD-GenBreedAI.md` | Requisitos de produto (narrativa para humanos/investidores) | Para entender o porquê das decisões de produto |
+1. **Fonte única de verdade, na ordem:** (a) o código e os ADRs em `docs/adr/` (o mais recente vence); (b)
+   `docs/gene-bank/*.md` para loci/alelos; (c) `docs/TDD-GenBreedAI.md` e `docs/PRD-GenBreedAI.md`. A **TDD §6 (tiers) e
+   parte da §7 estão desatualizadas** frente ao código (descrevem cota de cruzamento e bônus semanal, ADR-0019) — em
+   conflito, vale o código + ADRs. Não invente espécies, loci, alelos, valores de F, probabilidades ou regras fora dessas
+   fontes.
+2. **Anti-P2W:** as probabilidades do motor são imutáveis por tier. `cross()` é tier-agnóstico (não recebe tier). Tier
+   altera só: vagas de nascimento, retratos extras, bônus, pool de espécies e ferramentas — nunca o resultado genético.
+   Todo PR que toca o motor inclui teste de paridade entre tiers.
+3. **Determinismo:** mesmo genótipo + mesmo método + mesmo seed = mesmo resultado (cache de IA e fairness). Tempo de regra
+   de negócio vem de `Clock` (`apps/api/src/common/clock.ts`), nunca de `new Date()` direto em serviço.
+4. **Golden tests 100% verdes** antes de qualquer feature. Ficam em `packages/engine/src/__tests__/golden/`
+   (goldendoodle, boerpointer, danecollie, pumajaguar, tortoiseshell).
+5. **Moderação de imagem:** toda imagem gerada por IA passa por moderação antes de ser exibida (só `ImageJob.status =
+   APPROVED`). **Estado real:** `moderate()` (`apps/api/src/images/moderation.ts`) hoje aprova sempre e depende do
+   `safety_checker` do fal — moderação própria é pendência conhecida (seção 6). Não venda isso como moderação completa.
+6. **Ambiguidade:** escolha a interpretação mais conservadora e registre em ADR (`docs/adr/`, formato na seção 12).
+7. **Sem stubs falsos:** não entregue mock/stub que finja funcionar em produção (pagamento, moderação, cota). Stubs de dev
+   precisam estar atrás de flag que produção ignora.
+8. **Não implemente nada do não-escopo** (seção 13).
 
-| `docs/specialists/especialista-genetica-aplicada.md` | Prompt de sistema do auditor científico | OBRIGATÓRIO no gate da Fase 0 (seção 6) |
+## 3. Documentos de referência
 
-REGRAS DE INTERPRETAÇÃO (herdadas do TDD, seção 0):
+| Arquivo | Papel |
+|---|---|
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0023) |
+| `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
+| `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
+| `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
+| `docs/PRD-GenBreedAI.md` | Requisitos de produto — o porquê das decisões |
+| `docs/errata/fase0-errata.md` | Correções textuais da Fase 0 ao TDD/Gene-Bank |
+| `docs/audit/fase0-audit.md`, `fase0-audit-v2.md` | Pareceres da Fase 0 (05/09 e 06/09) — ver seção 6 |
+| `docs/specialists/especialista-genetica-aplicada.md` | Prompt de sistema do auditor científico |
+| `DEPLOY.md` | Passo a passo de infra. **Parcialmente desatualizado** (ver seção 10) |
 
-1. Não invente espécies, loci, alelos, valores de F, probabilidades ou regras fora das tabelas do TDD.
-
-2. Anti-P2W: as probabilidades do motor são imutáveis por tier. Tiers alteram apenas ferramentas, pools de espécies e limites diários.
-
-3. Determinismo: mesmo genótipo + mesmo método + mesmo seed = mesmo resultado (obrigatório para cache de IA e fairness).
-
-4. Golden tests (TDD seção 4.5) devem passar 100% antes de qualquer nova feature.
-
-5. Toda imagem gerada por IA passa por moderação antes de ser exibida ao usuário.
-
-6. Não implemente nada listado em "Não-escopo" (TDD seção 9).
-
-7. Ambiguidade: escolha a interpretação mais conservadora e registre em ADR em `docs/adr/`.
-
-## 3. Estrutura do monorepo
+## 4. Estrutura do monorepo
 
 ```
-
 genbreedai/
-
 ├── apps/
-
-│   ├── web/       # Next.js (App Router) + Tailwind + next-pwa — PWA mobile + web PC
-
-│   └── api/       # NestJS + Fastify — REST /api/v1
-
+│   ├── web/        # Next.js 15 (App Router) + Tailwind — telas do jogo, planos, páginas legais
+│   └── api/        # NestJS + Fastify — REST /api/v1; drizzle/ (migrações), Dockerfile, src/db/ (scripts)
 ├── packages/
-
-│   ├── engine/    # Motor genético em TypeScript puro, determinístico, sem I/O
-
-│   └── shared/    # Tipos, DTOs, constantes compartilhadas
-
-├── docs/
-
-│   ├── PRD-GenBreedAI.md
-
-│   ├── TDD-GenBreedAI.md
-
-│   ├── specialists/
-
-│   │   └── especialista-genetica-aplicada.md
-
-│   ├── adr/       # Architecture Decision Records
-
-│   └── audit/     # Pareceres de auditoria (ex.: fase0-audit.md)
-
-├── CLAUDE.md
-
-├── package.json   # Turborepo
-
-└── pnpm-workspace.yaml
-
+│   ├── engine/     # Motor genético em TS puro, determinístico, sem I/O (data packs felino/canino)
+│   └── shared/     # Tipos, DTOs, catálogo de espécies/raças, constantes
+├── docs/           # adr/, gene-bank/, audit/, errata/, specialists/, TDD, PRD, ...
+├── DEPLOY.md  railway.json  turbo.json  pnpm-workspace.yaml  CLAUDE.md
 ```
 
-## 4. Stack e comandos
+## 5. Stack e comandos
 
-- Gerenciador: pnpm + Turborepo
-
-- Frontend: Next.js 15 (App Router), TypeScript estrito, Tailwind CSS, next-pwa. Bundle < 35MB.
-
-- Backend: NestJS (adapter Fastify), REST /api/v1, Drizzle ORM, PostgreSQL (genoma em JSONB), Redis + BullMQ, S3/R2 + CDN, Auth.js (NextAuth v5).
-
-- Testes: Vitest (unit + golden), Playwright (E2E).
+- Gerenciador: pnpm 9 + Turborepo. Node 22 (Dockerfile). TypeScript estrito.
+- Web: Next.js 15, React 19, Tailwind 3. Só há `manifest.webmanifest`; **não há service worker nem `next-pwa`**.
+- API: NestJS 10 + Fastify 4, Drizzle ORM (0.36) sobre PostgreSQL (genoma em JSONB), `pg` (Neon) / PGlite nos testes.
+  Auth **própria**: JWT (`jsonwebtoken`) + `bcryptjs` + login Google (`google-auth-library`). Imagens: fal.ai + Cloudflare
+  R2 (`@aws-sdk/client-s3`). Pagamentos: Stripe.
+- Arquitetura da API: portas (classes abstratas `*Repository`) com adapter in-memory (dev/teste) e adapter Drizzle
+  (ADR-0005/0006). Sem `DATABASE_URL`, tudo roda em memória.
+- **Não existem hoje:** Redis, BullMQ, Auth.js/NextAuth, Playwright, chat. **Nenhum processo agendado** (cron/job/fila):
+  tudo roda por requisição — limpezas são preguiçosas (ex.: incubadora, ADR-0023).
+- Testes: Vitest (unit, golden e "e2e" via `app.inject` do Fastify).
 
 | Comando | O que faz |
-
 |---|---|
-
 | `pnpm install` | Instala dependências |
-
-| `pnpm dev` | Sobe web + api em modo dev |
-
+| `pnpm dev` | Web (3000) + API (3001) em dev |
 | `pnpm build` | Build de todos os pacotes |
+| `pnpm test` | Todos os testes (unit + golden) |
+| `pnpm test:golden` | Só os golden tests do motor |
+| `pnpm typecheck` | `tsc --noEmit` em cada pacote |
+| `pnpm lint` | **No-op hoje** — os scripts de lint dos apps são `echo 'skip'` (pendência, seção 6) |
 
-| `pnpm test` | Roda todos os testes (unit + golden) |
+Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:migrate`, `db:seed`, `db:reset`,
+`db:backfill-sex`, `images:seed`, `images:regenerate-founders`. Operação na seção 10.
 
-| `pnpm test:golden` | Roda apenas os golden tests do motor |
+## 6. Pendências registradas (não bloqueiam features)
 
-| `pnpm lint` | Lint (ESLint) |
+1. **Auditoria formal do motor atual (Fase 0) — PENDENTE.** Existem pareceres APROVADO de 05/09 (`fase0-audit.md`,
+   condicionado à errata) e 06/09 (`fase0-audit-v2.md`, modelo STR/SPD/DEF/RES/COL/PAT), mas o motor mudou depois:
+   packs felino/canino, sexo cromossômico e locus O (ADR-0013), efeito materno (0014), Haldane por sexo (0015/0018),
+   loci limitados ao sexo (0017), loco S canino (0022) etc. Nenhum parecer cobre isso. Quando for feita, seguir o fluxo:
+   assumir o papel de `docs/specialists/especialista-genetica-aplicada.md`, recalcular F de Wright e probabilidades de
+   forma independente, verificar determinismo, paridade anti-P2W e a separação `F_pedigree` (biologia) × `IF` (jogo), e
+   registrar o parecer em `docs/audit/` (matriz de achados com severidade e nível de evidência GRADE, checklist dos
+   golden tests, status APROVADO/REPROVADO). Enquanto pendente: não declare o motor "auditado".
+2. **Moderação de imagem própria** não existe (`moderate()` aprova sempre; regra 5 da seção 2).
+3. **`pnpm lint` é no-op** (há `eslint.config.js` na raiz, mas nenhum script o executa).
+4. **TDD §6/§7 desatualizadas** frente ao código (tiers, cotas, bônus, chat descrito mas inexistente).
+5. **`DEPLOY.md` desatualizado** (checkout "stub", `FAL_MODEL=flux/dev`, `db:reset` para semear, `vercel.json` inexistente).
+6. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+   não refletem o estado atual.
 
-| `pnpm typecheck` | TypeScript estrito |
-
-## 5. Convenções de código
+## 7. Convenções de código
 
 - TypeScript estrito: proibido `any` sem ADR justificando.
-
-- Motor genético (`packages/engine`): TypeScript puro, sem I/O, sem dependências externas; toda função pura e determinística sob seed.
-
-- Golden tests em `packages/engine/src/__tests__/golden/` — um arquivo por arco (goldendoodle, boerpointer, danecollie, pumajaguar).
-
+- Motor (`packages/engine`): TS puro, sem I/O, sem dependências externas; toda função pura e determinística sob seed.
 - Código e identificadores em inglês; comentários e docs em português.
-
 - Commits convencionais: `feat:`, `fix:`, `test:`, `docs:`, `chore:`, `refactor:`.
+- **Vitest não checa tipos.** Rode `pnpm typecheck` além dos testes — um método abstrato esquecido em um adapter só
+  aparece em execução ("is not a function"). Ao adicionar método a uma porta (`*Repository`), implemente-o nos DOIS
+  adapters (in-memory e Drizzle) e nos fakes de teste que o exercitem.
+- Mudança de schema (`apps/api/src/db/schema.ts`) exige migração gerada (`db:generate`) e registro; nunca aplicada pelo deploy.
+- Nenhum merge sem `pnpm test:golden` e `pnpm typecheck` verdes (e `pnpm test`).
 
-- Nenhum merge sem `pnpm test:golden`, `pnpm typecheck` e `pnpm lint` verdes.
+## 8. Regras de produto em vigor (conferidas em `tiers.ts`, `tier-access.ts`, ADRs 0016/0019–0023)
 
-## 6. Gate da Fase 0 — OBRIGATÓRIO (não pule)
+**O limite do jogo é o NASCIMENTO** (é onde a imagem custa). Cruzar é livre.
 
-O motor genético (`packages/engine`) NÃO pode ser declarado concluído sem este fluxo:
+- **Fluxo:** cruzar → gestar → nascer.
+  - **Cruzar:** livre e ilimitado, com limite TÉCNICO de 60 chamadas/hora de `POST /cross`, igual para todo tier (anti-abuso).
+    Gera **6 opções de fenótipo** por cruzamento, igual para todo tier (pode haver menos se o par não segrega — as opções
+    são agrupadas por fenótipo). Não gera imagem nem espécime: grava descrições na incubadora.
+  - **Gestar:** consome 1 vaga de nascimento (`birthQuota`) — ver tabela. Sem vaga, usa 1 crédito; sem os dois, 429 com
+    `nextAvailableAt`. Gestações simultâneas não têm teto. Não existe acelerar gestação.
+  - **Nascer:** só depois do prazo da gestação; gera a imagem (FLUX.2 pro), cria o espécime, sem custo novo.
+- **Vagas de nascimento por tier:**
 
-1. Implemente o motor conforme TDD seção 4 (modelo de herança, matemática, IF, pseudocódigo).
+  | Tier | Vagas | Janela | Bônus quinzenal | Retratos extras/mês | Árvore |
+  |---|---|---|---|---|---|
+  | FREE | 1 | a cada 7 dias (móvel) | não | 0 | 1 |
+  | JUNIOR | 3 | a cada 7 dias (móvel) | sim | 0 | 3 |
+  | SENIOR | 1 | por dia civil (America/Sao_Paulo) | sim | 15 | 7 |
+  | PHD | 3 | por dia civil (America/Sao_Paulo) | sim | 20 | completa (+ acesso ao Mercado) |
 
-2. Implemente os 4 golden tests (TDD seção 4.5) com tolerância zero sob seeds fixas.
+- **Gestação por aura:** 1★ 12h · 2★ 18h · 3★ 24h · 4★ 36h · 5★ 48h (`gestation-time.ts`; regra de produto, vive na API,
+  nunca no motor).
+- **Incubadora** (ADR-0020/0021/0023): guarda as descrições não gestadas sem prazo, com **teto de 200 não gestadas por
+  jogador** — ao cruzar, as mais antigas não gestadas são descartadas até caber (`POST /cross` devolve `discardedForCap`);
+  nunca descarta entrada em gestação nem nascida. Entrada **nascida some 7 dias corridos após o nascimento**; o espécime
+  fica no Gene Bank para sempre. Limpeza preguiçosa (em `GET /incubator` e `POST /cross`), sem job agendado.
+- **Crédito avulso = 1 nascimento extra** (usado quando não há vaga). Também é o fallback quando acaba a cota mensal de
+  retratos extras (regenerar retrato). Pacotes (`credit-packs.ts`): **10 por R$ 5,90 · 30 por R$ 14,90 · 60 por R$ 29,90**.
+  Ganha-se crédito por compra, indicação (referral) e bônus quinzenal.
+- **Bônus quinzenal:** +1 crédito, janela móvel de 15 dias, a partir do JUNIOR. A **recompensa diária de recursos**
+  (catalisadores/biomassa) continua diária, por tier (`wallet.service.ts`).
+- **Pool de espécies** (ADR-0016; espécie fora do pool responde 404, "escondida, sem cadeado"):
+  FREE só *Felis catus* (intraespécie) · JUNIOR + felinos selvagens e cruzamentos entre espécies · SENIOR + cães (todas as
+  raças do catálogo) · PHD tudo o que existe — hoje igual ao Senior, pois grandes animais ainda não têm fundador nem
+  `poolGroup`. Não adicionar pool sem ADR.
+- **Tier efetivo** é resolvido no servidor (`TierService.resolve`): assinatura Stripe ativa → concessão (`granted_tiers`,
+  ex.: prêmio de indicação) → FREE. O tier nunca vem cru do JWT/header (o `x-user-tier` só vale com `AUTH_DEV_HEADERS=true`).
+- **Imagem:** modelo único **FLUX.2 pro** (`fal-ai/flux-2-pro`, `FAL_MODEL`), o mesmo para todo tier (`FAL_MODEL_PHD` é
+  ignorada). Gerada no nascimento; além disso há retratos pré-gerados dos fundadores (`images:seed`) e regeneração de
+  retrato de espécime próprio (cota de retratos extras/créditos). Cache determinístico por `cacheKey` = hash(genótipo +
+  pack + versão da arte [+ sexo, só quando o sexo muda a aparência]) — qualquer mudança de genótipo de fundador força
+  novo retrato. Armazenamento no R2.
+- **Planos:** assinaturas Stripe mensal/anual (JUNIOR/SENIOR/PHD, por `lookup_key` — nunca hardcode `price_id`); o webhook
+  é a fonte do ciclo de vida da assinatura. Preços de planos: `apps/web/lib/plans.ts` e Stripe.
 
-3. Rode `pnpm test:golden` — 100% verdes obrigatório.
+## 9. Modelo de dados (`apps/api/src/db/schema.ts`; migrações em `apps/api/drizzle/`, 0000–0010)
 
-4. Assuma o papel definido em `docs/specialists/especialista-genetica-aplicada.md` e execute a auditoria completa:
+| Tabela | Papel |
+|---|---|
+| `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp |
+| `specimens` | Espécimes e fundadores. Genótipo/fenótipo em JSONB; `sex`, `fertility`, `haldane_status` (anuláveis, ADR-0015; legado fica NULL), `included_portrait` ("vale" de retrato da ADR-0019, hoje `false` nos nascimentos), `status` (ALIVE/FROZEN), `cache_key`, `created_at` (= instante do nascimento, base do ciclo de vida, ADR-0023) |
+| `incubator_entries` | Descrições geradas por cruzamento: `cross_id`, genótipo/fenótipo, `prob`, aura, `sex`, `gestation_started_at`, `gestation_ends_at`, `born_specimen_id`; `frozen` é órfão (sem escritor). Índice `(owner_id, created_at)` |
+| `cross_reservations` | Reservas do limite técnico de 60/h de `POST /cross` |
+| `birth_reservations` | Reservas das vagas de nascimento (`birthQuota`). Ambas: `RESERVED`/`CONFIRMED`; `RESERVED` com mais de 10 min não conta |
+| `wallets` | catalisadores, biomassa, `last_daily`, `last_biweekly`, `image_credits` |
+| `image_quota` | Uso mensal de retratos extras por usuário (`owner_id`, `ym`, `used`) |
+| `referral_links`, `referral_referred` | Indicação e marcos já creditados (anti-duplo-crédito) |
+| `payment_intents` | Compras de pacote; PK = id do gateway → crédito idempotente sob retry de webhook |
+| `subscriptions` | Assinaturas Stripe (tier, intervalo, status, fim do período) |
+| `granted_tiers` | Tiers concedidos fora do Stripe, com expiração |
+| `crosses` | Legada, nunca escrita pelo fluxo atual |
 
-   - Recalcule de forma independente os F de Wright e as probabilidades dos 4 arcos;
+## 10. Operação
 
-   - Verifique determinismo (mesma seed = mesmo resultado) e paridade anti-P2W (mesma entrada = mesmo resultado em qualquer tier);
+- **Deploy:** web (Vercel) e API (Railway) sobem a partir do GitHub; **deploy automático da `main` (informado)** — não há
+  workflow de CI no repo. O container só inicia (`start:prod`); `main.ts` não migra.
+- **Migração NUNCA roda sozinha no deploy.** Aplicar **antes** do deploy que a exige, com **backup no Neon (informado —
+  não está documentado no repo)**: `pnpm --filter @genbreedai/api db:migrate` com a `DATABASE_URL` alvo. `db:generate`
+  gera a migração a partir do `schema.ts`.
+- **`db:reset` é destrutivo:** apaga TODOS os espécimes e cruzamentos e re-semeia os fundadores. Trava: exige
+  `ALLOW_DB_RESET=yes-destroy-all-data` e, se o host for Neon, também `ALLOW_DB_RESET_REMOTE=yes`. Não use em banco com dados
+  de jogadores (o passo "db:reset semeia os fundadores" do `DEPLOY.md` está obsoleto).
+- **`db:backfill-sex`:** dry-run por padrão; `--apply` só grava com `--confirm-host=<host igual ao de DATABASE_URL>`.
+- **`images:regenerate-founders`:** dry-run por padrão; `--apply` exige `--confirm-bucket=<bucket real>` e `--max=N` acima de 10 retratos.
+- **Flags de cota:** `QUOTA_UNLIMITED_DEV` (e o nome antigo `CROSS_QUOTA_UNLIMITED`) é **ignorada quando
+  `NODE_ENV=production`**, com aviso no log. `IMAGE_QUOTA_UNLIMITED` (cota mensal de retratos extras) **não tem essa
+  trava** — mantenha `false` em produção. `AUTH_DEV_HEADERS` deve ser `false` em produção.
+- **Segredos/env** (ver `apps/api/.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `FAL_KEY`, `FAL_MODEL`, `R2_*`,
+  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`/`STRIPE_CANCEL_URL`, `GOOGLE_CLIENT_ID`.
+  Sem `STRIPE_SECRET_KEY` o billing cai no provider stub de dev; `BILLING_STUB_ENABLED` nunca `true` em produção.
+  **`AUTH_SECRET` é obrigatório em produção:** sem ele a API assina JWT com um segredo padrão inseguro
+  (`auth.service.ts`, sem trava contra isso).
 
-   - Verifique a separação F_pedigree (biologia) vs. IF (gamificação).
-
-5. Registre o parecer em `docs/audit/fase0-audit.md` com: matriz de achados (seção, problema, severidade, correção, nível de evidência GRADE), checklist dos golden tests e status final (APROVADO / REPROVADO).
-
-6. Somente após APROVADO, inicie UI/API. Nenhuma feature de aplicação pode ser mergeada antes dos golden tests 100% verdes.
-
-## 7. Definition of Done (todo PR)
+## 11. Definition of Done (todo PR)
 
 - [ ] `pnpm test:golden` 100% verdes
-
-- [ ] `pnpm typecheck` sem erros
-
-- [ ] `pnpm lint` sem erros
-
-- [ ] Anti-P2W: teste de paridade incluído sempre que o motor for tocado
-
-- [ ] Moderação: imagens só são exibidas com ImageJob.status = APPROVED
-
-- [ ] LGPD/COPPA: sem PII no chat, consentimento ativo
-
-- [ ] Performance: bundle < 35MB; TTI < 3s em 4G médio
-
+- [ ] `pnpm typecheck` sem erros (Vitest não checa tipos — seção 7)
+- [ ] `pnpm test` verde
+- [ ] Anti-P2W: teste de paridade entre tiers sempre que o motor for tocado
+- [ ] Portas: todo método abstrato novo implementado nos adapters in-memory E Drizzle
+- [ ] Schema alterado → migração gerada e registrada; nada de migração automática no deploy
+- [ ] Imagens: só exibidas com `ImageJob.status = APPROVED` (ver a ressalva da moderação, seção 2 regra 5)
+- [ ] Privacidade: sem PII em logs/mensagens; páginas `termos`, `privacidade` e `reembolso` coerentes com o produto (não existe chat hoje)
+- [ ] Performance: metas do TDD (bundle < 35MB; TTI < 3s em 4G médio) — **não medidas no repo (a confirmar)**
 - [ ] ADR criado para qualquer decisão ambígua
 
-## 8. ADR (Architecture Decision Record)
+## 12. ADR (Architecture Decision Record)
 
-Formato mínimo em `docs/adr/000X-titulo.md`:
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0024). Formato mínimo: Contexto
+(problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
+rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
-- Contexto (problema e restrições)
+## 13. Decisões de genética em vigor (ADRs 0013–0023) — o ADR é a fonte, não repita o conteúdo
 
-- Decisão (o que foi escolhido)
+- **0013** — Sexo cromossômico XX/XY e locus O (laranja) ligado ao X no pack felino.
+- **0014** — Efeito materno no QTL `porte` (Walton & Hammond 1938).
+- **0015** — Regra de Haldane condicionada ao sexo e classe de hibridação (`hybridClass`).
+- **0016** — Pool de espécies por tier (`poolGroup`; fail-closed para espécie desconhecida).
+- **0017** — Loci limitados ao sexo (juba `Ma`): fêmea nunca expressa.
+- **0018** — Esterilidade de macho híbrido além do F1 (substitui a regra provisória do backfill).
+- **0019** — Cotas persistidas, retrato incluído e bônus por tier. *Parcialmente superada pelas 0020/0021 (cota de cruzamento, bônus semanal).*
+- **0020** — Incubadora: cruzar é livre; limite de 60/h técnico. *A "revelação" e o "congelamento" foram superados pela 0021.*
+- **0021** — Gestação: o limite fica no nascimento; tempo por aura; bônus quinzenal.
+- **0022** — Locus S canino: dominância completa → incompleta (S/s^p = branco residual).
+- **0023** — Ciclo de vida da incubadora: nascida some em 7 dias; teto de 200 não gestadas.
 
-- Consequências (trade-offs, riscos)
+Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
+felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
 
-- Alternativas consideradas (e por que foram rejeitadas)
+## 14. Não-escopo (não implementar)
 
-## 9. Não-escopo (não implementar)
+- Web3/on-chain/NFTs.
+- **Mercado:** existe só como tela placeholder (`ComingSoon`, exclusivo PhD); leilão/escrow não estão implementados nem liberados.
+- Bovinos, suínos e ovinos: **fora das promessas** (removidos do roadmap). **Equinos são a próxima família prevista
+  (informado, sem ADR — a confirmar/registrar)**; nada de equinos antes de um ADR e de um data pack.
+- Websockets complexos (usar polling/SSE), app nativo Swift/Kotlin, checkout multi-moeda.
+- Chat comunitário: descrito na TDD §7.1, **não implementado**; não implemente sem decisão explícita.
 
-Web3/on-chain/NFTs, mercado fora do tier PhD, pecuária fora do PhD, websockets complexos (usar polling/SSE), nativo Swift/Kotlin, checkout multi-moeda. Detalhes no TDD seção 9.
+## 15. A confirmar
+
+- Stripe em modo live e deploy automático da `main` (informados; sem registro no repo).
+- Procedimento de backup no Neon antes de migrar (informado; não documentado no repo).
+- Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
+- Se PWA instalável é meta ativa (há manifest, não há service worker).
+- Metas de performance (bundle/TTI): sem medição no repo.
+- Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).
