@@ -153,8 +153,11 @@ pnpm --filter @genbreedai/api images:regenerate-founders --missing --apply --con
 
 ## Notas
 - **Imagens:** só com as cinco `R2_*` o `storage.ts` grava/serve do bucket; sem elas cai no disco local do container (só dev).
-- **Referral:** `POST /referral/event` **não existe mais** — os marcos (install/D1/D7/convert) não têm rota pública; o código
-  afirma que são creditados internamente (cadastro e webhook de pagamento), mas isso **está a confirmar** (não há chamador
-  encontrado no código).
+- **Referral (ADR-0024):** `POST /referral/event` **não existe mais** (nunca deve voltar — permitia crédito infinito). Os marcos são
+  tratados só no servidor: o registro (`POST /auth/register` e `/auth/google` aceitam o campo opcional `ref`) apenas GRAVA o vínculo
+  indicador → indicado, **sem crédito** (cadastro é farmável); quem paga é o webhook do Stripe quando a assinatura do indicado fica
+  `active` (JUNIOR 15 créditos · SENIOR 30 · PHD 1 mês do plano do indicador). Por isso o webhook precisa estar configurado
+  (`STRIPE_WEBHOOK_SECRET`) para o indicador ser recompensado. **D1/D7 ainda não creditam** (dependem de tarefa agendada). Erro ao recompensar no webhook
+  responde 500 de propósito — o Stripe reenvia.
 - **Nunca** aponte `DATABASE_URL` de produção para um script destrutivo (`db:reset`) nem para `db:backfill-sex --apply` sem ler o
   cabeçalho do script (`--confirm-host=<host igual ao de DATABASE_URL>` é obrigatório).

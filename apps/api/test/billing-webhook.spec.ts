@@ -6,6 +6,7 @@ import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { InMemoryPaymentIntentsRepository } from "../src/billing/payment-intents.repository";
 import { InMemorySubscriptionsRepository } from "../src/billing/subscriptions.repository";
 import { StripePaymentProvider } from "../src/billing/payment.provider";
+import { makeReferralStack } from "./helpers/referral";
 
 const WEBHOOK_SECRET = "whsec_test_123";
 
@@ -43,7 +44,7 @@ describe("Webhook Stripe (billing) — POST /billing/webhook", () => {
     process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
     wallet = new WalletService(new InMemoryWalletRepository());
     subs = new InMemorySubscriptionsRepository();
-    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs);
+    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs, makeReferralStack(wallet, subs).referral);
   });
 
   it("credita ao receber checkout.session.completed pago", async () => {
@@ -125,7 +126,7 @@ describe("Webhook Stripe (billing) — ciclo de vida de assinatura", () => {
     process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
     const wallet = new WalletService(new InMemoryWalletRepository());
     subs = new InMemorySubscriptionsRepository();
-    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs);
+    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs, makeReferralStack(wallet, subs).referral);
   });
   afterEach(() => { vi.restoreAllMocks(); });
 

@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0023) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0024) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -119,8 +119,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 3. **`pnpm lint` é no-op** (há `eslint.config.js` na raiz, mas nenhum script o executa).
 4. **TDD §6/§7 desatualizadas** frente ao código (tiers, cotas, bônus, chat descrito mas inexistente).
 5. **`IMAGE_QUOTA_UNLIMITED` sem trava de produção** (diferente de `QUOTA_UNLIMITED_DEV`): decisão pendente de aplicar o mesmo guarda.
-6. **Referral:** `ReferralService.recordEvent()` (install/D1/D7/convert) não tem chamador encontrado no código, apesar do comentário
-   do controller dizer que é chamado no cadastro e no webhook — marcos podem não estar sendo creditados (a investigar).
+6. **Referral — D1 e D7 NÃO implementados** (ADR-0024): dependem de tarefa agendada (não há cron/fila) ou de avaliação preguiçosa +
+   definição de "retornou" (login? bônus diário? nascimento?). As colunas `d1`/`d7` existem sem escritor; a tela mostra "em breve".
+   O vínculo no cadastro e a conversão (assinatura) JÁ funcionam, server-side; só a conversão paga.
 7. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
@@ -165,6 +166,12 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 - **Crédito avulso = 1 nascimento extra** (usado quando não há vaga). Também é o fallback quando acaba a cota mensal de
   retratos extras (regenerar retrato). Pacotes (`credit-packs.ts`): **10 por R$ 5,90 · 30 por R$ 14,90 · 60 por R$ 29,90**.
   Ganha-se crédito por compra, indicação (referral) e bônus quinzenal.
+- **Indicação (referral, ADR-0024):** o `?ref=` é capturado em qualquer página pública e enviado no cadastro; os marcos são creditados
+  **só no servidor** (nunca por rota pública — a antiga `POST /referral/event` foi removida por permitir crédito infinito). Cadastro de
+  usuário novo com código válido só **grava o vínculo** indicador→indicado (1x por indicado; auto-indicação por id/e-mail/alias não vincula)
+  e **não credita nada** (sem verificação de e-mail seria farmável). **Só a assinatura paga:** assinatura do indicado ativa no Stripe
+  (webhook): JUNIOR +15 créditos · SENIOR +30 · PHD = 1 mês grátis do plano do indicador em `granted_tiers` (FREE ganha 1 mês de JUNIOR),
+  1x por indicado. O indicado não ganha nada. D1/D7: pendentes (seção 6).
 - **Bônus quinzenal:** +1 crédito, janela móvel de 15 dias, a partir do JUNIOR. A **recompensa diária de recursos**
   (catalisadores/biomassa) continua diária, por tier (`wallet.service.ts`).
 - **Pool de espécies** (ADR-0016; espécie fora do pool responde 404, "escondida, sem cadeado"):
@@ -236,7 +243,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0024). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0025). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -253,6 +260,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0021** — Gestação: o limite fica no nascimento; tempo por aura; bônus quinzenal.
 - **0022** — Locus S canino: dominância completa → incompleta (S/s^p = branco residual).
 - **0023** — Ciclo de vida da incubadora: nascida some em 7 dias; teto de 200 não gestadas.
+- **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; D1/D7 pendentes.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

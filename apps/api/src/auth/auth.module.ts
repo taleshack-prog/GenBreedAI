@@ -3,6 +3,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { UserRepository, InMemoryUserRepository, DrizzleUserRepository } from "./user.repository";
 import { createDb } from "../db/client";
+import { ReferralModule } from "../referral/referral.module";
 
 const userRepositoryProvider = {
   provide: UserRepository,
@@ -14,6 +15,7 @@ const userRepositoryProvider = {
 };
 
 // Global: AuthService fica disponível ao AuthGuard em qualquer módulo.
+// `ReferralModule` (ADR-0024): o registro credita o marco "cadastrou" da indicação.
 @Global()
-@Module({ controllers: [AuthController], providers: [AuthService, userRepositoryProvider], exports: [AuthService] })
+@Module({ imports: [ReferralModule], controllers: [AuthController], providers: [AuthService, userRepositoryProvider], exports: [AuthService] })
 export class AuthModule {}

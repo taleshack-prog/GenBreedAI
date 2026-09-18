@@ -1,3 +1,5 @@
+import { getStoredRef, clearStoredRef } from "./referral-capture";
+
 /** Sessão do usuário no cliente (JWT em localStorage). Substitui o modo demo. */
 export interface SessionUser { id: string; email: string | null; name: string | null; tier: string; }
 
@@ -43,9 +45,21 @@ async function post(path: string, body: unknown) {
   return data as { token: string; user: SessionUser };
 }
 
+/** Código de indicação guardado por `RefCapture` (ADR-0024) — só INFORMA a origem; quem credita é o servidor. */
+function storedRef(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try { return getStoredRef(window.localStorage) ?? undefined; } catch { return undefined; }
+}
+function clearRef() {
+  if (typeof window === "undefined") return;
+  try { clearStoredRef(window.localStorage); } catch { /* idem */ }
+}
+
 export async function register(email: string, password: string, name?: string) {
-  const r = await post("/api/v1/auth/register", { email, password, name });
+  const ref = storedRef();
+  const r = await post("/api/v1/auth/register", { email, password, name, ...(ref ? { ref } : {}) });
   setSession(r.token, r.user);
+  clearRef(); // já usado no cadastro — não reenviar em logins futuros
   return r;
 }
 export async function login(email: string, password: string) {
@@ -54,7 +68,9 @@ export async function login(email: string, password: string) {
   return r;
 }
 export async function loginWithGoogle(idToken: string) {
-  const r = await post("/api/v1/auth/google", { idToken });
+  const ref = storedRef();
+  const r = await post("/api/v1/auth/google", { idToken, ...(ref ? { ref } : {}) });
   setSession(r.token, r.user);
+  clearRef(); // o servidor só credita se a conta for NOVA; conta existente ignora o ref
   return r;
 }

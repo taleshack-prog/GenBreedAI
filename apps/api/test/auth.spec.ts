@@ -1,10 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { AuthService } from "../src/auth/auth.service";
 import { InMemoryUserRepository } from "../src/auth/user.repository";
+import { WalletService } from "../src/economy/wallet.service";
+import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
+import { makeReferralStack } from "./helpers/referral";
 
 describe("Auth (e-mail + senha + JWT)", () => {
   let auth: AuthService;
-  beforeEach(() => { process.env.AUTH_SECRET = "test-secret"; auth = new AuthService(new InMemoryUserRepository()); });
+  beforeEach(() => {
+    process.env.AUTH_SECRET = "test-secret";
+    auth = new AuthService(new InMemoryUserRepository(), makeReferralStack(new WalletService(new InMemoryWalletRepository())).referral);
+  });
 
   it("registra e emite JWT válido", async () => {
     const r = await auth.register("a@b.com", "senha12345", "Ana");

@@ -3,6 +3,7 @@ import { BillingController } from "./billing.controller";
 import { BillingService } from "./billing.service";
 import { EconomyModule } from "../economy/economy.module";
 import { TierModule } from "./tier.module";
+import { ReferralModule } from "../referral/referral.module";
 import { PaymentIntentsRepository, InMemoryPaymentIntentsRepository, DrizzlePaymentIntentsRepository } from "./payment-intents.repository";
 import { createDb } from "../db/client";
 
@@ -15,5 +16,5 @@ const paymentIntentsRepositoryProvider = {
   },
 };
 
-@Module({ imports: [EconomyModule, TierModule], controllers: [BillingController], providers: [BillingService, paymentIntentsRepositoryProvider] })
+@Module({ imports: [EconomyModule, TierModule, ReferralModule], controllers: [BillingController], providers: [BillingService, paymentIntentsRepositoryProvider] })
 export class BillingModule {}

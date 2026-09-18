@@ -56,7 +56,8 @@ export default function ProfilePage() {
   function shareLink(via: "whatsapp" | "email" | "sms" | "copy") {
     if (!ref) return;
     const url = referralUrl(ref.code);
-    const msg = `Cria animais com genética real no GenBreedAI! Entra pelo meu link e a gente ganha créditos: ${url}`;
+    // O indicado não ganha nada por se cadastrar (o crédito é de quem indica, quando o indicado assina) — o texto não promete ganho.
+    const msg = `Cria animais com genética real no GenBreedAI! Entra pelo meu link: ${url}`;
     if (via === "copy") { navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); return; }
     if (navigator.share && via === "whatsapp") { navigator.share({ title: "GenBreedAI", text: msg, url }).catch(() => {}); return; }
     const links: Record<string, string> = {
@@ -185,7 +186,7 @@ export default function ProfilePage() {
       {ref && (
         <div className="mb-5 rounded-card border border-purple/30 bg-bg-800 p-4">
           <div className="mb-1 font-display text-xs font-bold uppercase text-purple">Indique e ganhe créditos</div>
-          <p className="mb-3 text-[0.7rem] text-ink-muted">Compartilhe seu link. Você ganha créditos conforme quem entra engaja: instalou +1 · voltou D1 +1 · ativo D7 +2 · virou assinante +15.</p>
+          <p className="mb-3 text-[0.7rem] text-ink-muted">Compartilhe seu link. O crédito vem quando quem entrou por ele <b className="text-ink">assina um plano</b>: Junior +15 créditos · Senior +30 créditos · PhD 1 mês grátis do seu plano (quem é Free ganha 1 mês de Junior). Só se cadastrar não rende nada. Retorno em D1 e D7: em breve.</p>
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-white/10 bg-bg-900 p-2">
             <span className="flex-1 truncate font-mono text-xs text-ink">{referralUrl(ref.code)}</span>
             <button onClick={() => shareLink("copy")} className="rounded border border-cyan/40 px-2 py-1 text-[0.65rem] uppercase text-cyan">{copied ? "copiado!" : "copiar"}</button>
@@ -196,8 +197,13 @@ export default function ProfilePage() {
             <button onClick={() => shareLink("sms")} className="rounded-lg border border-cyan/40 py-2 font-display text-xs uppercase text-cyan">SMS</button>
           </div>
           <div className="grid grid-cols-5 gap-1 text-center text-[0.6rem]">
-            {[["Cliques", ref.clicks], ["Instalou", ref.installs], ["D1", ref.d1], ["D7", ref.d7], ["Assinou", ref.conversions]].map(([l, v]) => (
-              <div key={l as string} className="rounded bg-bg-900/60 py-1.5"><div className="font-mono text-sm text-ink">{v as number}</div><div className="uppercase text-ink-muted">{l as string}</div></div>
+            {/* "Cadastrou" é só informativo (vínculo gravado, sem crédito — ADR-0024); só "Assinou" paga.
+                D1/D7 ainda não são creditados (dependem de tarefa agendada): "em breve" em vez de um 0 permanente. */}
+            {[["Cliques", ref.clicks], ["Cadastrou", ref.installs], ["D1", "em breve"], ["D7", "em breve"], ["Assinou", ref.conversions]].map(([l, v]) => (
+              <div key={l as string} className="rounded bg-bg-900/60 py-1.5">
+                <div className={typeof v === "number" ? "font-mono text-sm text-ink" : "font-mono text-[0.6rem] leading-5 text-ink-muted"}>{v}</div>
+                <div className="uppercase text-ink-muted">{l as string}</div>
+              </div>
             ))}
           </div>
           <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos ganhos: {ref.creditsEarned}</div>

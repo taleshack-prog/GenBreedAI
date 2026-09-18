@@ -6,6 +6,7 @@ import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { InMemoryPaymentIntentsRepository } from "../src/billing/payment-intents.repository";
 import { InMemorySubscriptionsRepository } from "../src/billing/subscriptions.repository";
+import { makeReferralStack } from "./helpers/referral";
 
 describe("Compra de créditos (billing)", () => {
   let billing: BillingService; let wallet: WalletService;
@@ -13,7 +14,7 @@ describe("Compra de créditos (billing)", () => {
     delete process.env.DATABASE_URL;
     delete process.env.STRIPE_SECRET_KEY; // garante StubPaymentProvider no teste
     wallet = new WalletService(new InMemoryWalletRepository());
-    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
+    billing = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository(), makeReferralStack(wallet).referral);
   });
 
   it("pacotes: 10/30/60 com id, preço e stripeLookupKey corretos (catálogo _v2 — pack-50/pack-100 saíram)", () => {
@@ -55,13 +56,13 @@ describe("Compra de créditos (billing)", () => {
 
   it("subscribe com tier inválido (FREE não é assinável) é rejeitado", async () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_fake"; // resolvePaymentProvider() roda no construtor
-    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
+    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository(), makeReferralStack(wallet).referral);
     await expect(b.subscribe("u", "FREE", "MONTH")).rejects.toThrow(/[Tt]ier/);
   });
 
   it("subscribe com intervalo inválido é rejeitado", async () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_fake";
-    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
+    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository(), makeReferralStack(wallet).referral);
     await expect(b.subscribe("u", "SENIOR", "WEEK" as never)).rejects.toThrow(/[Ii]ntervalo/);
   });
 
@@ -70,7 +71,7 @@ describe("Compra de créditos (billing)", () => {
 
     it("Price arquivado/lookup_key sem Price ATIVO (Stripe devolve lista vazia) → BadRequestException com mensagem acionável", async () => {
       process.env.STRIPE_SECRET_KEY = "sk_test_fake";
-      const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository());
+      const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), new InMemorySubscriptionsRepository(), makeReferralStack(wallet).referral);
       const provider = (b as unknown as { payments: StripePaymentProvider }).payments;
       const stripe = (provider as unknown as { stripe: { prices: { list: unknown } } }).stripe;
       vi.spyOn(stripe.prices as never, "list").mockResolvedValue({ data: [] } as never);
@@ -90,7 +91,7 @@ describe("Compra de créditos (billing)", () => {
 
   it("getSubscription: reflete a assinatura mais recente", async () => {
     const subs = new InMemorySubscriptionsRepository();
-    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs);
+    const b = new BillingService(wallet, new InMemoryPaymentIntentsRepository(), subs, makeReferralStack(wallet, subs).referral);
     await subs.create({ id: "sub_1", userId: "u", tier: "PHD", interval: "YEAR", stripeCustomerId: "cus_1", status: "ACTIVE", currentPeriodEnd: new Date("2027-01-01T00:00:00Z"), cancelAtPeriodEnd: true });
     expect(await b.getSubscription("u")).toEqual({ tier: "PHD", interval: "YEAR", status: "ACTIVE", currentPeriodEnd: "2027-01-01T00:00:00.000Z", cancelAtPeriodEnd: true });
   });

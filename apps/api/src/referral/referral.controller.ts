@@ -20,8 +20,10 @@ export class ReferralController {
     return { ok: true };
   }
 
-  // Marcos (install/d1/d7/convert) NÃO são afirmáveis pelo cliente — sem rota
-  // pública. ReferralService.recordEvent() é chamado apenas internamente por
-  // outros módulos do backend (install no cadastro, convert no webhook de
-  // pagamento).
+  // Marcos NÃO são afirmáveis pelo cliente — sem rota pública (a antiga
+  // POST /referral/event foi removida em 14/09: permitia crédito infinito
+  // variando o id do indicado). São server-side (ADR-0024):
+  //  - "cadastrou": AuthService.register()/google() → ReferralService.linkReferred() (só GRAVA o vínculo, não credita);
+  //  - "converteu": webhook do Stripe (BillingService) → ReferralService.recordConversion() — o ÚNICO que paga.
+  // D1/D7 ainda não existem (precisam de tarefa agendada).
 }

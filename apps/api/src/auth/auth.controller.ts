@@ -8,16 +8,16 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post("register")
-  register(@Body() b: { email: string; password: string; name?: string }) {
-    return this.auth.register(b.email, b.password, b.name);
+  register(@Body() b: { email: string; password: string; name?: string; ref?: string }) {
+    return this.auth.register(b.email, b.password, b.name, b.ref);
   }
   @Post("login")
   login(@Body() b: { email: string; password: string }) {
     return this.auth.login(b.email, b.password);
   }
   @Post("google")
-  google(@Body() b: { idToken: string }) {
-    return this.auth.google(b.idToken);
+  google(@Body() b: { idToken: string; ref?: string }) {
+    return this.auth.google(b.idToken, b.ref);
   }
   @Get("me")
   @UseGuards(AuthGuard)

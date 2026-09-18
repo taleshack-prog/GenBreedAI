@@ -49,6 +49,8 @@ export abstract class SubscriptionsRepository {
   abstract findLatestForUser(userId: string): Promise<SubscriptionRow | null>;
   /** Customer Stripe já usado pelo usuário (reuso — Customers duplicados quebram o portal). */
   abstract findCustomerIdForUser(userId: string): Promise<string | null>;
+  /** Linha por id de assinatura Stripe (webhook `customer.subscription.updated` só traz o id — ADR-0024, marco "converteu"). `null` se não existe. */
+  abstract findById(id: string): Promise<SubscriptionRow | null>;
 }
 
 export class InMemorySubscriptionsRepository extends SubscriptionsRepository {
@@ -86,6 +88,11 @@ export class InMemorySubscriptionsRepository extends SubscriptionsRepository {
   async findCustomerIdForUser(userId: string): Promise<string | null> {
     const all = this.forUser(userId);
     return all[0]?.stripeCustomerId ?? null;
+  }
+
+  async findById(id: string): Promise<SubscriptionRow | null> {
+    const row = this.rows.get(id);
+    return row ? { ...row } : null;
   }
 }
 
@@ -139,5 +146,16 @@ export class DrizzleSubscriptionsRepository extends SubscriptionsRepository {
   async findCustomerIdForUser(userId: string): Promise<string | null> {
     const rows = await this.rowsForUser(userId);
     return rows[0]?.stripeCustomerId ?? null;
+  }
+
+  async findById(id: string): Promise<SubscriptionRow | null> {
+    const rows = await this.db.select().from(subscriptions).where(eq(subscriptions.id, id));
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: r.id, userId: r.userId, tier: r.tier as PaidTier, interval: r.interval as SubscriptionInterval,
+      stripeCustomerId: r.stripeCustomerId, status: r.status as SubscriptionStatus,
+      currentPeriodEnd: r.currentPeriodEnd, cancelAtPeriodEnd: r.cancelAtPeriodEnd,
+    };
   }
 }

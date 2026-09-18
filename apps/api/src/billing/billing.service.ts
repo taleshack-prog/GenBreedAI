@@ -17,6 +17,7 @@ import { resolvePaymentProvider, StripePaymentProvider, type PaymentIntent, type
 import { PaymentIntentsRepository } from "./payment-intents.repository";
 import { SubscriptionsRepository, mapStripeSubscriptionStatus, type SubscriptionRow } from "./subscriptions.repository";
 import { WalletService } from "../economy/wallet.service";
+import { ReferralService } from "../referral/referral.service";
 
 export interface SubscriptionView { tier: Tier; interval: SubscriptionInterval; status: string; currentPeriodEnd: string; cancelAtPeriodEnd: boolean; }
 
@@ -38,6 +39,7 @@ export class BillingService {
     private readonly wallet: WalletService,
     private readonly intents: PaymentIntentsRepository,
     private readonly subscriptions: SubscriptionsRepository,
+    private readonly referral: ReferralService,
   ) {
     this.payments = resolvePaymentProvider(intents);
   }
@@ -175,6 +177,13 @@ export class BillingService {
           currentPeriodEnd: subscriptionPeriodEnd(sub),
           cancelAtPeriodEnd: sub.cancel_at_period_end,
         });
+        // Marco "converteu" (ADR-0024) também aqui: uma assinatura que nasceu
+        // não-ativa (pagamento pendente) e só ficou `active` depois chega por
+        // este evento. Idempotente — renovações e reenvios não creditam de novo.
+        if (sub.status === "active") {
+          const row = await this.subscriptions.findById(sub.id);
+          if (row) await this.referral.recordConversion(row.userId, { id: row.id, tier: row.tier });
+        }
         break;
       }
       case "customer.subscription.deleted": {
@@ -232,5 +241,15 @@ export class BillingService {
       stripeCustomerId: customerId, status: mapStripeSubscriptionStatus(sub.status),
       currentPeriodEnd: subscriptionPeriodEnd(sub), cancelAtPeriodEnd: sub.cancel_at_period_end,
     });
+
+    // Marco "converteu" da indicação (ADR-0024): liga o assinante (userId, vindo
+    // de client_reference_id — nunca do e-mail) ao indicador. Só com status CRU
+    // `active` do Stripe (pago) — `trialing` também vira ACTIVE no nosso enum,
+    // mas não deve render recompensa. Se o crédito falhar, o erro sobe: o
+    // webhook responde 500 e o Stripe reenvia (a criação da linha acima e a
+    // reivindicação do marco são idempotentes).
+    if (sub.status === "active") {
+      await this.referral.recordConversion(userId, { id: subscriptionId, tier: tier as "JUNIOR" | "SENIOR" | "PHD" });
+    }
   }
 }

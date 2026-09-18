@@ -1,10 +1,12 @@
 /**
  * Porta de persistência de granted_tiers — tiers concedidos fora do Stripe
  * (ex.: prêmio de indicação eleva o tier por 30 dias). Mesmo padrão de
- * WalletRepository/SubscriptionsRepository. `grant()` ainda não é chamado por
- * ninguém nesta fase (o gatilho de recordEvent("convert") do referral fica
- * pro próximo passo) — existe pra TierService já ter o que consultar e pra
- * dar pra testar.
+ * WalletRepository/SubscriptionsRepository. `grant()` é chamado por
+ * `ReferralService.recordConversion` (ADR-0024) quando o indicado assina o
+ * plano PHD: o INDICADOR ganha 1 mês do plano dele (FREE → JUNIOR), com
+ * `reason` "REFERRAL_PHD:<indicado>:<assinatura>". Atenção: `TierService`
+ * prioriza assinatura ativa, então para quem JÁ paga o mesmo tier a
+ * concessão só passa a valer se a assinatura cair antes de expirar.
  */
 import { eq, gt, and } from "drizzle-orm";
 import type { Tier } from "@genbreedai/shared";

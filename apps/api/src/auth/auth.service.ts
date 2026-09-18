@@ -7,6 +7,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import { UserRepository, type UserRow } from "./user.repository";
+import { ReferralService } from "../referral/referral.service";
+import { mailboxKey } from "../referral/self-referral";
 
 function secret(): string { return process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me"; }
 function newId(): string { return "usr_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -16,7 +18,29 @@ export interface AuthResult { token: string; user: { id: string; email: string |
 @Injectable()
 export class AuthService {
   private googleClient = new OAuth2Client();
-  constructor(private readonly users: UserRepository) {}
+  constructor(private readonly users: UserRepository, private readonly referral: ReferralService) {}
+
+  /**
+   * Vínculo indicador → indicado (ADR-0024) — SERVER-SIDE, só quando um usuário
+   * NOVO acabou de ser criado, nunca por rota pública. NÃO credita nada: o
+   * crédito só vem quando o indicado ASSINA (webhook do Stripe). Auto-indicação
+   * (mesmo usuário ou mesma caixa de e-mail, inclusive alias `+tag`/pontos do
+   * Gmail) não vincula. Qualquer falha aqui é engolida: o cadastro NUNCA
+   * quebra por causa de indicação (código inválido, erro de banco, etc.).
+   */
+  private async linkReferral(ref: unknown, u: UserRow): Promise<void> {
+    if (typeof ref !== "string" || !ref) return;
+    try {
+      const referrerId = await this.referral.ownerOfCode(ref);
+      if (!referrerId || referrerId === u.id) return;
+      const referrer = await this.users.findById(referrerId);
+      if (referrer?.email && u.email && mailboxKey(referrer.email) === mailboxKey(u.email)) return;
+      await this.referral.linkReferred(ref, u.id);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[auth] falha ao vincular indicação (cadastro segue normal):", e);
+    }
+  }
 
   private sign(u: UserRow): string {
     return jwt.sign({ sub: u.id, tier: u.tier, email: u.email }, secret(), { expiresIn: "30d" });
@@ -28,13 +52,14 @@ export class AuthService {
     return { token: this.sign(u), user: { id: u.id, email: u.email, name: u.name, tier: u.tier } };
   }
 
-  async register(email: string, password: string, name?: string): Promise<AuthResult> {
+  async register(email: string, password: string, name?: string, ref?: string): Promise<AuthResult> {
     email = (email ?? "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new BadRequestException("E-mail inválido.");
     if (!password || password.length < 8) throw new BadRequestException("A senha precisa de ao menos 8 caracteres.");
     if (await this.users.findByEmail(email)) throw new BadRequestException("Este e-mail já está cadastrado.");
     const passwordHash = await bcrypt.hash(password, 10);
     const u = await this.users.create({ id: newId(), email, name: name ?? null, passwordHash, googleId: null, tier: "FREE" });
+    await this.linkReferral(ref, u);
     return this.result(u);
   }
 
@@ -47,7 +72,7 @@ export class AuthService {
   }
 
   /** Login/cadastro via Google ID token (Google Identity Services no front). */
-  async google(idToken: string): Promise<AuthResult> {
+  async google(idToken: string, ref?: string): Promise<AuthResult> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) throw new BadRequestException("Login Google não configurado (defina GOOGLE_CLIENT_ID).");
     const ticket = await this.googleClient.verifyIdToken({ idToken, audience: clientId });
@@ -55,7 +80,10 @@ export class AuthService {
     if (!p?.sub) throw new UnauthorizedException("Token Google inválido.");
     let u = await this.users.findByGoogleId(p.sub);
     if (!u && p.email) u = await this.users.findByEmail(p.email.toLowerCase());
-    if (!u) u = await this.users.create({ id: newId(), email: p.email?.toLowerCase() ?? null, name: p.name ?? null, passwordHash: null, googleId: p.sub, tier: "FREE" });
+    if (!u) {
+      u = await this.users.create({ id: newId(), email: p.email?.toLowerCase() ?? null, name: p.name ?? null, passwordHash: null, googleId: p.sub, tier: "FREE" });
+      await this.linkReferral(ref, u); // só usuário NOVO — login de conta existente nunca vincula
+    }
     return this.result(u);
   }
 
