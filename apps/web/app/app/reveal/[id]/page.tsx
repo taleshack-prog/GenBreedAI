@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { listSpecimens, generateImage, getImage, type ApiSpecimen } from "../../../../lib/api";
+import { listSpecimens, generateImage, getImage, getReferral, type ApiSpecimen } from "../../../../lib/api";
 import { CapsuleCard } from "../../../../components/CapsuleCard";
 import { GenotypeChips } from "../../../../components/Genome";
 import { rarityOf, phenotypeOf } from "../../../../lib/reveal";
@@ -11,6 +11,7 @@ import { displayName } from "../../../../lib/display";
 import { methodLabel } from "../../../../lib/method-label";
 import { revealTitleWord } from "@genbreedai/shared";
 import { SexBadge } from "../../../../components/SexBadge";
+import { buildPublicSpecimenUrl, buildShareMessage, buildWhatsAppUrl } from "../../../../lib/share";
 
 const QTL_LABEL: Record<string,string> = { porte:"Porte", vigor:"Vigor", beleza:"Beleza", temperamento:"Temperamento", rosetas:"Rosetas" };
 
@@ -44,8 +45,11 @@ export default function RevealPage() {
   // continuar disponível — a mesma regra do endpoint POST .../image).
   const [polling, setPolling] = useState(false);
   const [pollTimedOut, setPollTimedOut] = useState(false);
+  // Código de indicação do DONO — vai no link público compartilhado (ver botão "Compartilhar no WhatsApp").
+  const [refCode, setRefCode] = useState<string | null>(null);
 
   useEffect(() => { listSpecimens().then(setAll).catch((e) => setErr(e.message)); }, []);
+  useEffect(() => { getReferral().then((r) => setRefCode(r.code)).catch(() => {}); }, []);
 
   const specimen = useMemo(() => all.find((s) => s.id === params.id) ?? null, [all, params.id]);
   const sire = useMemo(() => (specimen ? all.find((s) => s.id === specimen.sireId) ?? null : null), [all, specimen]);
@@ -155,12 +159,13 @@ export default function RevealPage() {
         {imgMsg && <p className="text-center text-xs text-ink-muted">{imgMsg}</p>}
         <button
           onClick={() => {
-            const txt = `Revelei um ${revealTitleWord(specimen.species).toLowerCase()} ${rarity.label} em GenBreedAI: ${specimen.species}!`;
-            if (navigator.share) navigator.share({ title: "GenBreedAI", text: txt }).catch(() => {});
-            else alert("Exportação de clipe (15s) chega com o pipeline de mídia. Texto copiado para compartilhar: " + txt);
+            const url = buildPublicSpecimenUrl(specimen.id, refCode);
+            const message = buildShareMessage(displayName(specimen), specimen.aura);
+            if (navigator.share) navigator.share({ title: "GenBreedAI", text: message, url }).catch(() => {});
+            else window.open(buildWhatsAppUrl(message, url), "_blank");
           }}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-ok px-4 py-3.5 font-display font-black uppercase tracking-wide text-bg-900 shadow-neon-green transition hover:brightness-110">
-          ▶ Exportar clipe <span className="font-mono text-xs opacity-80">15s</span>
+          ▶ Compartilhar no WhatsApp
         </button>
         <button onClick={() => setShowGenome((v) => !v)}
           className="flex w-full items-center justify-between rounded-xl border border-cyan/30 bg-bg-800 px-4 py-3 font-display text-sm uppercase tracking-wide text-cyan">
