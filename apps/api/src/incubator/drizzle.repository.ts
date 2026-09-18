@@ -1,6 +1,6 @@
 /**
- * Adapter Drizzle da porta IncubatorRepository (ADR-0020). Driver-agnóstico
- * (pg → Neon/local, ou PGlite nos testes), mesmo padrão de
+ * Adapter Drizzle da porta IncubatorRepository (ADR-0020, gestação ADR-0021).
+ * Driver-agnóstico (pg → Neon/local, ou PGlite nos testes), mesmo padrão de
  * `specimens/drizzle.repository.ts`.
  */
 import { and, eq, isNull } from "drizzle-orm";
@@ -19,7 +19,7 @@ function toStored(r: Row): StoredIncubatorEntry {
     prob: r.prob, fPedigree: r.fPedigree, fixationIndex: r.fixationIndex, aura: r.aura,
     generation: r.generation, sex: r.sex as StoredIncubatorEntry["sex"],
     fertility: r.fertility ?? null, haldaneStatus: (r.haldaneStatus as StoredIncubatorEntry["haldaneStatus"]) ?? null,
-    imageCacheKey: r.imageCacheKey, revealedAt: r.revealedAt, bornSpecimenId: r.bornSpecimenId,
+    gestationStartedAt: r.gestationStartedAt, gestationEndsAt: r.gestationEndsAt, bornSpecimenId: r.bornSpecimenId,
     frozen: r.frozen, createdAt: r.createdAt,
   };
 }
@@ -28,7 +28,7 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
   // `db` é tipado como any para permitir tanto node-postgres quanto PGlite.
   constructor(private readonly db: any) { super(); }
 
-  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "imageCacheKey" | "revealedAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry> {
+  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry> {
     const id = `incu_${randomUUID()}`;
     const row = {
       id, ownerId: entry.ownerId, crossId: entry.crossId, sireId: entry.sireId, damId: entry.damId,
@@ -51,15 +51,19 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
     return rows.map(toStored);
   }
 
-  /** UPDATE...WHERE revealed_at IS NULL...RETURNING — atômico de verdade no Postgres. */
-  async claimReveal(id: string, imageCacheKey: string): Promise<StoredIncubatorEntry | null> {
+  /**
+   * UPDATE...WHERE gestation_started_at IS NULL AND born_specimen_id IS NULL
+   * ...RETURNING — atômico de verdade no Postgres (ADR-0021 item 3).
+   */
+  async claimGestation(id: string, startedAt: Date, endsAt: Date): Promise<StoredIncubatorEntry | null> {
     const rows: Row[] = await this.db.update(incubatorEntries)
-      .set({ revealedAt: new Date(), imageCacheKey })
-      .where(and(eq(incubatorEntries.id, id), isNull(incubatorEntries.revealedAt)))
+      .set({ gestationStartedAt: startedAt, gestationEndsAt: endsAt })
+      .where(and(eq(incubatorEntries.id, id), isNull(incubatorEntries.gestationStartedAt), isNull(incubatorEntries.bornSpecimenId)))
       .returning();
     return rows[0] ? toStored(rows[0]) : null;
   }
 
+  /** Órfão (ver nota em `in-memory.repository.ts`) — nenhuma rota chama mais isto. */
   async markFrozen(id: string): Promise<StoredIncubatorEntry | null> {
     const rows: Row[] = await this.db.update(incubatorEntries).set({ frozen: true }).where(eq(incubatorEntries.id, id)).returning();
     return rows[0] ? toStored(rows[0]) : null;

@@ -1,28 +1,43 @@
 /**
- * Incubadora (ADR-0020): descrições de fenótipo vivem aqui de graça, sem
- * prazo, até o jogador revelar (gera o retrato de IA — consome revealQuota)
- * e/ou fazer nascer (materializa o espécime, grátis, reaproveitando a
- * imagem já revelada). "Congelar" preserva uma revelada-mas-não-nascida
- * (custa catalisadores, como o freezeOption antigo). Descartar (DELETE)
- * apaga a entrada — o "perder" é decisão/aviso da WEB, a API só executa.
+ * Incubadora (ADR-0020, modelo de gestação ADR-0021): descrições de
+ * fenótipo vivem aqui de graça, sem prazo, até o jogador GESTAR (consome a
+ * vaga de `birthQuota` — é aqui que o único custo real, a imagem de IA, é
+ * comprometido) e, depois do prazo pela aura, fazer NASCER (gera a imagem,
+ * cria o espécime, grátis — a vaga já foi paga na gestação). Descartar
+ * (DELETE) apaga a entrada — o "perder" é decisão/aviso da WEB, a API só
+ * executa.
+ *
+ * "Agora" (início/fim da gestação, checagem do prazo) vem de `Clock`
+ * (injetado, `../common/clock.ts`), nunca de `new Date()`/`Date.now()`
+ * direto — testes e2e (via `app.inject()`) avançam `SystemClock.
+ * setForTesting()` em vez de `vi.useFakeTimers()` global, que trava a
+ * resposta simulada do Fastify indefinidamente (bugfix: era a causa dos
+ * timeouts de 5s em `incubator.e2e.spec.ts`).
  */
 import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException } from "@nestjs/common";
 import type { Tier } from "@genbreedai/shared";
 import { IncubatorRepository, type StoredIncubatorEntry } from "./in-memory.repository";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
-import { ImageService, cacheKeyOf, type ImageResult } from "../images/image.service";
-import { buildPrompt } from "../images/prompt";
+import { ImageService, cacheKeyOf } from "../images/image.service";
 import { stat, publicUrl } from "../images/storage";
 import { QuotaService } from "../quota/quota.service";
-import { WalletService, FREEZE_COST } from "../economy/wallet.service";
+import { WalletService } from "../economy/wallet.service";
 import { tierPolicy } from "../common/tiers";
+import { Clock } from "../common/clock";
+import { gestationEndFor, gestationHoursForAura } from "./gestation-time";
 
 export interface IncubatorEntryView {
   id: string; crossId: string; sireId: string; damId: string; method: string;
   pack: string; species: string; genotype: StoredIncubatorEntry["genotype"]; phenotype: StoredIncubatorEntry["phenotype"];
   prob: number; fPedigree: number; fixationIndex: number; aura: number; generation: number;
   sex: string; fertility: number | null; haldaneStatus: string | null;
-  imageUrl: string | null; revealed: boolean; frozen: boolean; born: boolean; bornSpecimenId: string | null;
+  imageUrl: string | null;
+  /** ADR-0021 item 6. */
+  state: "NA_INCUBADORA" | "GESTANDO" | "NASCIDO";
+  gestationEndsAt: string | null;
+  /** Tempo previsto pela aura (item 6) — sempre presente, independe do estado (útil pra UI mostrar "vai levar Xh" antes de gestar). */
+  gestationHours: number;
+  bornSpecimenId: string | null;
   createdAt: string;
 }
 
@@ -34,6 +49,7 @@ export class IncubatorService {
     private readonly images: ImageService,
     private readonly quota: QuotaService,
     private readonly wallet: WalletService,
+    private readonly clock: Clock,
   ) {}
 
   /** `StoredIncubatorEntry` → objeto no formato `StoredSpecimen` que o pipeline de imagem (buildPrompt/generateForSpecimen) já entende. */
@@ -54,64 +70,68 @@ export class IncubatorService {
   }
 
   private toView(e: StoredIncubatorEntry, imageUrl: string | null): IncubatorEntryView {
+    const state: IncubatorEntryView["state"] =
+      e.bornSpecimenId !== null ? "NASCIDO" : e.gestationStartedAt !== null ? "GESTANDO" : "NA_INCUBADORA";
     return {
       id: e.id, crossId: e.crossId, sireId: e.sireId, damId: e.damId, method: e.method,
       pack: e.pack, species: e.species, genotype: e.genotype, phenotype: e.phenotype,
       prob: e.prob, fPedigree: e.fPedigree, fixationIndex: e.fixationIndex, aura: e.aura, generation: e.generation,
       sex: e.sex, fertility: e.fertility, haldaneStatus: e.haldaneStatus,
-      imageUrl, revealed: e.revealedAt !== null, frozen: e.frozen, born: e.bornSpecimenId !== null,
+      imageUrl, state, gestationEndsAt: e.gestationEndsAt ? e.gestationEndsAt.toISOString() : null,
+      gestationHours: gestationHoursForAura(e.aura),
       bornSpecimenId: e.bornSpecimenId, createdAt: e.createdAt.toISOString(),
     };
   }
 
-  /** GET /api/v1/incubator — tudo que a web precisa: descrição completa + estado. */
+  /**
+   * GET /api/v1/incubator — tudo que a web precisa: descrição completa +
+   * estado. Só entradas NASCIDAS têm imagem (não existe imagem antes do
+   * nascimento neste modelo, ADR-0021) — derivada do espécime já nascido
+   * (`bornSpecimenId`), nunca de uma `imageCacheKey` própria da entrada (essa
+   * coluna saiu do schema, ver ADR-0021 item 5).
+   */
   async list(ownerId: string): Promise<IncubatorEntryView[]> {
     const entries = await this.repo.listByOwner(ownerId);
     const out: IncubatorEntryView[] = [];
     for (const e of entries) {
       let imageUrl: string | null = null;
-      if (e.imageCacheKey) {
-        const st = await stat(e.imageCacheKey);
-        if (st) imageUrl = publicUrl(e.imageCacheKey, st.version);
+      if (e.bornSpecimenId) {
+        const specimen = await this.specimens.get(e.bornSpecimenId);
+        if (specimen) {
+          const cacheKey = specimen.cacheKey ?? cacheKeyOf(specimen);
+          const st = await stat(cacheKey);
+          if (st) imageUrl = publicUrl(cacheKey, st.version);
+        }
       }
       out.push(this.toView(e, imageUrl));
     }
     return out;
   }
 
-  /** Retrato já revelado — devolve sem cobrar (item 4: "Se já revelada, devolve a imagem sem cobrar"). */
-  private async cachedImage(e: StoredIncubatorEntry): Promise<ImageResult> {
-    const cacheKey = e.imageCacheKey ?? cacheKeyOf(this.asFakeSpecimen(e));
-    const st = await stat(cacheKey);
-    return {
-      cacheKey, status: "APPROVED", imageUrl: st ? publicUrl(cacheKey, st.version) : null,
-      model: "cache", cached: true, prompt: buildPrompt(this.asFakeSpecimen(e)),
-    };
-  }
-
   /**
-   * POST /incubator/:id/reveal (ADR-0020, item 4). Reivindicação ATÔMICA
-   * (`repo.claimReveal`, mesmo padrão de `claimIncludedPortrait`) ANTES de
-   * cobrar — só quem ganha a reivindicação cobra; corrida (2 pedidos
-   * simultâneos na MESMA entrada nunca revelada) faz o perdedor estornar o
-   * que acabou de cobrar e devolver a imagem já revelada pelo vencedor, sem
-   * cobrança dupla.
+   * POST /incubator/:id/gestate (ADR-0021, item 3). É AQUI que a vaga de
+   * `birthQuota` é consumida (reserva atômica, mesmo padrão do antigo
+   * `reveal()`, ADR-0020: sem vaga usa 1 crédito de imagem; sem nenhum dos
+   * dois, 429 com `nextAvailableAt`). Nenhuma imagem é gerada aqui — só marca
+   * `gestationStartedAt`/`gestationEndsAt` (prazo pela aura, `gestation-
+   * time.ts`). Entrada já em gestação ou já nascida → 400.
    */
-  async reveal(id: string, ownerId: string, tier: Tier): Promise<ImageResult> {
+  async gestate(id: string, ownerId: string, tier: Tier): Promise<IncubatorEntryView> {
     const entry = await this.getOwned(id, ownerId);
-    if (entry.revealedAt !== null) return this.cachedImage(entry);
+    if (entry.bornSpecimenId !== null) throw new BadRequestException("Esta descrição já nasceu.");
+    if (entry.gestationStartedAt !== null) throw new BadRequestException("Esta descrição já está gestando.");
 
-    const policy = tierPolicy(tier).revealQuota;
-    const reservationId = await this.quota.reserve("reveal", ownerId, policy);
+    const policy = tierPolicy(tier).birthQuota;
+    const reservationId = await this.quota.reserve("birth", ownerId, policy);
     let usedCredit = false;
     if (!reservationId) {
       usedCredit = await this.wallet.consumeImageCredit(ownerId);
       if (!usedCredit) {
-        const nextAt = await this.quota.nextAvailableAt("reveal", ownerId, policy);
+        const nextAt = await this.quota.nextAvailableAt("birth", ownerId, policy);
         throw new HttpException(
           {
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: "Sem cota de revelação nem créditos de imagem. Indique amigos, colete o bônus semanal, ou compre créditos.",
+            message: "Sem vaga de gestação nem créditos de imagem. Indique amigos, colete o bônus quinzenal, ou compre créditos.",
             error: "Too Many Requests",
             nextAvailableAt: nextAt ? nextAt.toISOString() : null,
           },
@@ -119,51 +139,76 @@ export class IncubatorService {
         );
       }
     }
-    try {
-      const fake = this.asFakeSpecimen(entry);
-      // skipQuota=true SEMPRE: a cota/crédito de REVELAÇÃO já foi cobrada
-      // acima (revealQuota, ADR-0020) — `generateForSpecimen` não deve
-      // cobrar de novo pela cota MENSAL de retratos extras (ADR-0019),
-      // que é uma coisa diferente (regenerar).
-      const result = await this.images.generateForSpecimen(fake, ownerId, tier, true);
-      const claimed = await this.repo.claimReveal(id, result.cacheKey);
-      if (!claimed) {
-        // Corrida: outro pedido revelou primeiro entre o get() e agora —
-        // estorna o que cobramos (nunca cobra 2x pela mesma revelação) e
-        // devolve a imagem que o vencedor já gerou.
-        if (reservationId) await this.quota.release("reveal", reservationId);
-        else if (usedCredit) await this.wallet.creditImageCredits(ownerId, 1);
-        const fresh = await this.repo.get(id);
-        return this.cachedImage(fresh!);
-      }
-      if (reservationId) await this.quota.confirm("reveal", reservationId);
-      return result;
-    } catch (e) {
-      if (reservationId) await this.quota.release("reveal", reservationId);
+
+    const refund = async () => {
+      if (reservationId) await this.quota.release("birth", reservationId);
       else if (usedCredit) await this.wallet.creditImageCredits(ownerId, 1);
+    };
+
+    let claimed: StoredIncubatorEntry | null;
+    try {
+      const startedAt = this.clock.now();
+      const endsAt = gestationEndFor(entry.aura, startedAt);
+      claimed = await this.repo.claimGestation(id, startedAt, endsAt);
+    } catch (e) {
+      await refund();
       throw e;
     }
+    if (!claimed) {
+      // Corrida: outro pedido reivindicou a gestação desta MESMA entrada
+      // entre o getOwned() e agora — estorna o que acabou de cobrar (nunca
+      // cobra 2x pela mesma vaga) e responde 400 (item 3).
+      await refund();
+      throw new BadRequestException("Esta descrição já está gestando.");
+    }
+    if (reservationId) await this.quota.confirm("birth", reservationId);
+    return this.toView(claimed, null);
   }
 
   /**
-   * POST /incubator/:id/born (ADR-0020, item 5) — só revelada; cria o
-   * espécime COM os campos já gravados na entrada (genótipo, fenótipo,
-   * sexo, fertilidade, F, IF, aura, cacheKey da imagem já revelada), SEM
-   * recalcular nada. Grátis, sem cota — a imagem já foi paga na revelação.
+   * POST /incubator/:id/born (ADR-0021, item 4) — só depois do prazo de
+   * gestação (`gestationEndsAt` já passado); antes disso, 400 com o tempo
+   * restante. Gera a imagem AGORA (sem consumir vaga nem crédito — já foram
+   * pagos na gestação), cria o espécime com os campos já gravados na entrada
+   * (genótipo, fenótipo, sexo, fertilidade, F, IF, aura), SEM recalcular
+   * nada, e marca `bornSpecimenId`.
    */
-  async born(id: string, ownerId: string): Promise<{ specimen: StoredSpecimen }> {
+  async born(id: string, ownerId: string, tier: Tier): Promise<{ specimen: StoredSpecimen }> {
     const entry = await this.getOwned(id, ownerId);
-    if (entry.bornSpecimenId) throw new BadRequestException("Esta descrição já nasceu.");
-    if (entry.revealedAt === null) throw new BadRequestException("Revele antes de fazer nascer.");
+    if (entry.bornSpecimenId !== null) throw new BadRequestException("Esta descrição já nasceu.");
+    if (entry.gestationStartedAt === null || entry.gestationEndsAt === null) {
+      throw new BadRequestException("Inicie a gestação antes de fazer nascer.");
+    }
+    const now = this.clock.now().getTime();
+    const endsAtMs = entry.gestationEndsAt.getTime();
+    if (endsAtMs > now) {
+      const remainingMin = Math.ceil((endsAtMs - now) / 60000);
+      throw new BadRequestException(`Gestação ainda não terminou. Faltam ${remainingMin} minuto(s).`);
+    }
+
+    // LIMITAÇÃO CONHECIDA (não resolvida aqui, reportada no resumo): duas
+    // chamadas a born() na MESMA entrada, exatamente após o prazo, podem
+    // ambas passar do check `bornSpecimenId === null` acima antes de
+    // qualquer uma marcar — image.service já não duplica CUSTO (cache por
+    // cacheKey), mas `specimens.save()` pode criar 2 espécimes. Sem proteção
+    // atômica dedicada (tipo `claimGestation`) porque não é o mesmo tipo de
+    // simultaneidade pedido no item 9 ("gestações simultâneas: sem teto" é
+    // sobre entradas DIFERENTES gestando ao mesmo tempo, não uma corrida na
+    // MESMA entrada) e o `born()` antigo (ADR-0020) nunca teve essa proteção.
+    //
+    // Nenhum custo aqui — skipQuota=true sempre: a vaga já foi paga em
+    // GESTAR (ADR-0021 item 3); `generateForSpecimen` não cobra de novo.
+    const fake = this.asFakeSpecimen(entry);
+    const result = await this.images.generateForSpecimen(fake, ownerId, tier, true);
     const stored = await this.specimens.save({
       id: "", ownerId, pack: entry.pack, species: entry.species,
       genotype: entry.genotype, phenotype: entry.phenotype, generation: entry.generation,
       sireId: entry.sireId, damId: entry.damId, method: entry.method,
       fPedigree: entry.fPedigree, fixationIndex: entry.fixationIndex, aura: entry.aura,
-      cacheKey: entry.imageCacheKey, status: "ALIVE",
+      cacheKey: result.cacheKey, status: "ALIVE",
       sex: entry.sex, fertility: entry.fertility, haldaneStatus: entry.haldaneStatus,
-      // O retrato já foi PAGO na revelação (reusado aqui, não regenerado) —
-      // nenhum "vale" de retrato incluído (ADR-0019) faz sentido de novo.
+      // O retrato já foi gerado (e pago, via a vaga de gestação) agora mesmo
+      // — nenhum "vale" de retrato incluído (ADR-0019) faz sentido de novo.
       includedPortrait: false,
     });
     await this.repo.markBorn(id, stored.id);
@@ -172,25 +217,6 @@ export class IncubatorService {
     // que é quando o espécime de fato passa a existir.
     await this.wallet.rewardForCross(ownerId, entry.aura).catch(() => {});
     return { specimen: stored };
-  }
-
-  /**
-   * POST /incubator/:id/freeze (ADR-0020, item 6) — só revelada e não
-   * nascida; cobra catalisadores (mesmo valor do freezeOption antigo,
-   * `FREEZE_COST`). Congelada continua podendo nascer (grátis) depois.
-   */
-  async freeze(id: string, ownerId: string): Promise<{ entry: IncubatorEntryView; wallet: Awaited<ReturnType<WalletService["get"]>> }> {
-    const entry = await this.getOwned(id, ownerId);
-    if (entry.revealedAt === null) throw new BadRequestException("Revele antes de congelar.");
-    if (entry.bornSpecimenId) throw new BadRequestException("Esta descrição já nasceu.");
-    if (!entry.frozen) {
-      await this.wallet.charge(ownerId, FREEZE_COST);
-      await this.repo.markFrozen(id);
-    }
-    const updated = (await this.repo.get(id))!;
-    let imageUrl: string | null = null;
-    if (updated.imageCacheKey) { const st = await stat(updated.imageCacheKey); if (st) imageUrl = publicUrl(updated.imageCacheKey, st.version); }
-    return { entry: this.toView(updated, imageUrl), wallet: await this.wallet.get(ownerId) };
   }
 
   /** DELETE /api/v1/incubator/:id — descarta a entrada. Só a web avisa antes; a API só executa. */

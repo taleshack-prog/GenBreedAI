@@ -1,15 +1,16 @@
 /**
- * ADR-0020: `QuotaService` passou a servir DOIS contadores independentes
+ * ADR-0021 (era ADR-0020): `QuotaService` serve DOIS contadores independentes
  * (`kind`): "cross_hourly" (limite TÉCNICO de 60/hora em POST /cross, igual
- * pra todo tier — QuotaGuard) e "reveal" (cota de REVELAÇÃO por tier,
- * rolling7d/day — era a cota de cruzamento da ADR-0019, mesmos valores,
- * cobrada agora em POST /incubator/:id/reveal). Reserva atômica
- * (QuotaGuard/IncubatorService → QuotaService.reserve), confirmação no
- * sucesso e estorno na falha. QuotaService é REAL (equivalente em memória,
- * sem DATABASE_URL); CrossService é FALSO (mock) — sem motor, sem
- * repositório, sem DB. O caso "61 cruzamentos numa hora → 429" fim-a-fim
- * (com o motor de verdade) está em `cross.e2e.spec.ts`; aqui é só o
- * contrato de reserva/confirmação/estorno + a aritmética das janelas.
+ * pra todo tier — QuotaGuard) e "birth" (vaga de GESTAÇÃO por tier,
+ * rolling7d/day — era "reveal"/cota de revelação da ADR-0020, era a cota de
+ * cruzamento da ADR-0019, mesmos valores, cobrada agora em POST
+ * /incubator/:id/gestate). Reserva atômica (QuotaGuard/IncubatorService →
+ * QuotaService.reserve), confirmação no sucesso e estorno na falha.
+ * QuotaService é REAL (equivalente em memória, sem DATABASE_URL);
+ * CrossService é FALSO (mock) — sem motor, sem repositório, sem DB. O caso
+ * "61 cruzamentos numa hora → 429" fim-a-fim (com o motor de verdade) está em
+ * `cross.e2e.spec.ts`; aqui é só o contrato de reserva/confirmação/estorno +
+ * a aritmética das janelas.
  */
 import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
 import { BadRequestException, NotFoundException, HttpException, ExecutionContext } from "@nestjs/common";
@@ -21,7 +22,15 @@ import { QuotaGuard, type CrossReservedRequest } from "../src/quota/quota.guard"
 import { QuotaService } from "../src/quota/quota.service";
 import { isQuotaUnlimitedDev, resetQuotaUnlimitedDevWarnings } from "../src/quota/quota-unlimited-dev";
 import { TierService } from "../src/billing/tier.service";
+import { SystemClock } from "../src/common/clock";
 import type { CrossDto } from "../src/cross/dto/cross.dto";
+
+// `QuotaService` agora recebe `Clock` (bugfix: "agora" injetável — ver
+// `common/clock.ts`); `SystemClock.now()` chama `new Date()`, que os testes
+// abaixo continuam fakeando via `vi.useFakeTimers()`/`vi.setSystemTime()`
+// normalmente (nenhum destes testes faz `app.inject()` — não há o problema
+// de `setImmediate` do Fastify travando, então fake timers globais são
+// seguros aqui, diferente de `incubator.e2e.spec.ts`).
 
 /** Contexto Nest mínimo (guard) + objeto `req` reaproveitado pelo controller (crossReservationId fica nele). */
 function makeContext(userId: string): { ctx: ExecutionContext; req: CrossReservedRequest } {
@@ -57,7 +66,7 @@ describe("Limite técnico horário de POST /cross (ADR-0020) — QuotaGuard + Cr
     delete process.env.DATABASE_URL;
     process.env.NODE_ENV = "test";
     resetQuotaUnlimitedDevWarnings();
-    quota = new QuotaService();
+    quota = new QuotaService(new SystemClock());
     quota.resetAll();
     tier = tierServiceFor("FREE"); // hourlyCrossLimit é igual (60) pra todo tier
   });
@@ -208,7 +217,7 @@ describe("QUOTA_UNLIMITED_DEV (flag de dev, ex-CROSS_QUOTA_UNLIMITED)", () => {
   it("item 4 (pedido): NODE_ENV=production + flag ligada → QuotaService.reserve() continua limitando de verdade (fim-a-fim)", async () => {
     process.env.NODE_ENV = "production";
     process.env.QUOTA_UNLIMITED_DEV = "true";
-    const quota = new QuotaService();
+    const quota = new QuotaService(new SystemClock());
     const policy = { limit: 1, window: "hour" } as const;
     const id1 = await quota.reserve("cross_hourly", "prod-user", policy);
     expect(id1).not.toBeNull(); // a 1ª reserva de verdade passa (dentro do limite)
@@ -231,63 +240,63 @@ describe("Janelas de cota por kind (ADR-0020) — QuotaService direto, sem contr
     delete process.env.QUOTA_UNLIMITED_DEV;
     delete process.env.CROSS_QUOTA_UNLIMITED;
     delete process.env.DATABASE_URL;
-    quota = new QuotaService();
+    quota = new QuotaService(new SystemClock());
   });
   afterEach(() => { vi.useRealTimers(); });
 
-  it("reveal FREE (1/rolling7d): 1º passa, 2º em seguida → null (429); 7 dias + 1 min depois → passa de novo", async () => {
+  it("birth FREE (1/rolling7d): 1º passa, 2º em seguida → null (429); 7 dias + 1 min depois → passa de novo", async () => {
     const policy = { limit: 1, window: "rolling7d" } as const;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
 
-    const id1 = await quota.reserve("reveal", "free-user", policy);
+    const id1 = await quota.reserve("birth", "free-user", policy);
     expect(id1).not.toBeNull();
-    await quota.confirm("reveal", id1!);
+    await quota.confirm("birth", id1!);
 
-    const id2 = await quota.reserve("reveal", "free-user", policy);
+    const id2 = await quota.reserve("birth", "free-user", policy);
     expect(id2).toBeNull();
 
     vi.setSystemTime(new Date("2026-01-08T12:01:00Z")); // 7 dias + 1 min depois
-    const id3 = await quota.reserve("reveal", "free-user", policy);
+    const id3 = await quota.reserve("birth", "free-user", policy);
     expect(id3).not.toBeNull();
   });
 
-  it("reveal JUNIOR (3/rolling7d): 3 passam, o 4º → null", async () => {
+  it("birth JUNIOR (3/rolling7d): 3 passam, o 4º → null", async () => {
     const policy = { limit: 3, window: "rolling7d" } as const;
     for (let i = 0; i < 3; i++) {
-      const id = await quota.reserve("reveal", "junior-user", policy);
+      const id = await quota.reserve("birth", "junior-user", policy);
       expect(id).not.toBeNull();
-      await quota.confirm("reveal", id!);
+      await quota.confirm("birth", id!);
     }
-    expect(await quota.reserve("reveal", "junior-user", policy)).toBeNull();
+    expect(await quota.reserve("birth", "junior-user", policy)).toBeNull();
   });
 
-  it("reveal SENIOR (1/day, America/Sao_Paulo): esgota no dia, libera na virada da meia-noite local", async () => {
+  it("birth SENIOR (1/day, America/Sao_Paulo): esgota no dia, libera na virada da meia-noite local", async () => {
     const policy = { limit: 1, window: "day" } as const;
     vi.useFakeTimers();
     // 2026-01-01 23:59 em America/Sao_Paulo (UTC-3) = 2026-01-02T02:59:00Z.
     vi.setSystemTime(new Date("2026-01-02T02:59:00Z"));
-    const id1 = await quota.reserve("reveal", "senior-user", policy);
+    const id1 = await quota.reserve("birth", "senior-user", policy);
     expect(id1).not.toBeNull();
-    await quota.confirm("reveal", id1!);
-    expect(await quota.reserve("reveal", "senior-user", policy)).toBeNull();
+    await quota.confirm("birth", id1!);
+    expect(await quota.reserve("birth", "senior-user", policy)).toBeNull();
 
     // 1 minuto depois já é 2026-01-02T00:00 em São Paulo — outro dia civil.
     vi.setSystemTime(new Date("2026-01-02T03:00:00Z"));
-    const id2 = await quota.reserve("reveal", "senior-user", policy);
+    const id2 = await quota.reserve("birth", "senior-user", policy);
     expect(id2).not.toBeNull();
   });
 
-  it("reveal PHD (3/day, America/Sao_Paulo): 3 no mesmo dia civil passam, o 4º não", async () => {
+  it("birth PHD (3/day, America/Sao_Paulo): 3 no mesmo dia civil passam, o 4º não", async () => {
     const policy = { limit: 3, window: "day" } as const;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-02T14:00:00Z")); // meio do dia em São Paulo
     for (let i = 0; i < 3; i++) {
-      const id = await quota.reserve("reveal", "phd-user", policy);
+      const id = await quota.reserve("birth", "phd-user", policy);
       expect(id).not.toBeNull();
-      await quota.confirm("reveal", id!);
+      await quota.confirm("birth", id!);
     }
-    expect(await quota.reserve("reveal", "phd-user", policy)).toBeNull();
+    expect(await quota.reserve("birth", "phd-user", policy)).toBeNull();
   });
 
   it("cross_hourly (60/hour): esgota na hora, libera 1h+1min depois — mesma aritmética de rolling7d, janela menor", async () => {
@@ -304,28 +313,28 @@ describe("Janelas de cota por kind (ADR-0020) — QuotaService direto, sem contr
     expect(await quota.reserve("cross_hourly", "hourly-user", policy)).not.toBeNull();
   });
 
-  it("cross_hourly e reveal são contadores INDEPENDENTES pro mesmo dono — esgotar um não afeta o outro", async () => {
+  it("cross_hourly e birth são contadores INDEPENDENTES pro mesmo dono — esgotar um não afeta o outro", async () => {
     const hourlyPolicy = { limit: 1, window: "hour" } as const;
-    const revealPolicy = { limit: 1, window: "rolling7d" } as const;
+    const birthPolicy = { limit: 1, window: "rolling7d" } as const;
     const owner = "shared-owner";
     const hid = await quota.reserve("cross_hourly", owner, hourlyPolicy);
     expect(hid).not.toBeNull();
     await quota.confirm("cross_hourly", hid!);
     expect(await quota.reserve("cross_hourly", owner, hourlyPolicy)).toBeNull(); // horário esgotado
 
-    const rid = await quota.reserve("reveal", owner, revealPolicy);
-    expect(rid).not.toBeNull(); // reveal continua livre — contador separado
+    const rid = await quota.reserve("birth", owner, birthPolicy);
+    expect(rid).not.toBeNull(); // birth continua livre — contador separado
   });
 
   it("RESERVED com mais de 10 minutos não conta (proteção contra processo morto)", async () => {
     const policy = { limit: 1, window: "rolling7d" } as const;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
-    const id1 = await quota.reserve("reveal", "stale-user", policy);
+    const id1 = await quota.reserve("birth", "stale-user", policy);
     expect(id1).not.toBeNull();
     // NUNCA confirmada nem estornada (processo "morreu" no meio) — 11 min depois:
     vi.setSystemTime(new Date("2026-01-01T12:11:00Z"));
-    const id2 = await quota.reserve("reveal", "stale-user", policy);
+    const id2 = await quota.reserve("birth", "stale-user", policy);
     expect(id2).not.toBeNull(); // a RESERVED velha não contou mais
   });
 });

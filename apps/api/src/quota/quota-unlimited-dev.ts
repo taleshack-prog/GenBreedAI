@@ -1,7 +1,7 @@
 /**
  * Flag de DEV/TESTE que ignora TODA cota (`QuotaService.reserve()` não
  * distingue `kind` — vale tanto pro limite horário de cruzar quanto pra
- * `revealQuota`, ADR-0020).
+ * `birthQuota`, ADR-0021).
  *
  * Nome NOVO: `QUOTA_UNLIMITED_DEV` — o nome antigo, `CROSS_QUOTA_UNLIMITED`
  * (ADR-0019), enganava: dava a entender que só desligava a cota de

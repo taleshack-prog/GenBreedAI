@@ -1,8 +1,10 @@
 /**
- * Incubadora (ADR-0020): GET lista, POST .../reveal consome revealQuota (gera
- * o retrato), POST .../born materializa o espécime (grátis, reaproveita a
- * imagem revelada), POST .../freeze preserva revelada-não-nascida (custa
- * catalisadores), DELETE descarta.
+ * Incubadora (ADR-0021): GET lista (estado NA_INCUBADORA|GESTANDO|NASCIDO),
+ * POST .../gestate consome a vaga de birthQuota (inicia a gestação, prazo
+ * pela aura), POST .../born só depois do prazo (gera a imagem, materializa o
+ * espécime, grátis — a vaga já foi paga na gestação), DELETE descarta.
+ * Rotas `.../reveal` e `.../freeze` (ADR-0020) saíram — não existe mais
+ * revelação avulsa nem congelamento neste modelo.
  */
 import { Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard, CurrentUser, type AuthenticatedUser } from "../common/auth.guard";
@@ -19,23 +21,18 @@ export class IncubatorController {
     return this.incubator.list(user.id);
   }
 
-  @Post(":id/reveal")
+  @Post(":id/gestate")
   @UseGuards(AuthGuard)
-  async reveal(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+  async gestate(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
     const tier = await this.tier.resolve(user.id, user.tier);
-    return this.incubator.reveal(id, user.id, tier);
+    return this.incubator.gestate(id, user.id, tier);
   }
 
   @Post(":id/born")
   @UseGuards(AuthGuard)
-  born(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.incubator.born(id, user.id);
-  }
-
-  @Post(":id/freeze")
-  @UseGuards(AuthGuard)
-  freeze(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
-    return this.incubator.freeze(id, user.id);
+  async born(@CurrentUser() user: AuthenticatedUser, @Param("id") id: string) {
+    const tier = await this.tier.resolve(user.id, user.tier);
+    return this.incubator.born(id, user.id, tier);
   }
 
   @Delete(":id")

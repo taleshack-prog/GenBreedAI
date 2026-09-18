@@ -4,7 +4,7 @@
  * imagem) e grava cada uma na incubadora; NÃO cria espécime, NÃO consome
  * cota de revelação. Só guard: `QuotaGuard`, agora só o limite TÉCNICO
  * anti-abuso (60/hora, todo tier, ADR-0020) — não mais a cota de cruzamento
- * por tier (essa virou `revealQuota`, cobrada em `POST /incubator/:id/reveal`).
+ * por tier (essa virou `birthQuota`, cobrada em `POST /incubator/:id/gestate`, ADR-0021).
  * Ordem: AuthGuard (identidade) → QuotaGuard (limite horário).
  * 201 Created | 400 Bad Request | 401 Unauthorized | 429 Too Many Requests.
  */

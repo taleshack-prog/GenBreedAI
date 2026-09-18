@@ -7,6 +7,7 @@ import { ImageModule } from "../images/image.module";
 import { QuotaModule } from "../quota/quota.module";
 import { SpecimensModule } from "../specimens/specimens.module";
 import { TierModule } from "../billing/tier.module";
+import { ClockModule } from "../common/clock.module";
 
 /**
  * Feature da incubadora (ADR-0020): revelar/nascer/congelar/descartar/listar.
@@ -18,10 +19,12 @@ import { TierModule } from "../billing/tier.module";
  * lá). `ImageModule` — gera o retrato na revelação. `SpecimensModule` —
  * persiste o espécime ao nascer. `QuotaModule` — cota de revelação.
  * `EconomyModule` — crédito de imagem (fallback) e custo de congelar.
- * `TierModule` — resolve o tier efetivo (nunca do JWT cru).
+ * `TierModule` — resolve o tier efetivo (nunca do JWT cru). `ClockModule` —
+ * fornece `Clock` (bugfix: `IncubatorService` não usa mais `new Date()`
+ * direto pro prazo de gestação, ver `common/clock.ts`).
  */
 @Module({
-  imports: [IncubatorStoreModule, ImageModule, SpecimensModule, QuotaModule, EconomyModule, TierModule],
+  imports: [IncubatorStoreModule, ImageModule, SpecimensModule, QuotaModule, EconomyModule, TierModule, ClockModule],
   controllers: [IncubatorController],
   providers: [IncubatorService],
 })

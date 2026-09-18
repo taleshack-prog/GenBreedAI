@@ -1,14 +1,16 @@
 /**
  * Reservas atômicas PERSISTIDAS, reusadas por DOIS limites independentes
- * (ADR-0020 — incubadora e cota de revelação):
+ * (ADR-0021 — gestação; "reveal" da ADR-0020 virou "birth" aqui, mesmos
+ * valores/janelas, só o alvo mudou de "revelar" pra "iniciar gestação"):
  *   "cross_hourly" — limite TÉCNICO anti-abuso em POST /cross (60/hora,
  *                    igual pra todo tier, ADR-0020) — MESMA tabela
  *                    `cross_reservations` que antes guardava a cota de
  *                    cruzamento (ADR-0019), só o SIGNIFICADO mudou.
- *   "reveal"       — cota de REVELAÇÃO por tier (rolling7d/day, ADR-0020,
- *                    era a cota de cruzamento da ADR-0019) — tabela NOVA
- *                    `reveal_reservations` (mesma forma, contador
- *                    independente: revelar não deve consumir o teto
+ *   "birth"        — vaga de GESTAÇÃO por tier (rolling7d/day, ADR-0021,
+ *                    era a cota de revelação da ADR-0020, era a cota de
+ *                    cruzamento da ADR-0019) — tabela `birth_reservations`
+ *                    (renomeada de `reveal_reservations`, mesma forma,
+ *                    contador independente: gestar não deve consumir o teto
  *                    horário de cruzar, nem vice-versa).
  *
  * Três janelas (`ReservationPolicy.window`):
@@ -30,19 +32,25 @@
  * construção (JS é single-thread). No Postgres, a atomicidade vem de
  * `pg_advisory_xact_lock(hashtext(owner_id))` dentro da transação — serializa
  * reservas concorrentes do MESMO dono (donos diferentes nunca se bloqueiam).
+ *
+ * "Agora" vem de `Clock` (injetado, `../common/clock.ts`), nunca de
+ * `new Date()` direto — testes avançam `SystemClock.setForTesting()` em vez
+ * de `vi.useFakeTimers()` global, que travaria `app.inject()` nos e2e (ver
+ * nota em `clock.ts`).
  */
 
 import { Injectable } from "@nestjs/common";
 import { and, asc, eq, gte, sql } from "drizzle-orm";
-import { crossReservations, revealReservations } from "../db/schema";
+import { crossReservations, birthReservations } from "../db/schema";
 import { createDb, type Database } from "../db/client";
 import { isQuotaUnlimitedDev } from "./quota-unlimited-dev";
+import { Clock } from "../common/clock";
 
 export type ReservationWindow = "hour" | "rolling7d" | "day";
 export interface ReservationPolicy { limit: number; window: ReservationWindow; }
-export type ReservationKind = "cross_hourly" | "reveal";
+export type ReservationKind = "cross_hourly" | "birth";
 
-const TABLE_BY_KIND = { cross_hourly: crossReservations, reveal: revealReservations };
+const TABLE_BY_KIND = { cross_hourly: crossReservations, birth: birthReservations };
 
 const STALE_RESERVED_MS = 10 * 60 * 1000;
 const WINDOW_MS: Record<"hour" | "rolling7d", number> = {
@@ -72,11 +80,11 @@ interface MemReservation { id: string; ownerId: string; createdAt: number; statu
 @Injectable()
 export class QuotaService {
   // Um array em memória POR `kind` — nunca mistura a contagem horária de
-  // cruzamento com a contagem de revelação.
-  private readonly mem: Record<ReservationKind, MemReservation[]> = { cross_hourly: [], reveal: [] };
+  // cruzamento com a contagem de gestação.
+  private readonly mem: Record<ReservationKind, MemReservation[]> = { cross_hourly: [], birth: [] };
   private db: Database | null = null;
   private seq = 0;
-  constructor() { const url = process.env.DATABASE_URL; if (url) this.db = createDb(url).db; }
+  constructor(private readonly clock: Clock) { const url = process.env.DATABASE_URL; if (url) this.db = createDb(url).db; }
 
   private newId(): string { this.seq += 1; return `resv_${Date.now()}_${this.seq}`; }
 
@@ -87,15 +95,16 @@ export class QuotaService {
   }
 
   /**
-   * Reserva atômica de 1 unidade (cruzamento OU revelação, conforme `kind`).
-   * Devolve o id da reserva (pra confirmar ou estornar depois) ou `null` se
-   * a cota estourou. `QUOTA_UNLIMITED_DEV` (modo DEV/teste — NUNCA em
-   * produção, ver `isQuotaUnlimitedDev()`) devolve sempre um id "fictício",
-   * nunca grava nada de verdade — vale pros dois `kind`s.
+   * Reserva atômica de 1 unidade (cruzamento horário OU vaga de gestação,
+   * conforme `kind`). Devolve o id da reserva (pra confirmar ou estornar
+   * depois) ou `null` se a cota estourou. `QUOTA_UNLIMITED_DEV` (modo
+   * DEV/teste — NUNCA em produção, ver `isQuotaUnlimitedDev()`) devolve
+   * sempre um id "fictício", nunca grava nada de verdade — vale pros dois
+   * `kind`s.
    */
   async reserve(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<string | null> {
     if (isQuotaUnlimitedDev()) return this.newId();
-    const now = new Date();
+    const now = this.clock.now();
     const from = windowStart(policy.window, now);
     const table = TABLE_BY_KIND[kind];
 
@@ -103,7 +112,7 @@ export class QuotaService {
       const db = this.db;
       return db.transaction(async (tx) => {
         // Lock por (dono, kind) — hashtext de string única evita que a
-        // reserva horária de cruzamento serialize com a de revelação do
+        // reserva horária de cruzamento serialize com a de gestação do
         // MESMO dono à toa (são contadores independentes).
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${kind}:${ownerId}`}))`);
         const staleBefore = new Date(now.getTime() - STALE_RESERVED_MS);
@@ -156,7 +165,7 @@ export class QuotaService {
 
   /** Quantas reservas válidas (RESERVED recente + CONFIRMED) o dono tem na janela — GET /me/tier. */
   async used(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<number> {
-    const now = new Date();
+    const now = this.clock.now();
     const from = windowStart(policy.window, now);
     const table = TABLE_BY_KIND[kind];
     if (this.db) {
@@ -184,7 +193,7 @@ export class QuotaService {
    * "hour"/"rolling7d": instante em que a reserva mais ANTIGA da janela sai dela.
    */
   async nextAvailableAt(kind: ReservationKind, ownerId: string, policy: ReservationPolicy): Promise<Date | null> {
-    const now = new Date();
+    const now = this.clock.now();
     const usedNow = await this.used(kind, ownerId, policy);
     if (usedNow < policy.limit) return null;
 
@@ -218,5 +227,5 @@ export class QuotaService {
   }
 
   /** Uso apenas em testes: limpa tudo (equivalente em memória), os dois `kind`s. */
-  resetAll(): void { this.mem.cross_hourly.length = 0; this.mem.reveal.length = 0; }
+  resetAll(): void { this.mem.cross_hourly.length = 0; this.mem.birth.length = 0; }
 }

@@ -1,5 +1,8 @@
 /**
- * Bônus semanal (ADR-0019): só a partir do Junior. FREE → 403.
+ * Bônus quinzenal (ADR-0021 — item 8; era semanal, ADR-0019): só a partir do
+ * Junior. FREE → 403. Arquivo mantido com o nome antigo (`claim-weekly.spec.ts`)
+ * — não há comando de rename disponível nesta rodada (só edição de arquivos);
+ * reportado no resumo.
  */
 import { describe, it, expect } from "vitest";
 import { ForbiddenException } from "@nestjs/common";
@@ -21,26 +24,34 @@ function makeController(tier: Tier) {
   return new GeneBankController(gb, wallet, tierService);
 }
 
-describe("claimWeekly — bônus semanal só a partir do Junior (ADR-0019)", () => {
-  it("FREE → 403 'Bônus semanal disponível a partir do plano Junior.'", async () => {
+describe("claimBiweekly — bônus quinzenal só a partir do Junior (ADR-0021)", () => {
+  it("FREE → 403 'Bônus quinzenal disponível a partir do plano Junior.'", async () => {
     const controller = makeController("FREE");
     let caught: unknown;
-    try { await controller.claimWeekly({ id: "u-free", tier: "FREE" }); } catch (e) { caught = e; }
+    try { await controller.claimBiweekly({ id: "u-free", tier: "FREE" }); } catch (e) { caught = e; }
     expect(caught).toBeInstanceOf(ForbiddenException);
-    expect((caught as Error).message).toBe("Bônus semanal disponível a partir do plano Junior.");
+    expect((caught as Error).message).toBe("Bônus quinzenal disponível a partir do plano Junior.");
   });
 
   it("JUNIOR → ok (concede o crédito)", async () => {
     const controller = makeController("JUNIOR");
-    const r = await controller.claimWeekly({ id: "u-junior", tier: "JUNIOR" });
+    const r = await controller.claimBiweekly({ id: "u-junior", tier: "JUNIOR" });
     expect(r.claimed).toBe(true);
   });
 
   it("SENIOR e PHD → ok também", async () => {
     for (const tier of ["SENIOR", "PHD"] as Tier[]) {
       const controller = makeController(tier);
-      const r = await controller.claimWeekly({ id: `u-${tier}`, tier });
+      const r = await controller.claimBiweekly({ id: `u-${tier}`, tier });
       expect(r.claimed).toBe(true);
     }
+  });
+
+  it("2ª chamada antes de 15 dias corridos → claimed: false (não concede de novo)", async () => {
+    const controller = makeController("JUNIOR");
+    const first = await controller.claimBiweekly({ id: "u-junior2", tier: "JUNIOR" });
+    expect(first.claimed).toBe(true);
+    const second = await controller.claimBiweekly({ id: "u-junior2", tier: "JUNIOR" });
+    expect(second.claimed).toBe(false);
   });
 });

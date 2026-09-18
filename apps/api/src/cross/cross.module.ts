@@ -20,7 +20,7 @@ import { CrossService } from "./cross.service";
  * indiretamente via `execute()` (mantido, usado por `GeneBankService.
  * synthesizeAndFreeze` — ver ADR-0020 "órfãos").
  * `QuotaModule` — `QuotaGuard` (agora só o limite TÉCNICO horário, ADR-0020,
- * não mais a cota de cruzamento por tier — essa virou `revealQuota`,
+ * não mais a cota de cruzamento por tier — essa virou `birthQuota` (ADR-0021),
  * cobrada em `IncubatorModule`).
  * `IncubatorStoreModule` (NOVO, ADR-0020) — `CrossController` grava as
  * descrições enumeradas por `CrossService.incubate()` como linhas de

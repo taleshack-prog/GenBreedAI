@@ -128,22 +128,26 @@ function reservationsTable(name: string) {
 export const crossReservations = reservationsTable("cross_reservations");
 
 /**
- * Reservas da cota de REVELAÇÃO por tier (ADR-0020 — rolling7d/day, mesmos
- * valores que a cota de cruzamento tinha na ADR-0019, só o alvo mudou de
- * "cruzar" pra "revelar uma descrição da incubadora"). Tabela NOVA — contador
- * independente do limite horário de cruzamento acima (`quota.service.ts`,
- * kind "reveal").
+ * Reservas da cota de GESTAÇÃO por tier (ADR-0021 — rolling7d/day, mesmos
+ * valores/janelas que a ADR-0020 tinha pra "revelar"; só o alvo mudou de
+ * "revelar uma descrição" pra "iniciar a gestação de uma descrição" — o
+ * único custo real é a imagem gerada no NASCIMENTO, então o limite fica na
+ * gestação, o passo que efetivamente compromete essa imagem). Tabela
+ * RENOMEADA de `reveal_reservations` (ADR-0020) — reportar pra `db:generate`
+ * gerar a migração de rename. Contador independente do limite horário de
+ * cruzamento acima (`quota.service.ts`, kind "birth").
  */
-export const revealReservations = reservationsTable("reveal_reservations");
+export const birthReservations = reservationsTable("birth_reservations");
 
 /**
- * Incubadora (ADR-0020): toda descrição de fenótipo enumerada por um
- * cruzamento (livre/ilimitado) vira uma linha aqui — SEM imagem, sem custo,
- * sem prazo. Campos ALÉM da lista literal pedida (`sireId`/`damId`/`method`/
- * `pack`/`species`/`fPedigree`/`fixationIndex`/`generation`/`fertility`/
- * `haldaneStatus`) são necessários pra "nascer" (passo 5, ADR-0020) NUNCA
- * recalcular nada — sem eles não dá pra montar um `StoredSpecimen` válido
- * só com o que a lista original tinha (genotype/phenotype/prob/aura/sex).
+ * Incubadora (ADR-0020, campos de gestação adicionados na ADR-0021): toda
+ * descrição de fenótipo enumerada por um cruzamento (livre/ilimitado) vira
+ * uma linha aqui — SEM imagem, sem custo, sem prazo, até GESTAR. Campos
+ * ALÉM da lista literal pedida (`sireId`/`damId`/`method`/`pack`/`species`/
+ * `fPedigree`/`fixationIndex`/`generation`/`fertility`/`haldaneStatus`) são
+ * necessários pra "nascer" NUNCA recalcular nada — sem eles não dá pra
+ * montar um `StoredSpecimen` válido só com o que a lista original tinha
+ * (genotype/phenotype/prob/aura/sex).
  * `crossId` NÃO é FK pra outra tabela — é só um id de correlação, o MESMO em
  * toda linha gerada pelo mesmo POST /cross (pra UI agrupar "essas N vieram
  * do mesmo cruzamento"); a tabela `crosses` (legada, nunca chegou a ser
@@ -170,9 +174,24 @@ export const incubatorEntries = pgTable("incubator_entries", {
   sex: text("sex").notNull(), // "M" | "F" — ADR-0020: sexo é sorteado na INCUBAÇÃO, não mais só na síntese
   fertility: doublePrecision("fertility"), // 0–100 | null (ADR-0015, mesma regra de specimens.fertility)
   haldaneStatus: text("haldane_status"), // "NONE" | "STERILE" | "REDUCED" | null
-  imageCacheKey: text("image_cache_key"),
-  revealedAt: timestamp("revealed_at", { withTimezone: true }),
+  /**
+   * Gestação (ADR-0021). Ambas NULL = "na incubadora" (estado inicial, livre,
+   * sem prazo). `gestationStartedAt` preenchido = vaga consumida (atômico,
+   * ver `claimGestation` no repositório); `gestationEndsAt` = início + horas
+   * pela aura da entrada (`gestation-time.ts`). NASCER exige
+   * `gestationEndsAt` já passado — antes disso, 400 com o tempo restante.
+   */
+  gestationStartedAt: timestamp("gestation_started_at", { withTimezone: true }),
+  gestationEndsAt: timestamp("gestation_ends_at", { withTimezone: true }),
   bornSpecimenId: text("born_specimen_id"),
+  /**
+   * ADR-0021 item 5: `frozen`/`markFrozen()` ficam ÓRFÃOS por este PR — a
+   * única rota que os escrevia (`POST /:id/freeze`) foi removida junto com
+   * "revelar" avulso, e não existe mais opção de "congelar" no modelo de
+   * gestação. Mantidos aqui (não listados no item 5 como candidatos a sair,
+   * ao contrário de `imageCacheKey`/`revealedAt`) — reportado no resumo pra
+   * decisão explícita de remover ou não numa próxima rodada.
+   */
   frozen: boolean("frozen").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -187,7 +206,7 @@ export type DbSchema = {
   specimens: typeof specimens;
   crosses: typeof crosses;
   crossReservations: typeof crossReservations;
-  revealReservations: typeof revealReservations;
+  birthReservations: typeof birthReservations;
   incubatorEntries: typeof incubatorEntries;
 };
 
@@ -197,7 +216,15 @@ export const wallets = pgTable("wallets", {
   catalisadores: integer("catalisadores").notNull().default(12450),
   biomassa: integer("biomassa").notNull().default(125480),
   lastDaily: text("last_daily"),
-  lastWeekly: text("last_weekly"),
+  /**
+   * Última data (YYYY-MM-DD) em que o bônus QUINZENAL de crédito de imagem
+   * foi resgatado (ADR-0021 — era `lastWeekly`/`last_weekly`, semanal, ADR-
+   * 0019; renomeado pra não sugerir semana sob a nova janela de 15 dias
+   * corridos). Comparação é por TIMESTAMP/rolling-window em `wallet.service.ts`
+   * (`claimBiweekly`), não por igualdade de bucket calendário como o antigo
+   * `weekKey()` — 15 não divide um calendário em buckets limpos.
+   */
+  lastBiweekly: text("last_biweekly"),
   imageCredits: integer("image_credits").notNull().default(0),
 });
 

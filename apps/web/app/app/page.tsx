@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { listSpecimens, postCross, getMyTier, classifyCross, type ApiSpecimen, type CrossClassification, type MyTier, type IncubatorDescription } from "../../lib/api";
+import { listSpecimens, postCross, gestateEntry, getMyTier, classifyCross, type ApiSpecimen, type CrossClassification, type MyTier, type IncubatorDescription } from "../../lib/api";
 import { compatibility } from "../../lib/lab";
 import { displayName } from "../../lib/display";
 import { methodLabel } from "../../lib/method-label";
 import { phenoSummary } from "../../lib/phenotype-summary";
-import { revealQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
+import { birthQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
+import { gestationHoursForAura } from "../../lib/gestation";
 import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
@@ -17,8 +18,38 @@ import { wrightF } from "@genbreedai/engine";
 
 const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as const;
 
-/** Card de UMA descrição recém-criada na incubadora (ADR-0020) — mesma informação que a incubadora mostra: probabilidade, aura, fenótipo completo, genótipo. "Revelar" leva pra incubadora, não gera nada aqui. */
-function CrossResultCard({ e, router }: { e: IncubatorDescription; router: ReturnType<typeof useRouter> }) {
+/**
+ * Card de UMA descrição recém-criada na incubadora (ADR-0021) — mesma
+ * informação que a incubadora mostra: probabilidade, aura, fenótipo
+ * completo, genótipo. Duas ações (item 3): "Gestar" (mesma regra de custo
+ * da incubadora, direto daqui) ou "Guardar na incubadora" (não faz nada —
+ * a descrição já ESTÁ salva, livre, desde o cruzamento; só leva pra lá).
+ */
+function CrossResultCard({ e, myTier, router }: { e: IncubatorDescription; myTier: MyTier | null; router: ReturnType<typeof useRouter> }) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const hasVaga = !!myTier && myTier.birthQuota.used < myTier.birthQuota.limit;
+  const hours = gestationHoursForAura(e.aura);
+
+  async function onGestate() {
+    setBusy(true); setMsg(null);
+    try { await gestateEntry(e.id); setDone(true); }
+    catch (ex) { setMsg((ex as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  if (done) {
+    return (
+      <div className="rounded-lg border border-ok/30 bg-bg-900/60 p-3 text-center">
+        <p className="text-[0.7rem] text-ok">Gestando — {hours}h até nascer.</p>
+        <button onClick={() => router.push("/app/incubadora")} className="mt-2 block w-full rounded border border-ok/40 py-1.5 text-center font-display text-[0.6rem] uppercase text-ok transition hover:bg-ok/10">
+          Acompanhar na Incubadora
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-cyan/25 bg-bg-900/60 p-3 text-left">
       <div className="mb-2 flex items-center justify-between">
@@ -28,12 +59,18 @@ function CrossResultCard({ e, router }: { e: IncubatorDescription; router: Retur
       <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
       <FullPhenotype loci={e.phenotype.loci} />
       <GenotypeToggle genotype={e.genotype} />
+      <p className="mt-2 text-center text-[0.6rem] text-ink-muted">Gestação: {hours}h</p>
+      <button disabled={busy} onClick={onGestate}
+        className="mt-1 block w-full rounded border border-ok/40 bg-ok/5 py-1.5 text-center font-display text-[0.65rem] uppercase text-ok transition hover:bg-ok/10 disabled:opacity-60">
+        {busy ? "gestando…" : `◈ Gestar — usa 1 ${hasVaga ? "vaga" : "crédito"}`}
+      </button>
       <button
         onClick={() => router.push("/app/incubadora")}
-        className="mt-2 block w-full rounded border border-cyan/30 py-1.5 text-center font-display text-[0.65rem] uppercase text-cyan transition hover:bg-cyan/10"
+        className="mt-1 block w-full rounded border border-cyan/30 py-1.5 text-center font-display text-[0.6rem] uppercase text-cyan transition hover:bg-cyan/10"
       >
-        ◈ Revelar
+        Guardar na incubadora
       </button>
+      {msg && <p className="mt-1 text-center text-[0.6rem] text-crit">{msg}</p>}
     </div>
   );
 }
@@ -52,9 +89,9 @@ function LabInner() {
   const [crossing, setCrossing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  // ADR-0020: resultado do ÚLTIMO cruzamento (livre, sem custo) — as
-  // descrições ficam na tela até o jogador ir revelar/nascer na incubadora;
-  // cruzar de novo troca pelo resultado novo.
+  // ADR-0021: resultado do ÚLTIMO cruzamento (livre, sem custo) — as
+  // descrições ficam na tela até o jogador gestar (aqui) ou ir pra
+  // incubadora; cruzar de novo troca pelo resultado novo.
   const [crossEntries, setCrossEntries] = useState<IncubatorDescription[]>([]);
 
   useEffect(() => {
@@ -216,25 +253,25 @@ function LabInner() {
       <p className="mt-2 text-center text-[0.65rem] uppercase tracking-wide text-ok">Cruzamentos ilimitados, sem custo</p>
       {error && <p className="mt-3 text-center text-sm text-crit">{error}</p>}
 
-      {/* Resultado do cruzamento (ADR-0020): descrições recém-criadas, ainda
-          sem retrato — ficam na incubadora até o jogador revelar. */}
+      {/* Resultado do cruzamento (ADR-0021): descrições recém-criadas, ainda
+          sem retrato — ficam livres na incubadora até o jogador gestar. */}
       {crossEntries.length > 0 && (
         <section className="mt-6 rounded-card border border-cyan/20 bg-bg-800 p-4">
           <h3 className="mb-1 font-display text-xs font-bold uppercase text-cyan">
             {crossEntries.length} descriç{crossEntries.length === 1 ? "ão" : "ões"} de fenótipo
           </h3>
-          <p className="mb-3 text-[0.7rem] text-ink-muted">As descrições ficam na Incubadora até você revelar.</p>
+          <p className="mb-3 text-[0.7rem] text-ink-muted">As descrições ficam na Incubadora, livres, até você gestar.</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {crossEntries.map((e) => <CrossResultCard key={e.id} e={e} router={router} />)}
+            {crossEntries.map((e) => <CrossResultCard key={e.id} e={e} myTier={myTier} router={router} />)}
           </div>
         </section>
       )}
 
       {myTier && (
         <p className="mt-4 text-center text-[0.7rem] text-ink-muted">
-          Revelar: {revealQuotaLabel(myTier.revealQuota)}
-          {myTier.revealQuota.nextAvailableAt && myTier.revealQuota.used >= myTier.revealQuota.limit && (
-            <span className="text-amber"> · {nextAvailableLabel(myTier.revealQuota.nextAvailableAt)}</span>
+          Nascimentos: {birthQuotaLabel(myTier.birthQuota)}
+          {myTier.birthQuota.nextAvailableAt && myTier.birthQuota.used >= myTier.birthQuota.limit && (
+            <span className="text-amber"> · {nextAvailableLabel(myTier.birthQuota.nextAvailableAt)}</span>
           )}
         </p>
       )}

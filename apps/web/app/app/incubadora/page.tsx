@@ -2,29 +2,39 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listIncubator, revealEntry, bornEntry, freezeEntry, discardEntry, getMyTier, type IncubatorEntry, type MyTier } from "../../../lib/api";
+import { listIncubator, gestateEntry, bornEntry, discardEntry, getMyTier, type IncubatorEntry, type MyTier } from "../../../lib/api";
 import { Screen, ComingSoon } from "../../../components/Screen";
 import { displayName } from "../../../lib/display";
 import { sexChar } from "../../../components/SexBadge";
 import { phenoSummary } from "../../../lib/phenotype-summary";
-import { revealQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
+import { birthQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
+import { gestationRemainingLabel } from "../../../lib/gestation";
+import { DISCARD_CONFIRM_TEXT } from "../../../lib/incubator-texts";
 import { GenotypeToggle, FullPhenotype, AuraStars } from "../../../components/Genome";
+import { FetusPlaceholder } from "../../../components/FetusPlaceholder";
 
-/** 4 estados mutuamente exclusivos (ADR-0020, item 2) — "congelada" já implica revelada, então sai do grupo "revelada". */
-type Filtro = "todas" | "nao-revelada" | "revelada" | "congelada" | "nascida";
+/**
+ * Estado de UI (ADR-0021, item 1) — "pronto" é um recorte CLIENT-SIDE de
+ * GESTANDO: o servidor só marca NASCIDO quando `/born` é chamado, mas a UI
+ * já sabe (comparando `gestationEndsAt` com o relógio local) que o prazo
+ * venceu antes disso, e é aí que troca o contador pelo botão "Nascer".
+ */
+type Filtro = "todas" | "na-incubadora" | "gestando" | "pronto" | "nascido";
 const FILTROS: Array<{ k: Filtro; label: string }> = [
   { k: "todas", label: "Todas" },
-  { k: "nao-revelada", label: "Não revelada" },
-  { k: "revelada", label: "Revelada" },
-  { k: "congelada", label: "Congelada" },
-  { k: "nascida", label: "Nascida" },
+  { k: "na-incubadora", label: "Na incubadora" },
+  { k: "gestando", label: "Gestando" },
+  { k: "pronto", label: "Pronto" },
+  { k: "nascido", label: "Nascido" },
 ];
 
-function estadoDe(e: IncubatorEntry): Exclude<Filtro, "todas"> {
-  if (e.born) return "nascida";
-  if (e.frozen) return "congelada";
-  if (e.revealed) return "revelada";
-  return "nao-revelada";
+function uiStateOf(e: IncubatorEntry, nowMs: number): Exclude<Filtro, "todas"> {
+  if (e.state === "NASCIDO") return "nascido";
+  if (e.state === "GESTANDO") {
+    if (e.gestationEndsAt && new Date(e.gestationEndsAt).getTime() <= nowMs) return "pronto";
+    return "gestando";
+  }
+  return "na-incubadora";
 }
 
 export default function IncubatorPage() {
@@ -34,16 +44,24 @@ export default function IncubatorPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const reload = () => listIncubator().then((r) => setEntries([...r].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))).catch((e) => setErr(e.message));
   useEffect(() => { reload(); getMyTier().then(setMyTier).catch(() => {}); }, []);
 
-  const visible = entries.filter((e) => filtro === "todas" || estadoDe(e) === filtro);
-  const hasQuota = !!myTier && myTier.revealQuota.used < myTier.revealQuota.limit;
+  // Contador regressivo (item 1, estado GESTANDO) — 15s é fino o bastante
+  // pro rótulo, que só mostra granularidade de minuto.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 15000);
+    return () => clearInterval(id);
+  }, []);
 
-  async function onReveal(id: string) {
+  const visible = entries.filter((e) => filtro === "todas" || uiStateOf(e, nowMs) === filtro);
+  const hasVaga = !!myTier && myTier.birthQuota.used < myTier.birthQuota.limit;
+
+  async function onGestate(id: string) {
     setBusy(id); setMsg(null); setErr(null);
-    try { await revealEntry(id); await reload(); await getMyTier().then(setMyTier).catch(() => {}); }
+    try { await gestateEntry(id); await reload(); await getMyTier().then(setMyTier).catch(() => {}); }
     catch (e) { setMsg((e as Error).message); }
     finally { setBusy(null); }
   }
@@ -56,18 +74,14 @@ export default function IncubatorPage() {
     } catch (e) { setMsg((e as Error).message); }
     finally { setBusy(null); }
   }
-  async function onFreeze(id: string) {
-    setBusy(id); setMsg(null);
-    try { await freezeEntry(id); await reload(); }
-    catch (e) { setMsg((e as Error).message); }
-    finally { setBusy(null); }
-  }
   async function onDiscard(id: string) {
-    const ok = window.confirm("Esta descrição revelada será perdida. Você já pagou por ela. Congelar guarda para depois. Descartar mesmo assim?");
-    if (!ok) return;
+    if (!window.confirm(DISCARD_CONFIRM_TEXT)) return;
     setBusy(id); setMsg(null);
-    try { await discardEntry(id); await reload(); }
-    catch (e) { setMsg((e as Error).message); }
+    try {
+      await discardEntry(id);
+      // Some da lista na hora — sem recarregar a incubadora inteira (item 3).
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    } catch (e) { setMsg((e as Error).message); }
     finally { setBusy(null); }
   }
 
@@ -75,7 +89,7 @@ export default function IncubatorPage() {
     <Screen title="Incubadora" subtitle="Descrições de fenótipo dos seus cruzamentos">
       {myTier && (
         <p className="mb-3 text-center text-[0.65rem] text-ink-muted">
-          Revelar: {revealQuotaLabel(myTier.revealQuota)} — {myTier.revealQuota.used} de {myTier.revealQuota.limit} usadas
+          Gestar: {birthQuotaLabel(myTier.birthQuota)} — {myTier.birthQuota.used} de {myTier.birthQuota.limit} usadas
         </p>
       )}
       <div className="mb-4 flex flex-wrap gap-2">
@@ -99,7 +113,7 @@ export default function IncubatorPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {visible.map((e) => {
-            const estado = estadoDe(e);
+            const estado = uiStateOf(e, nowMs);
             return (
               <div key={e.id} className="rounded-card border border-cyan/20 bg-bg-800 p-3">
                 <div className="mb-2 flex items-center justify-between">
@@ -110,48 +124,53 @@ export default function IncubatorPage() {
                   </span>
                 </div>
 
-                {estado === "nao-revelada" && (
+                {estado === "na-incubadora" && (
                   <>
                     <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
                     <FullPhenotype loci={e.phenotype.loci} />
                     <GenotypeToggle genotype={e.genotype} />
-                    <button disabled={busy === e.id} onClick={() => onReveal(e.id)}
-                      className="mt-2 block w-full rounded-lg border border-cyan/40 bg-cyan/5 py-2 text-center font-display text-[0.65rem] uppercase text-cyan transition hover:bg-cyan/10 disabled:opacity-60">
-                      {busy === e.id ? "revelando…" : `◈ Revelar — usa 1 ${hasQuota ? "da sua cota" : "crédito"}`}
+                    <p className="mt-2 text-center text-[0.6rem] text-ink-muted">Gestação: {e.gestationHours}h</p>
+                    <button disabled={busy === e.id} onClick={() => onGestate(e.id)}
+                      className="mt-1 block w-full rounded-lg border border-ok/40 bg-ok/5 py-2 text-center font-display text-[0.65rem] uppercase text-ok transition hover:bg-ok/10 disabled:opacity-60">
+                      {busy === e.id ? "gestando…" : `◈ Gestar — usa 1 ${hasVaga ? "das suas vagas" : "crédito"}`}
                     </button>
-                    {!hasQuota && myTier?.revealQuota.nextAvailableAt && (
-                      <p className="mt-1 text-center text-[0.6rem] text-amber">{nextAvailableLabel(myTier.revealQuota.nextAvailableAt)}</p>
+                    {!hasVaga && myTier?.birthQuota.nextAvailableAt && (
+                      <p className="mt-1 text-center text-[0.6rem] text-amber">{nextAvailableLabel(myTier.birthQuota.nextAvailableAt)}</p>
                     )}
+                    <button disabled={busy === e.id} onClick={() => onDiscard(e.id)}
+                      className="mt-2 block w-full text-center font-mono text-[0.6rem] text-ink-muted underline decoration-dotted transition hover:text-crit disabled:opacity-60">
+                      descartar
+                    </button>
                   </>
                 )}
 
-                {(estado === "revelada" || estado === "congelada") && (
+                {estado === "gestando" && (
                   <>
                     <div className="relative mx-auto mb-2 grid aspect-square w-full max-w-[180px] place-items-center overflow-hidden rounded bg-bg-900">
-                      {e.imageUrl ? <img src={e.imageUrl} alt={displayName(e)} className="h-full w-full object-cover" /> : <span className="font-mono text-[0.6rem] uppercase text-ink-muted">modo procedural</span>}
+                      <FetusPlaceholder className="h-full w-full" />
                     </div>
                     <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
-                    {estado === "congelada" && <div className="mt-1 text-center font-display text-[0.6rem] uppercase text-purple">❄ congelada</div>}
-                    <button disabled={busy === e.id} onClick={() => onBorn(e.id)}
-                      className="mt-2 block w-full rounded-lg bg-ok py-2 text-center font-display text-[0.65rem] font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:opacity-60">
-                      {busy === e.id ? "…" : "Nascer (grátis)"}
-                    </button>
-                    {estado === "revelada" && (
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <button disabled={busy === e.id} onClick={() => onFreeze(e.id)}
-                          className="rounded border border-purple/40 py-1.5 text-center font-display text-[0.6rem] uppercase text-purple transition hover:bg-purple/10 disabled:opacity-60">
-                          ❄ Congelar (−20)
-                        </button>
-                        <button disabled={busy === e.id} onClick={() => onDiscard(e.id)}
-                          className="rounded border border-crit/40 py-1.5 text-center font-display text-[0.6rem] uppercase text-crit transition hover:bg-crit/10 disabled:opacity-60">
-                          Descartar
-                        </button>
-                      </div>
-                    )}
+                    <div className="mt-1 text-center font-mono text-[0.7rem] text-purple">
+                      {e.gestationEndsAt ? gestationRemainingLabel(e.gestationEndsAt, new Date(nowMs)) : "Gestando…"}
+                    </div>
                   </>
                 )}
 
-                {estado === "nascida" && (
+                {estado === "pronto" && (
+                  <>
+                    <div className="relative mx-auto mb-2 grid aspect-square w-full max-w-[180px] place-items-center overflow-hidden rounded bg-bg-900">
+                      <FetusPlaceholder className="h-full w-full" />
+                    </div>
+                    <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
+                    <div className="mt-1 text-center font-display text-[0.65rem] uppercase text-ok">Pronto para nascer!</div>
+                    <button disabled={busy === e.id} onClick={() => onBorn(e.id)}
+                      className="mt-2 block w-full rounded-lg bg-ok py-2 text-center font-display text-[0.65rem] font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110 disabled:opacity-60">
+                      {busy === e.id ? "…" : "Nascer"}
+                    </button>
+                  </>
+                )}
+
+                {estado === "nascido" && (
                   <>
                     <div className="relative mx-auto mb-2 grid aspect-square w-full max-w-[180px] place-items-center overflow-hidden rounded bg-bg-900">
                       {e.imageUrl ? <img src={e.imageUrl} alt={displayName(e)} className="h-full w-full object-cover" /> : <span className="font-mono text-[0.6rem] uppercase text-ink-muted">modo procedural</span>}

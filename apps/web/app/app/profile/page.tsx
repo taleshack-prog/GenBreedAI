@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listSpecimens, getWallet, claimDaily, claimWeekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack, type MyTier } from "../../../lib/api";
+import { listSpecimens, getWallet, claimDaily, claimBiweekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack, type MyTier } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
-import { revealUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
+import { birthUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
 
 const TIER_NAME: Record<Tier, string> = {
   FREE: "FREEBREEDER",
@@ -49,8 +49,8 @@ export default function ProfilePage() {
       setWallet(r.wallet); setBuyMsg(`+${r.creditsAdded} créditos de imagem!`);
     } catch (e) { setBuyMsg((e as Error).message); } finally { setBuying(null); }
   }
-  async function coletarSemanal() {
-    try { const r = await claimWeekly(); setWallet(r.wallet); setDailyMsg(r.claimed ? "+1 crédito de imagem (bônus semanal)!" : "Bônus semanal já coletado. Volte na próxima semana."); }
+  async function coletarQuinzenal() {
+    try { const r = await claimBiweekly(); setWallet(r.wallet); setDailyMsg(r.claimed ? "+1 crédito de imagem (bônus quinzenal)!" : "Bônus quinzenal já coletado. Volte daqui a 15 dias."); }
     catch (e) { setDailyMsg((e as Error).message); }
   }
   function shareLink(via: "whatsapp" | "email" | "sms" | "copy") {
@@ -96,9 +96,9 @@ export default function ProfilePage() {
           <div className="text-sm text-purple">{TIER_NAME[tier] ?? TIER_NAME.FREE}</div>
           {myTier && (
             <div className="mt-1 text-xs text-ink-muted">
-              {revealUsageLabel(myTier.revealQuota)} · {myTier.monthlyExtraImages} retratos extras/mês
-              {myTier.revealQuota.nextAvailableAt && myTier.revealQuota.used >= myTier.revealQuota.limit && (
-                <div className="mt-0.5 text-amber">{nextAvailableLabel(myTier.revealQuota.nextAvailableAt)}</div>
+              {birthUsageLabel(myTier.birthQuota)} · {myTier.monthlyExtraImages} retratos extras/mês
+              {myTier.birthQuota.nextAvailableAt && myTier.birthQuota.used >= myTier.birthQuota.limit && (
+                <div className="mt-0.5 text-amber">{nextAvailableLabel(myTier.birthQuota.nextAvailableAt)}</div>
               )}
             </div>
           )}
@@ -130,10 +130,10 @@ export default function ProfilePage() {
           <button onClick={coletar} className="w-full rounded-lg bg-ok py-2.5 font-display text-sm font-bold uppercase text-bg-900 shadow-neon-green transition hover:brightness-110">
             ☀ Coletar recompensa diária
           </button>
-          {/* ADR-0019: bônus semanal só a partir do Junior. */}
-          {myTier?.weeklyBonus && (
-            <button onClick={coletarSemanal} className="mt-2 w-full rounded-lg border border-purple/40 py-2 font-display text-xs uppercase text-purple transition hover:bg-purple/10">
-              🖼 Coletar imagem semanal (+1 crédito)
+          {/* ADR-0021 (era semanal, ADR-0019): bônus quinzenal só a partir do Junior — escondido pro FREE. */}
+          {myTier?.biweeklyBonus && (
+            <button onClick={coletarQuinzenal} className="mt-2 w-full rounded-lg border border-purple/40 py-2 font-display text-xs uppercase text-purple transition hover:bg-purple/10">
+              🖼 Coletar crédito quinzenal (+1 crédito)
             </button>
           )}
           {wallet.imageCredits !== undefined && <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos de imagem: {wallet.imageCredits ?? 0}</div>}

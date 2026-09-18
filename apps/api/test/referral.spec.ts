@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ReferralService } from "../src/referral/referral.service";
 import { WalletService } from "../src/economy/wallet.service";
 import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
@@ -38,11 +38,30 @@ describe("Referral (viralização anti-fraude)", () => {
     expect(await wallet.consumeImageCredit("alice")).toBe(false);
   });
 
-  it("bônus semanal: +1 crédito, 1x por semana", async () => {
-    const a = await wallet.claimWeekly("carol");
+  it("bônus quinzenal (ADR-0021, era semanal): +1 crédito, 1x a cada 15 dias corridos", async () => {
+    const a = await wallet.claimBiweekly("carol");
     expect(a.claimed).toBe(true);
     expect(a.wallet.imageCredits).toBe(1);
-    const b = await wallet.claimWeekly("carol");
+    const b = await wallet.claimBiweekly("carol");
     expect(b.claimed).toBe(false);
+  });
+
+  it("bônus quinzenal: 14 dias depois ainda bloqueado; 15 dias + 1 min depois libera de novo (janela MÓVEL, não bucket de calendário)", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+      const first = await wallet.claimBiweekly("dave");
+      expect(first.claimed).toBe(true);
+
+      vi.setSystemTime(new Date("2026-01-15T11:59:00Z")); // 13d23h59min depois
+      expect((await wallet.claimBiweekly("dave")).claimed).toBe(false);
+
+      vi.setSystemTime(new Date("2026-01-16T12:01:00Z")); // 15 dias + 1 min depois
+      const second = await wallet.claimBiweekly("dave");
+      expect(second.claimed).toBe(true);
+      expect(second.wallet.imageCredits).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Testes e2e do endpoint POST /api/v1/cross (ADR-0020 — incubadora: cruzar é
  * livre, cria descrições na incubadora, NÃO cria espécime, NÃO consome
- * revealQuota; só o limite técnico horário — 60/hora, `QuotaGuard` — pode
- * bloquear, com 429).
+ * birthQuota (ADR-0021, era revealQuota); só o limite técnico horário —
+ * 60/hora, `QuotaGuard` — pode bloquear, com 429).
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -51,9 +51,10 @@ describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
     expect(e.genotype).toBeDefined();
     expect(e.phenotype).toBeDefined();
     expect(["M", "F"]).toContain(e.sex);
-    // Nenhuma imagem/retrato nasce junto — isso é trabalho da revelação.
-    expect(e.imageCacheKey ?? null).toBeNull();
-    expect(e.revealedAt ?? null).toBeNull();
+    // Nenhuma imagem/retrato nasce junto, nem gestação iniciada — isso é
+    // trabalho de GESTAR (ADR-0021); cruzar só cria a descrição livre.
+    expect(e.gestationStartedAt ?? null).toBeNull();
+    expect(e.gestationEndsAt ?? null).toBeNull();
     expect(e.bornSpecimenId ?? null).toBeNull();
     expect(b).not.toHaveProperty("specimen"); // o formato antigo (ADR-0019) não existe mais
   });
@@ -61,13 +62,13 @@ describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
   it("401: sem autenticação", async () => { expect((await post(CROSS, {})).statusCode).toBe(401); });
   it("400: método inválido", async () => { expect((await post({ sireId: "onca-pintada", damId: "onca-negra", method: "XYZ" }, AUTH_PHD)).statusCode).toBe(400); });
 
-  it("cruzar NÃO consome revealQuota — GET /me/tier.revealQuota.used continua 0 depois de cruzar várias vezes", async () => {
+  it("cruzar NÃO consome birthQuota — GET /me/tier.birthQuota.used continua 0 depois de cruzar várias vezes", async () => {
     const headers = AUTH_FREE("user-no-quota-spend");
     for (let i = 0; i < 3; i++) {
       expect((await post({ sireId: "gato-tabby", damId: "gato-siames", method: "F1" }, headers)).statusCode).toBe(201);
     }
     const me = (await get("/api/v1/me/tier", headers)).json();
-    expect(me.revealQuota.used).toBe(0);
+    expect(me.birthQuota.used).toBe(0);
   });
 
   it("limite TÉCNICO horário (61 cruzamentos numa hora) → 429 no 61º", async () => {

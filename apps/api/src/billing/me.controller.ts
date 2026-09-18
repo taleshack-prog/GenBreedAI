@@ -20,19 +20,19 @@ export class MeController {
     const tier = await this.tierService.resolve(user.id, user.tier);
     const policy = tierPolicy(tier);
     const [used, nextAvailableAt] = await Promise.all([
-      this.quota.used("reveal", user.id, policy.revealQuota),
-      this.quota.nextAvailableAt("reveal", user.id, policy.revealQuota),
+      this.quota.used("birth", user.id, policy.birthQuota),
+      this.quota.nextAvailableAt("birth", user.id, policy.birthQuota),
     ]);
     return {
       tier,
-      revealQuota: {
-        limit: policy.revealQuota.limit,
-        window: policy.revealQuota.window,
+      birthQuota: {
+        limit: policy.birthQuota.limit,
+        window: policy.birthQuota.window,
         used,
         nextAvailableAt: nextAvailableAt ? nextAvailableAt.toISOString() : null,
       },
       monthlyExtraImages: policy.monthlyExtraImages,
-      weeklyBonus: policy.weeklyBonus,
+      biweeklyBonus: policy.biweeklyBonus,
     };
   }
 }

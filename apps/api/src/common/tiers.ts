@@ -1,7 +1,9 @@
 /**
- * Cotas por tier (ADR-0019, renomeado pela ADR-0020 — incubadora: cruzar é
- * livre, REVELAR consome cota).
- * REGRA ANTI-P2W: o tier afeta EXCLUSIVAMENTE cota de revelação, retratos
+ * Cotas por tier (ADR-0019 → ADR-0020 "revelar" → ADR-0021 "gestar" — o
+ * nome do gate muda a cada revisão de produto, mesmos valores/janelas desde
+ * a ADR-0019; ADR-0021: o único custo real é a imagem gerada no NASCIMENTO,
+ * então o limite passou a ficar em GESTAR, não mais em revelar).
+ * REGRA ANTI-P2W: o tier afeta EXCLUSIVAMENTE cota de gestação, retratos
  * extras, pool de espécies e ferramentas — NUNCA as probabilidades do motor.
  * Este mapa é a única autoridade sobre limites; o motor nunca o consulta.
  */
@@ -9,28 +11,28 @@
 import type { Tier } from "@genbreedai/shared";
 
 /**
- * Cota de REVELAÇÃO (ADR-0020 — antes "cota de cruzamento", ADR-0019; mesmos
- * valores/janelas, só o alvo mudou de "cruzar" pra "revelar uma descrição já
- * incubada"): "rolling7d" = N revelações nos últimos 7×24h corridas (janela
- * móvel, sem "virar" num horário fixo); "day" = N revelações por DIA CIVIL em
- * America/Sao_Paulo (vira à meia-noite local).
+ * Vagas de GESTAÇÃO (ADR-0021 — era `revealQuota`, ADR-0020; mesmos
+ * valores/janelas, só o alvo mudou de "revelar uma descrição" pra "iniciar
+ * a gestação de uma descrição"): "rolling7d" = N gestações iniciadas nos
+ * últimos 7×24h corridas (janela móvel); "day" = N gestações por DIA CIVIL
+ * em America/Sao_Paulo (vira à meia-noite local).
  */
-export interface RevealQuotaPolicy {
+export interface BirthQuotaPolicy {
   limit: number;
   window: "rolling7d" | "day";
 }
 
 export interface TierPolicy {
-  /** Cota de REVELAÇÃO — ADR-0020 (era `crossQuota`, ADR-0019). */
-  revealQuota: RevealQuotaPolicy;
+  /** Vagas de gestação — ADR-0021 (era `revealQuota`, ADR-0020). */
+  birthQuota: BirthQuotaPolicy;
   /**
-   * Retratos EXTRAS por mês (regenerar um retrato já revelado) — NÃO conta a
-   * primeira revelação de uma descrição (essa é a `revealQuota` acima).
-   * Esgotado → créditos avulsos.
+   * Retratos EXTRAS por mês (regenerar o retrato de um espécime já
+   * nascido) — NÃO conta o retrato do nascimento em si (esse é grátis,
+   * pago pela vaga de gestação). Esgotado → créditos avulsos.
    */
   monthlyExtraImages: number;
-  /** Bônus semanal (+1 crédito de imagem) liberado a partir deste tier (ADR-0019). */
-  weeklyBonus: boolean;
+  /** Bônus QUINZENAL (+1 crédito de imagem) liberado a partir deste tier (ADR-0021 — era semanal, ADR-0019). */
+  biweeklyBonus: boolean;
   /** Profundidade de árvore genealógica exposta pela API (TDD §8). */
   lineageDepth: number | "full";
   /** Acesso ao mercado (exclusivo PhD, TDD §7.4). */
@@ -45,10 +47,10 @@ export interface TierPolicy {
 }
 
 export const TIER_POLICIES: Record<Tier, TierPolicy> = {
-  FREE: { revealQuota: { limit: 1, window: "rolling7d" }, monthlyExtraImages: 0, weeklyBonus: false, lineageDepth: 1, marketAccess: false, hourlyCrossLimit: 60 },
-  JUNIOR: { revealQuota: { limit: 3, window: "rolling7d" }, monthlyExtraImages: 0, weeklyBonus: true, lineageDepth: 3, marketAccess: false, hourlyCrossLimit: 60 },
-  SENIOR: { revealQuota: { limit: 1, window: "day" }, monthlyExtraImages: 15, weeklyBonus: true, lineageDepth: 7, marketAccess: false, hourlyCrossLimit: 60 },
-  PHD: { revealQuota: { limit: 3, window: "day" }, monthlyExtraImages: 20, weeklyBonus: true, lineageDepth: "full", marketAccess: true, hourlyCrossLimit: 60 },
+  FREE: { birthQuota: { limit: 1, window: "rolling7d" }, monthlyExtraImages: 0, biweeklyBonus: false, lineageDepth: 1, marketAccess: false, hourlyCrossLimit: 60 },
+  JUNIOR: { birthQuota: { limit: 3, window: "rolling7d" }, monthlyExtraImages: 0, biweeklyBonus: true, lineageDepth: 3, marketAccess: false, hourlyCrossLimit: 60 },
+  SENIOR: { birthQuota: { limit: 1, window: "day" }, monthlyExtraImages: 15, biweeklyBonus: true, lineageDepth: 7, marketAccess: false, hourlyCrossLimit: 60 },
+  PHD: { birthQuota: { limit: 3, window: "day" }, monthlyExtraImages: 20, biweeklyBonus: true, lineageDepth: "full", marketAccess: true, hourlyCrossLimit: 60 },
 };
 
 export function tierPolicy(tier: Tier): TierPolicy {

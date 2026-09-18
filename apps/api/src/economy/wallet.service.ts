@@ -4,8 +4,9 @@ import { WalletRepository, type Wallet } from "./wallet.repository";
 
 export type { Wallet };
 export const FREEZE_COST = { catalisadores: 20 };
-function weekKey(): string { const d = new Date(); const onejan = new Date(d.getFullYear(),0,1); const wk = Math.ceil((((d.getTime()-onejan.getTime())/86400000)+onejan.getDay()+1)/7); return `${d.getFullYear()}-W${wk}`; }
 export const THAW_COST = { biomassa: 10000 };
+/** Janela do bônus de crédito de imagem (ADR-0021 — 15 dias corridos, era 7/semanal na ADR-0019). */
+const BIWEEKLY_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class WalletService {
@@ -42,12 +43,22 @@ export class WalletService {
     await this.repo.save(owner, { ...w, imageCredits: (w.imageCredits ?? 0) - 1 });
     return true;
   }
-  /** Imagem semanal (engajamento): +1 crédito de imagem, 1x por semana. */
-  async claimWeekly(owner: string): Promise<{ claimed: boolean; wallet: Wallet }> {
+  /**
+   * Imagem quinzenal (engajamento, ADR-0021 — era semanal, ADR-0019): +1
+   * crédito de imagem, no máximo 1x a cada 15 dias corridos. Janela MÓVEL
+   * (timestamp, não bucket de calendário — 15 não divide um calendário em
+   * buckets limpos como semana/mês dividem): compara `now` contra o
+   * `lastBiweekly` gravado, igual à janela `rolling7d` já usada em
+   * `quota.service.ts`.
+   */
+  async claimBiweekly(owner: string): Promise<{ claimed: boolean; wallet: Wallet }> {
     const w = await this.repo.get(owner);
-    const week = weekKey();
-    if (w.lastWeekly === week) return { claimed: false, wallet: w };
-    const next: Wallet = { ...w, imageCredits: (w.imageCredits ?? 0) + 1, lastWeekly: week };
+    const now = new Date();
+    if (w.lastBiweekly) {
+      const last = new Date(w.lastBiweekly);
+      if (now.getTime() - last.getTime() < BIWEEKLY_WINDOW_MS) return { claimed: false, wallet: w };
+    }
+    const next: Wallet = { ...w, imageCredits: (w.imageCredits ?? 0) + 1, lastBiweekly: now.toISOString() };
     await this.repo.save(owner, next);
     return { claimed: true, wallet: next };
   }

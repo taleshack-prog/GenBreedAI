@@ -23,15 +23,15 @@ export class GeneBankController {
     return this.wallet.claimDaily(user.id, tier);
   }
 
-  /** ADR-0019: bônus semanal só a partir do Junior (FREE não tem). */
-  @Post("wallet/weekly")
+  /** ADR-0021: bônus quinzenal (era semanal, ADR-0019) só a partir do Junior (FREE não tem). Rota renomeada de `wallet/weekly` — a web ainda chama a antiga (turno seguinte). */
+  @Post("wallet/biweekly")
   @UseGuards(AuthGuard)
-  async claimWeekly(@CurrentUser() user: AuthenticatedUser) {
+  async claimBiweekly(@CurrentUser() user: AuthenticatedUser) {
     const tier = await this.tier.resolve(user.id, user.tier);
-    if (!tierPolicy(tier).weeklyBonus) {
-      throw new ForbiddenException("Bônus semanal disponível a partir do plano Junior.");
+    if (!tierPolicy(tier).biweeklyBonus) {
+      throw new ForbiddenException("Bônus quinzenal disponível a partir do plano Junior.");
     }
-    return this.wallet.claimWeekly(user.id);
+    return this.wallet.claimBiweekly(user.id);
   }
 
   @Post("gene-bank/freeze/:id")
