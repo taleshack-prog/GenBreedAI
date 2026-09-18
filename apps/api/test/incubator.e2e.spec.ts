@@ -165,9 +165,21 @@ describe("Incubadora — HTTP (ADR-0021, gestação)", () => {
   });
 
   it("paginação via HTTP (ADR-0021 item 2): limit funciona, nextCursor avança sem repetir, counts vem completo, state inválido → 400", async () => {
+    // BUGFIX (achado em produção): a versão anterior deste teste assumia que
+    // UM cruzamento de `CROSS` (gato-tabby × gato-siames) sempre gera 6
+    // entradas — falso pra ESTE par: os dois fundadores são homozigotos em
+    // TODO loco (achado nesta rodada — todo fundador de gato doméstico é
+    // "raça pura", sem heterozigose nenhuma), então só existe 1 combinação
+    // de fenótipo possível, não 6 (a genética está certa; era a suposição do
+    // teste que estava errada). Paginação não precisa de diversidade
+    // genética pra ser testada — 6 chamadas separadas de POST /cross (cada
+    // uma determinística, sempre a MESMA descrição, mas em linhas
+    // INDEPENDENTES da incubadora) dão um total conhecido e controlado.
     const headers = AUTH_JUNIOR("incu-page-http-1");
-    const crossRes = await post("/api/v1/cross", CROSS, headers);
-    expect(crossRes.json().entries.length).toBe(6); // JUNIOR: 6 opções (decisão desta rodada — igual pra todo tier)
+    for (let i = 0; i < 6; i++) {
+      const r = await post("/api/v1/cross", CROSS, headers);
+      expect(r.json().entries.length).toBe(1); // par sem segregação nenhuma — sempre 1 descrição por chamada
+    }
 
     const p1 = (await get("/api/v1/incubator?limit=4", headers)).json();
     expect(p1.entries.length).toBe(4);

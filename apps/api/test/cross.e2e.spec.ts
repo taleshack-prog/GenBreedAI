@@ -91,17 +91,48 @@ describe("POST /api/v1/cross (ADR-0020 — incubadora)", () => {
   it("ANTI-P2W: FREE e PHD → mesma descrição de maior probabilidade (mesmo seed)", async () => {
     // gato-tabby × gato-siames (DOMESTIC_CAT — ADR-0016): CROSS (onca-pintada/
     // onca-negra) é WILD_FELINE, fora do pool FREE — FREE receberia 404.
+    //
+    // BUGFIX (achado em produção): NÃO dá pra afirmar "6 entradas" aqui —
+    // gato-tabby e gato-siames são cada um homozigoto em TODO loco (achado
+    // nesta rodada: todo fundador de gato doméstico é assim, "raça pura"),
+    // então esse cruzamento só tem 1 combinação de fenótipo possível, sempre
+    // (a genética está certa; a asserção "toBe(6)" antiga é que inventava um
+    // número sem checar se o par permitia). Como NENHUM par de fundadores
+    // de gato doméstico segrega (são todos homozigotos — não existe par
+    // acessível ao FREE que dê mais de 1 opção), este teste mantém o que
+    // sempre verificou de verdade — o resultado mais provável é IDÊNTICO
+    // entre tiers — sem fingir uma contagem que este par não pode dar. A
+    // prova de segregação de verdade (>1, tier-independente) está no teste
+    // seguinte, com um par que realmente segrega (onca-pintada×onca-negra,
+    // fora do pool FREE, por isso comparado entre JUNIOR e PHD).
     const fixed = { sireId: "gato-tabby", damId: "gato-siames", method: "F1", seed: "e2e-fixed" };
     const phd = (await post(fixed, { "x-user-id": "p1", "x-user-tier": "PHD" })).json();
     const free = (await post(fixed, { "x-user-id": "f1", "x-user-tier": "FREE" })).json();
-    // DECISÃO (rodada de "escolha não varia por plano"): PHD e FREE veem a
-    // MESMA quantidade agora (6 — era até 12 pro PHD). A ORDEM (por
-    // probabilidade) e o resultado da 1ª (mais provável) têm que ser
-    // IDÊNTICOS: a probabilidade do motor não muda por tier.
-    expect(phd.entries.length).toBe(6);
-    expect(free.entries.length).toBe(6);
+    expect(phd.entries.length).toBe(1);
+    expect(free.entries.length).toBe(1);
     expect(free.entries[0].genotype).toEqual(phd.entries[0].genotype);
     expect(free.entries[0].phenotype).toEqual(phd.entries[0].phenotype);
     expect(free.entries[0].sex).toBe(phd.entries[0].sex);
+  });
+
+  it("ANTI-P2W (par que REALMENTE segrega): JUNIOR e PHD → mesma quantidade de opções e mesma mais provável (mesmo seed)", async () => {
+    // onca-pintada (C heterozigoto: C/c^b) × onca-negra (A heterozigoto:
+    // A/a) — ao contrário de qualquer par de gato doméstico, este cruzamento
+    // segrega de verdade (locus A: 1/2 A/a "agouti" · 1/2 a/a "não-agouti" —
+    // 2 fenótipos distintos). WILD_FELINE (ADR-0016) — fora do pool FREE,
+    // por isso comparado entre JUNIOR (mínimo tier que alcança) e PHD.
+    const fixed = { sireId: "onca-pintada", damId: "onca-negra", method: "F1", seed: "e2e-fixed-2" };
+    const phd = (await post(fixed, { "x-user-id": "p2", "x-user-tier": "PHD" })).json();
+    const junior = (await post(fixed, { "x-user-id": "j2", "x-user-tier": "JUNIOR" })).json();
+    // Prova de segregação de verdade — NUNCA "pelo menos 1" (isso escondia o
+    // bug real: um par sem nenhuma variação genética "passando" com 1).
+    expect(phd.entries.length).toBeGreaterThan(1);
+    // Contagem IGUAL entre tiers — igual quantidade de opções não é mais um
+    // privilégio de plano (decisão desta rodada); e o resultado mais
+    // provável é IDÊNTICO, a probabilidade do motor não muda por tier.
+    expect(junior.entries.length).toBe(phd.entries.length);
+    expect(junior.entries[0].genotype).toEqual(phd.entries[0].genotype);
+    expect(junior.entries[0].phenotype).toEqual(phd.entries[0].phenotype);
+    expect(junior.entries[0].sex).toBe(phd.entries[0].sex);
   });
 });
