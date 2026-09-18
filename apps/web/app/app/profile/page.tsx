@@ -46,11 +46,11 @@ export default function ProfilePage() {
     try {
       const r = await buyCredits(packId);
       if (r.redirected) return; // navegando para o checkout do Stripe
-      setWallet(r.wallet); setBuyMsg(`+${r.creditsAdded} créditos de imagem!`);
+      setWallet(r.wallet); setBuyMsg(`+${r.creditsAdded} créditos!`);
     } catch (e) { setBuyMsg((e as Error).message); } finally { setBuying(null); }
   }
   async function coletarQuinzenal() {
-    try { const r = await claimBiweekly(); setWallet(r.wallet); setDailyMsg(r.claimed ? "+1 crédito de imagem (bônus quinzenal)!" : "Bônus quinzenal já coletado. Volte daqui a 15 dias."); }
+    try { const r = await claimBiweekly(); setWallet(r.wallet); setDailyMsg(r.claimed ? "+1 crédito (bônus quinzenal)!" : "Bônus quinzenal já coletado. Volte daqui a 15 dias."); }
     catch (e) { setDailyMsg((e as Error).message); }
   }
   function shareLink(via: "whatsapp" | "email" | "sms" | "copy") {
@@ -136,28 +136,37 @@ export default function ProfilePage() {
               🖼 Coletar crédito quinzenal (+1 crédito)
             </button>
           )}
-          {wallet.imageCredits !== undefined && <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos de imagem: {wallet.imageCredits ?? 0}</div>}
+          {wallet.imageCredits !== undefined && <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos: {wallet.imageCredits ?? 0} (1 crédito = 1 nascimento extra)</div>}
           {dailyMsg && <p className="mt-2 text-center text-xs text-cyan">{dailyMsg}</p>}
           {imgQuota && (
             <div className="mt-3 rounded-lg border border-purple/30 bg-bg-900/50 p-3">
               <div className="flex items-center justify-between">
-                <span className="font-display text-[0.65rem] uppercase text-purple">Imagens IA este mês</span>
+                <span className="font-display text-[0.65rem] uppercase text-purple">Retratos extras este mês</span>
                 <span className="font-mono text-sm text-ink">{imgQuota.remaining} / {imgQuota.limit}</span>
               </div>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full bg-purple" style={{ width: `${imgQuota.limit ? (imgQuota.used / imgQuota.limit) * 100 : 0}%` }} />
               </div>
-              <p className="mt-1.5 text-[0.65rem] text-ink-muted">O retrato de todo cruzamento já vem incluído, sem custo. Esta cota vale só para regenerar um retrato existente — excedeu, usa créditos.</p>
+              {/* BUGFIX (achado nesta rodada): a frase antiga dizia "o retrato de
+                  todo cruzamento já vem incluído" — isso era verdade na ADR-0019,
+                  mas desde a gestação (ADR-0021) o retrato só existe depois do
+                  NASCIMENTO, nunca no cruzamento. Esta cota é só pra REGENERAR um
+                  retrato de um espécime que já nasceu. */}
+              <p className="mt-1.5 text-[0.65rem] text-ink-muted">O retrato é gerado no nascimento, sem custo extra. Esta cota vale só para regenerar um retrato de um espécime que já nasceu — excedeu, usa créditos.</p>
             </div>
           )}
-          <p className="mt-2 text-[0.7rem] text-ink-muted">Fontes de recursos: recompensa diária (por tier), fixação de linhagem (aura 4/5 rende), cota do tier. Congelar custa pouco (20).</p>
+          {/* "cota do tier" tirado daqui (achado nesta rodada): vaga de
+              nascimento não concede catalisadores/biomassa — não é fonte de
+              recurso nenhuma, só limita quando o filhote nasce. As únicas
+              fontes confirmadas no código (WalletService) são as duas abaixo. */}
+          <p className="mt-2 text-[0.7rem] text-ink-muted">Fontes de recursos: recompensa diária (por tier), fixação de linhagem (aura 4/5 rende). Congelar custa pouco (20).</p>
         </div>
       )}
 
       {packs.length > 0 && (
         <div className="mb-5 rounded-card border border-cyan/20 bg-bg-800 p-4">
-          <div className="mb-1 font-display text-xs font-bold uppercase text-cyan">Comprar créditos de imagem</div>
-          <p className="mb-3 text-[0.7rem] text-ink-muted">Créditos geram retratos IA além da sua cota mensal. 1 crédito = 1 imagem.</p>
+          <div className="mb-1 font-display text-xs font-bold uppercase text-cyan">Comprar créditos</div>
+          <p className="mb-3 text-[0.7rem] text-ink-muted">1 crédito = 1 nascimento extra (sem vaga do tier) ou 1 retrato extra além da sua cota mensal de regeneração.</p>
           <div className="grid grid-cols-3 gap-2">
             {packs.map((p) => (
               <button key={p.id} disabled={buying === p.id} onClick={() => comprar(p.id)}
@@ -175,7 +184,7 @@ export default function ProfilePage() {
 
       {ref && (
         <div className="mb-5 rounded-card border border-purple/30 bg-bg-800 p-4">
-          <div className="mb-1 font-display text-xs font-bold uppercase text-purple">Indique e ganhe créditos de imagem</div>
+          <div className="mb-1 font-display text-xs font-bold uppercase text-purple">Indique e ganhe créditos</div>
           <p className="mb-3 text-[0.7rem] text-ink-muted">Compartilhe seu link. Você ganha créditos conforme quem entra engaja: instalou +1 · voltou D1 +1 · ativo D7 +2 · virou assinante +15.</p>
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-white/10 bg-bg-900 p-2">
             <span className="flex-1 truncate font-mono text-xs text-ink">{referralUrl(ref.code)}</span>
@@ -191,7 +200,7 @@ export default function ProfilePage() {
               <div key={l as string} className="rounded bg-bg-900/60 py-1.5"><div className="font-mono text-sm text-ink">{v as number}</div><div className="uppercase text-ink-muted">{l as string}</div></div>
             ))}
           </div>
-          <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos de imagem ganhos: {ref.creditsEarned}</div>
+          <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos ganhos: {ref.creditsEarned}</div>
         </div>
       )}
 

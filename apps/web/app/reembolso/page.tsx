@@ -8,7 +8,7 @@ export default function ReembolsoPage() {
       <LegalSection title="1. Direito de arrependimento (art. 49 do CDC)">
         <p>
           Nos termos do art. 49 da Lei nº 8.078/1990 (Código de Defesa do Consumidor), você pode desistir de uma assinatura ou de uma compra
-          de créditos de imagem em até <b>7 (sete) dias corridos</b> a contar da contratação, com <b>devolução integral</b> do valor pago,
+          de créditos em até <b>7 (sete) dias corridos</b> a contar da contratação, com <b>devolução integral</b> do valor pago,
           sem necessidade de justificativa.
         </p>
       </LegalSection>

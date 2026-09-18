@@ -27,7 +27,7 @@ export default function PrivacidadePage() {
         <ul>
           <li>Criar e operar sua conta;</li>
           <li>Executar o jogo (cruzamentos, cálculo genético, cota diária/mensal por tier);</li>
-          <li>Processar assinaturas e compras de créditos de imagem.</li>
+          <li>Processar assinaturas e compras de créditos.</li>
         </ul>
       </LegalSection>
 

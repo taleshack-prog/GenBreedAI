@@ -233,7 +233,7 @@ export async function gestateEntry(id: string): Promise<IncubatorEntry> {
     if (res.status === 429) {
       const body = await res.json().catch(() => null) as { message?: string; nextAvailableAt?: string | null } | null;
       const when = body?.nextAvailableAt ? nextAvailableLabel(body.nextAvailableAt) : null;
-      throw new ApiError(429, when ?? body?.message ?? "Sem vaga de gestação nem créditos de imagem.");
+      throw new ApiError(429, when ?? body?.message ?? "Sem vaga de gestação nem créditos.");
     }
     throw await apiErrorFrom(res, `Falha ao gestar (${res.status}).`);
   }
@@ -270,7 +270,7 @@ export async function getReferral(): Promise<Referral> {
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar indicação.");
   return res.json();
 }
-/** Bônus QUINZENAL de crédito de imagem (ADR-0021 — era semanal, ADR-0019). */
+/** Bônus QUINZENAL de crédito (1 crédito = 1 nascimento extra, ADR-0021 — era semanal, ADR-0019). */
 export async function claimBiweekly(): Promise<{ claimed: boolean; wallet: Wallet }> {
   const res = await fetch("/api/v1/wallet/biweekly", { method: "POST", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao coletar bônus quinzenal.");

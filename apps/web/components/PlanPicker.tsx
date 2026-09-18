@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { PLANS, fmtBRL, type PlanId, type PlanInfo, type PlanInterval } from "../lib/plans";
+import { PLANS, GESTATION_NOTE, fmtBRL, type PlanId, type PlanInfo, type PlanInterval } from "../lib/plans";
 
 /**
  * Toggle mensal/anual + os 4 cards de plano. Puramente apresentacional — quem
@@ -54,6 +54,7 @@ export function PlanPicker({
                 <li><span className="text-ink">{p.images}</span></li>
                 <li>{p.tools}</li>
                 <li>{p.pool}</li>
+                <li className="text-ink-muted/80">{GESTATION_NOTE}</li>
               </ul>
               <button onClick={() => onSelect(p.id, interval)} disabled={busy || isCurrent}
                 className="rounded-lg border py-2.5 text-center font-display text-xs font-bold uppercase tracking-wide transition hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
