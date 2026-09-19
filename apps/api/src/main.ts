@@ -10,8 +10,13 @@ import {
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
 import { AppModule } from "./app.module";
+import { assertAuthSecretForBoot } from "./common/auth-secret";
 
 export async function buildApp(): Promise<NestFastifyApplication> {
+  // ANTES de criar qualquer coisa: em produção sem AUTH_SECRET válida a API NÃO
+  // sobe (lança aqui) — falhar ao subir é melhor que assinar JWT com segredo
+  // fraco. Fora de produção só avisa que está usando o padrão de dev.
+  assertAuthSecretForBoot();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
@@ -42,5 +47,12 @@ async function bootstrap() {
 
 // Só inicia o servidor quando executado diretamente (não em testes).
 if (process.env.NODE_ENV !== "test") {
-  bootstrap();
+  // Falha de boot (ex.: AUTH_SECRET inválida em produção) tem que DERRUBAR o
+  // processo com código ≠ 0 — os handlers globais acima só logam ("tratado") e
+  // o processo poderia sair com código 0 (Railway não reiniciaria/alertaria).
+  bootstrap().catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error("[boot] A API NÃO subiu:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
 }

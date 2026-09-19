@@ -44,15 +44,15 @@ Guarde a `DATABASE_URL` do projeto. Toda mudança de schema é aplicada **à mã
 | Variável | Para quê | Se faltar |
 |---|---|---|
 | `DATABASE_URL` | Postgres (Neon) | **Silencioso e perigoso:** todos os módulos caem para repositórios em MEMÓRIA. A API sobe "normal", mas nada persiste — tudo some a cada restart/deploy. |
-| `AUTH_SECRET` | Assina/valida o JWT (gere: `openssl rand -hex 32`) | A API usa um segredo padrão **inseguro** (`dev-insecure-secret-change-me`, sem trava): qualquer um consegue forjar sessão de qualquer usuário. |
+| `AUTH_SECRET` | Assina/valida o JWT (gere: `openssl rand -hex 32`). **Regra em produção:** definida, sem espaço/quebra de linha nas pontas, **≥ 32 caracteres**, ≥ 8 caracteres distintos e sem valor óbvio/placeholder (o padrão antigo `dev-insecure-secret-change-me`, "change-me", "insecure", "example", "default"…) | **A API NÃO sobe** (`NODE_ENV=production`): o boot falha com `[auth] AUTH_SECRET inválida em produção: <motivo>` e o processo sai com código 1 (veja `[boot] A API NÃO subiu` nos logs do Railway; o que acontece com a versão anterior depende de haver healthcheck configurado — **a confirmar**). Nunca cai no padrão. Fora de produção o padrão existe, com aviso no log. |
 | `FAL_KEY` | fal.ai (geração de retrato) | Modo procedural: nascimentos ficam **sem retrato de IA**; nada é cobrado nem gerado. |
 | `FAL_MODEL` | Modelo de imagem. Opcional; padrão `fal-ai/flux-2-pro`, o **mesmo para todo tier** | Usa o padrão. **Não defina `FAL_MODEL_PHD`** — é ignorada (aviso no log). |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | Storage de imagens no R2 | Se **qualquer uma das cinco** faltar (em especial `R2_PUBLIC_URL`), o storage cai para o **disco local do container**: as imagens somem no próximo deploy/restart e as URLs não apontam para o R2. |
-| `STRIPE_SECRET_KEY` | Chave **live** (`sk_live_…`) do Stripe | O billing cai no **provider stub de dev** (não cobra de verdade); assinaturas e webhook ficam indisponíveis. |
+| `STRIPE_SECRET_KEY` | Chave **live** (`sk_live_…`) do Stripe | O billing cai no **provider stub de dev** (não cobra de verdade); assinaturas e webhook ficam indisponíveis. Não é inseguro (em produção o `/billing/confirm` do stub fica bloqueado, seção 3.3), mas as compras **não funcionam e não avisam** — a API sobe normal. |
 | `STRIPE_WEBHOOK_SECRET` | Verifica a assinatura de `POST /api/v1/billing/webhook` | O webhook responde 400: pagamentos feitos no Stripe **nunca creditam** pacote nem ativam/atualizam assinatura. |
 | `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` | Retorno do Checkout | O Checkout redireciona para `http://localhost:3000/...` (padrão de dev): o cliente paga e volta para o localhost. Use as URLs de `genbreed.com.br` (ex.: `/app/profile?billing=success&session_id={CHECKOUT_SESSION_ID}` e `/app/profile?billing=cancel`). |
 | `GOOGLE_CLIENT_ID` | Login Google (opcional) | O login Google responde 400 ("não configurado"); e-mail/senha segue funcionando. |
-| `NODE_ENV=production` | Já definido no `Dockerfile` — **não sobrescreva** | É o que faz o código ignorar `QUOTA_UNLIMITED_DEV`. |
+| `NODE_ENV=production` | Já definido no `Dockerfile` — **não sobrescreva** | É o que faz o código ignorar as flags de dev (seção 3.3) **e** exigir `AUTH_SECRET` válida no boot. Sem ele a API roda em modo "dev" (segredo padrão inseguro incluído). |
 | `PORT` | O Railway injeta | — |
 
 ### 3.2 Web (Vercel)
@@ -152,7 +152,8 @@ pnpm --filter @genbreedai/api images:regenerate-founders --missing --apply --con
 ## 10) Checklist final (produção)
 - [ ] Backup do Neon feito e migração aplicada **antes** do merge (seção 7).
 - [ ] `DATABASE_URL` definido (senão a API roda em memória e perde tudo).
-- [ ] `AUTH_SECRET` forte e único.
+- [ ] `AUTH_SECRET` forte e único (≥ 32 caracteres; a API se recusa a subir sem ele em produção — se o deploy falhar no boot com `AUTH_SECRET inválida`, a variável sumiu/está fraca no Railway).
+- [ ] Trocar o `AUTH_SECRET` **invalida todas as sessões** (todo mundo precisa logar de novo) — faça de propósito, nunca "sem querer".
 - [ ] **Nenhuma** variável da seção 3.3 existe no Railway.
 - [ ] As **cinco** `R2_*` definidas (teste: gere um retrato e confirme que a URL aponta para o R2).
 - [ ] `FAL_KEY` definido; `FAL_MODEL` indefinido ou `fal-ai/flux-2-pro`.

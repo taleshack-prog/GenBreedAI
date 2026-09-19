@@ -224,8 +224,11 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 - **Segredos/env** (ver `apps/api/.env.example`): `DATABASE_URL`, `AUTH_SECRET`, `FAL_KEY`, `FAL_MODEL`, `R2_*`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`/`STRIPE_CANCEL_URL`, `GOOGLE_CLIENT_ID`.
   Sem `STRIPE_SECRET_KEY` o billing cai no provider stub de dev (sem cobrança real).
-  **`AUTH_SECRET` é obrigatório em produção:** sem ele a API assina JWT com um segredo padrão inseguro
-  (`auth.service.ts`, sem trava contra isso).
+  **`AUTH_SECRET` é obrigatório em produção** (`common/auth-secret.ts`): com `NODE_ENV=production` a API **não sobe** sem um valor
+  válido (≥ 32 caracteres, sem placeholder/padrão de dev) — `buildApp()` lança e o processo sai com código 1; `AuthService` também se
+  recusa a assinar/verificar JWT sem ele. Fora de produção o padrão inseguro de dev continua, com aviso no log 1x por processo.
+  Os demais segredos ausentes falham FECHADO (webhook Stripe 400, login Google 400, sem fal.ai só o modo procedural) — nenhum
+  tem fallback inseguro; os que só degradam em silêncio estão no `DEPLOY.md` §3.1.
 
 ## 11. Definition of Done (todo PR)
 

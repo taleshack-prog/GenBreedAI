@@ -9,8 +9,10 @@ import { OAuth2Client } from "google-auth-library";
 import { UserRepository, type UserRow } from "./user.repository";
 import { ReferralService } from "../referral/referral.service";
 import { mailboxKey } from "../referral/self-referral";
+import { resolveAuthSecret } from "../common/auth-secret";
 
-function secret(): string { return process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me"; }
+/** Produção sem `AUTH_SECRET` válida LANÇA (nunca cai no padrão de dev) — ver `common/auth-secret.ts`. */
+function secret(): string { return resolveAuthSecret(); }
 function newId(): string { return "usr_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
 export interface AuthResult { token: string; user: { id: string; email: string | null; name: string | null; tier: string }; }
@@ -46,7 +48,8 @@ export class AuthService {
     return jwt.sign({ sub: u.id, tier: u.tier, email: u.email }, secret(), { expiresIn: "30d" });
   }
   verify(token: string): { sub: string; tier: string } {
-    return jwt.verify(token, secret()) as { sub: string; tier: string };
+    // Fixa o algoritmo (o mesmo do `sign`, HS256 por padrão) — nunca aceita outro.
+    return jwt.verify(token, secret(), { algorithms: ["HS256"] }) as { sub: string; tier: string };
   }
   private result(u: UserRow): AuthResult {
     return { token: this.sign(u), user: { id: u.id, email: u.email, name: u.name, tier: u.tier } };
