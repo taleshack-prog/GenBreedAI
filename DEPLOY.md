@@ -144,6 +144,21 @@ pnpm --filter @genbreedai/api images:regenerate-founders --missing --apply --con
 ```
 `images:seed` também gera os retratos que faltam, mas sem dry-run. Prefira `regenerate-founders`.
 
+### Miniaturas dos retratos (ADR-0027) — `sharp`
+
+Todo retrato novo grava também `generated/<cacheKey>_thumb.jpg` (600×600 JPEG, < 200 KB), usada na og:image do WhatsApp. Precisa do
+`sharp` na API — **dependência ainda não instalada**. Ordem:
+1. `pnpm --filter @genbreedai/api add sharp` e commitar `apps/api/package.json` **e** `pnpm-lock.yaml` juntos (o Dockerfile usa
+   `--frozen-lockfile`: `package.json` alterado sem o lockfile derruba o build da API).
+2. Deploy. Sem o `sharp` nada quebra: o retrato é salvo e a miniatura falha com aviso `[thumbnail]` no log; a prévia cai no original.
+3. Retratos gerados **antes** não têm miniatura — backfill (só lê o PNG do R2 e redimensiona; **não** chama a fal.ai nem altera o original):
+```
+pnpm --filter @genbreedai/api images:backfill-thumbs                                          # dry-run (padrão): só conta quantos faltam
+pnpm --filter @genbreedai/api images:backfill-thumbs --apply --confirm-bucket=<bucket> [--max=<N>]
+```
+O token do R2 precisa poder gravar/listar/ler qualquer chave do bucket (o backfill usa List/Get/Put); o token de produção da API já grava.
+Depois de subir, o WhatsApp guarda em cache a prévia antiga de um link por um tempo — teste com um link novo ou aguarde.
+
 ## 9) Stripe (produção)
 - **Webhook:** endpoint `https://<API>/api/v1/billing/webhook`, com o segredo em `STRIPE_WEBHOOK_SECRET`. Eventos tratados:
   `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`.

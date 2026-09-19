@@ -5,9 +5,12 @@
  *
  * A troca é automática por ambiente: sem R2_* → disco; com R2_* → bucket.
  */
-import { mkdir, writeFile, stat as fsStat, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir, stat as fsStat, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
+import { makeThumbnail } from "./thumbnail";
 
 /**
  * Pasta local (sem R2) — padrão apps/web/public/assets/generated (dev sem R2:
@@ -41,6 +44,9 @@ function client(): S3Client {
   return s3;
 }
 const objKey = (cacheKey: string) => `generated/${cacheKey}.png`;
+/** Miniatura (ADR-0027): sufixo PREVISÍVEL ao lado do original — `generated/<cacheKey>_thumb.jpg`. */
+const THUMB_SUFFIX = "_thumb.jpg";
+const thumbObjKey = (cacheKey: string) => `generated/${cacheKey}${THUMB_SUFFIX}`;
 
 /**
  * URL pública do objeto. `version` (epoch em SEGUNDOS — HeadObject.LastModified
@@ -55,21 +61,41 @@ export function publicUrl(cacheKey: string, version?: number): string {
 }
 
 /**
+ * URL pública da MINIATURA (600×600 JPEG, ADR-0027) — mesmo padrão de
+ * `publicUrl` (`?v=<version>` quando há versão). Só chame com a versão de
+ * `statThumb()`: a miniatura pode não existir (retratos anteriores à ADR-0027).
+ */
+export function thumbUrl(cacheKey: string, version?: number): string {
+  const suffix = version !== undefined ? `?v=${version}` : "";
+  if (useR2) return `${R2.publicUrl!.replace(/\/$/, "")}/${thumbObjKey(cacheKey)}${suffix}`;
+  return `/assets/generated/${cacheKey}${THUMB_SUFFIX}${suffix}`;
+}
+
+async function statObject(r2Key: string, diskName: string): Promise<{ version: number } | null> {
+  if (useR2) {
+    try {
+      const res = await client().send(new HeadObjectCommand({ Bucket: R2.bucket!, Key: r2Key }));
+      return { version: Math.floor((res.LastModified?.getTime() ?? Date.now()) / 1000) };
+    } catch { return null; }
+  }
+  try {
+    const s = await fsStat(join(dir(), diskName));
+    return { version: Math.floor(s.mtimeMs / 1000) };
+  } catch { return null; }
+}
+
+/**
  * Versão do objeto gravado (pra cache-busting, ver `publicUrl`) — `null` se
  * o objeto não existe. R2: `HeadObjectCommand.LastModified` (Date) truncado
  * pra segundos. Disco local: `mtime` do arquivo, idem.
  */
 export async function stat(cacheKey: string): Promise<{ version: number } | null> {
-  if (useR2) {
-    try {
-      const res = await client().send(new HeadObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) }));
-      return { version: Math.floor((res.LastModified?.getTime() ?? Date.now()) / 1000) };
-    } catch { return null; }
-  }
-  try {
-    const s = await fsStat(join(dir(), `${cacheKey}.png`));
-    return { version: Math.floor(s.mtimeMs / 1000) };
-  } catch { return null; }
+  return statObject(objKey(cacheKey), `${cacheKey}.png`);
+}
+
+/** Igual a `stat()`, mas da miniatura — `null` quando ela não existe (retrato anterior à ADR-0027, ou a geração falhou). */
+export async function statThumb(cacheKey: string): Promise<{ version: number } | null> {
+  return statObject(thumbObjKey(cacheKey), `${cacheKey}${THUMB_SUFFIX}`);
 }
 
 /** Wrapper booleano de `stat()` — mantido pelos chamadores que só precisam saber se existe. */
@@ -83,17 +109,89 @@ export async function store(cacheKey: string, buffer: Buffer): Promise<string> {
   const version = Math.floor(Date.now() / 1000);
   if (useR2) {
     await client().send(new PutObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey), Body: buffer, ContentType: "image/png" }));
-    return publicUrl(cacheKey, version);
+  } else {
+    await mkdir(dir(), { recursive: true });
+    await writeFile(join(dir(), `${cacheKey}.png`), buffer);
   }
-  await mkdir(dir(), { recursive: true });
-  await writeFile(join(dir(), `${cacheKey}.png`), buffer);
+  // O ORIGINAL já está salvo. A miniatura (ADR-0027) é melhor-esforço: qualquer falha
+  // (sharp ausente, imagem ilegível, R2 recusando o 2º objeto) vira log e o retrato
+  // segue normalmente — nunca impede nem desfaz a gravação do original.
+  await storeThumbnailBestEffort(cacheKey, buffer);
   return publicUrl(cacheKey, version);
 }
 
+/** Gera e grava a miniatura ao lado do original; nunca lança. */
+async function storeThumbnailBestEffort(cacheKey: string, original: Buffer): Promise<void> {
+  try {
+    await storeThumbnail(cacheKey, await makeThumbnail(original));
+  } catch (e) {
+    console.warn(`[thumbnail] falha ao gerar a miniatura de ${cacheKey} (o retrato original foi salvo): ${(e as Error).message}`);
+    // Não deixa uma miniatura ANTIGA (de um retrato regravado sob o mesmo cacheKey) servindo a imagem errada.
+    await removeThumbnail(cacheKey);
+  }
+}
+
+/** Grava a miniatura JPEG (já pronta) — usada por `store()` e pelo script de backfill. Lança em erro de I/O. */
+export async function storeThumbnail(cacheKey: string, jpeg: Buffer): Promise<string> {
+  const version = Math.floor(Date.now() / 1000);
+  if (useR2) {
+    await client().send(new PutObjectCommand({ Bucket: R2.bucket!, Key: thumbObjKey(cacheKey), Body: jpeg, ContentType: "image/jpeg" }));
+  } else {
+    await mkdir(dir(), { recursive: true });
+    await writeFile(join(dir(), `${cacheKey}${THUMB_SUFFIX}`), jpeg);
+  }
+  return thumbUrl(cacheKey, version);
+}
+
+async function removeThumbnail(cacheKey: string): Promise<void> {
+  if (useR2) {
+    try { await client().send(new DeleteObjectCommand({ Bucket: R2.bucket!, Key: thumbObjKey(cacheKey) })); } catch { /* já não existe */ }
+    return;
+  }
+  try { await rm(join(dir(), `${cacheKey}${THUMB_SUFFIX}`)); } catch { /* já não existe */ }
+}
+
+/** Apaga o retrato E a miniatura (senão uma regeneração deixaria a miniatura velha no ar). */
 export async function remove(cacheKey: string): Promise<void> {
+  await removeThumbnail(cacheKey);
   if (useR2) {
     try { await client().send(new DeleteObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) })); } catch { /* já não existe */ }
     return;
   }
   try { await rm(join(dir(), `${cacheKey}.png`)); } catch { /* já não existe */ }
+}
+
+/**
+ * Backfill de miniaturas (`images:backfill-thumbs`): todas as cacheKeys com
+ * ORIGINAL gravado (`<cacheKey>.png`) — R2: lista `generated/` paginado; disco: a pasta.
+ */
+export async function listCacheKeys(): Promise<string[]> {
+  const keys: string[] = [];
+  if (useR2) {
+    let token: string | undefined;
+    do {
+      const res = await client().send(new ListObjectsV2Command({ Bucket: R2.bucket!, Prefix: "generated/", ContinuationToken: token }));
+      for (const o of res.Contents ?? []) {
+        const m = /^generated\/(.+)\.png$/.exec(o.Key ?? "");
+        if (m) keys.push(m[1]!);
+      }
+      token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (token);
+    return keys;
+  }
+  try {
+    for (const f of await readdir(dir())) if (f.endsWith(".png")) keys.push(f.slice(0, -".png".length));
+  } catch { /* pasta ainda não existe */ }
+  return keys;
+}
+
+/** Bytes do retrato original (só leitura) — `null` se não existe. Nunca gera imagem. */
+export async function readOriginal(cacheKey: string): Promise<Buffer | null> {
+  if (useR2) {
+    try {
+      const res = await client().send(new GetObjectCommand({ Bucket: R2.bucket!, Key: objKey(cacheKey) }));
+      return res.Body ? Buffer.from(await res.Body.transformToByteArray()) : null;
+    } catch { return null; }
+  }
+  try { return await readFile(join(dir(), `${cacheKey}.png`)); } catch { return null; }
 }

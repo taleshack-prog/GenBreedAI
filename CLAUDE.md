@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0026) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0027) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -106,7 +106,7 @@ genbreedai/
 | `pnpm lint` | **No-op hoje** — os scripts de lint dos apps são `echo 'skip'` (pendência, seção 6) |
 
 Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:migrate`, `db:seed`, `db:reset`,
-`db:backfill-sex`, `images:seed`, `images:regenerate-founders`. Operação na seção 10.
+`db:backfill-sex`, `images:seed`, `images:regenerate-founders`, `images:backfill-thumbs`. Operação na seção 10.
 
 ## 6. Pendências registradas (não bloqueiam features)
 
@@ -127,7 +127,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
    no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
    definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
-7. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+7. **`sharp` não instalado na API** (ADR-0027): sem ele nenhuma miniatura é gerada (o retrato é salvo normalmente, com aviso no log).
+   Instalar com `pnpm --filter @genbreedai/api add sharp` e commitar `package.json` + `pnpm-lock.yaml` juntos (Dockerfile usa
+   `--frozen-lockfile`). Retratos anteriores à ADR-0027 ficam sem miniatura até rodar `images:backfill-thumbs`.
+8. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
 ## 7. Convenções de código
@@ -192,7 +195,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   ignorada). Gerada no nascimento; além disso há retratos pré-gerados dos fundadores (`images:seed`) e regeneração de
   retrato de espécime próprio (cota de retratos extras/créditos). Cache determinístico por `cacheKey` = hash(genótipo +
   pack + versão da arte [+ sexo, só quando o sexo muda a aparência]) — qualquer mudança de genótipo de fundador força
-  novo retrato. Armazenamento no R2.
+  novo retrato. Armazenamento no R2. **Miniatura (ADR-0027):** ao gravar o retrato também se grava `generated/<cacheKey>_thumb.jpg`
+  (600×600 JPEG, < 200 KB) para a og:image do WhatsApp (o original passa de 1 MB e é ignorado); melhor-esforço — falha na miniatura
+  só gera log, nunca impede o retrato. `GET /public/specimens/:id` devolve `thumbUrl` (ou `null` → a web cai no original).
 - **Planos:** assinaturas Stripe mensal/anual (JUNIOR/SENIOR/PHD, por `lookup_key` — nunca hardcode `price_id`); o webhook
   é a fonte do ciclo de vida da assinatura. Preços de planos: `apps/web/lib/plans.ts` e Stripe.
 
@@ -227,6 +232,8 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   a API (detalhes em `DEPLOY.md`).
 - **`db:backfill-sex`:** dry-run por padrão; `--apply` só grava com `--confirm-host=<host igual ao de DATABASE_URL>`.
 - **`images:regenerate-founders`:** dry-run por padrão; `--apply` exige `--confirm-bucket=<bucket real>` e `--max=N` acima de 10 retratos.
+- **`images:backfill-thumbs`** (ADR-0027): dry-run por padrão (só conta os retratos sem miniatura); `--apply` exige `--confirm-bucket=<bucket real>`,
+  `--max=N` opcional. Só lê o PNG e grava `_thumb.jpg` — sem fal.ai, sem tocar no original. Requer `sharp`.
 - **Flags de dev** (`common/dev-flags.ts`, `isDevFlagEnabled` — a função ÚNICA; flag nova de dev usa ela): `QUOTA_UNLIMITED_DEV` (e o
   alias depreciado `CROSS_QUOTA_UNLIMITED`), `IMAGE_QUOTA_UNLIMITED`, `AUTH_DEV_HEADERS` e `BILLING_STUB_ENABLED` são **ignoradas quando
   `NODE_ENV=production`**, mesmo definidas, com aviso no log 1x por processo. Mesmo assim, não as defina em produção (`DEPLOY.md` §3.3).
@@ -257,7 +264,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0027). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0028). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -277,6 +284,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; D1/D7 pendentes.
 - **0025** — (produto, não genética) Primeira gestação de cada conta = 5 min (cortesia, `users.first_gestation_at`); complementa a 0021.
 - **0026** — (produto/web, não genética) PWA instalável: manifest + service worker mínimo sem cache offline; instruções na landing.
+- **0027** — (produto/imagem, não genética) Miniatura 600×600 JPEG do retrato para a og:image do WhatsApp; melhor-esforço; backfill por script.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

@@ -31,9 +31,10 @@ describe("GET /api/v1/public/specimens/:id (sem login)", () => {
     expect(["M", "F", null]).toContain(body.sex);
     expect(typeof body.generation).toBe("number");
     expect(body).toHaveProperty("imageUrl");
+    expect(body).toHaveProperty("thumbUrl"); // ADR-0027: miniatura (string) ou null
 
-    // Projeção ESTRITA (item 4/segurança) — nada além do item 1.
-    const allowedKeys = ["id", "displayName", "species", "aura", "sex", "generation", "imageUrl"].sort();
+    // Projeção ESTRITA (item 4/segurança) — nada além do item 1 (+ a miniatura, ADR-0027).
+    const allowedKeys = ["id", "displayName", "species", "aura", "sex", "generation", "imageUrl", "thumbUrl"].sort();
     expect(Object.keys(body).sort()).toEqual(allowedKeys);
     expect(body).not.toHaveProperty("genotype");
     expect(body).not.toHaveProperty("phenotype");

@@ -7,7 +7,7 @@
  *
  * SEGURANÇA (reportado no pedido, item 4): a resposta é uma projeção
  * ESTRITA — só `id`, `displayName`, `species`, `aura`, `sex`, `generation`,
- * `imageUrl`. NUNCA `genotype`/`phenotype` (composição genética), `ownerId`
+ * `imageUrl`, `thumbUrl` (miniatura do retrato, ADR-0027). NUNCA `genotype`/`phenotype` (composição genética), `ownerId`
  * (dono), `sireId`/`damId` (pedigree/linhagem), `fPedigree`/`fixationIndex`
  * (métricas de criação), `cacheKey` cru, `fertility`/`haldaneStatus` ou
  * `status` (ALIVE/FROZEN). `imageUrl` só aparece se o retrato JÁ existe
@@ -24,7 +24,7 @@ import { resolveDisplayName } from "@genbreedai/shared";
 import type { Sex } from "@genbreedai/shared";
 import { SpecimenRepository } from "./in-memory.repository";
 import { cacheKeyOf } from "../images/image.service";
-import { stat, publicUrl } from "../images/storage";
+import { stat, statThumb, publicUrl, thumbUrl } from "../images/storage";
 
 export interface PublicSpecimenView {
   id: string;
@@ -34,6 +34,12 @@ export interface PublicSpecimenView {
   sex: Sex | null;
   generation: number;
   imageUrl: string | null;
+  /**
+   * Miniatura 600×600 JPEG (ADR-0027) pra og:image do WhatsApp (o original,
+   * >1 MB, é ignorado pelo card). `null` quando não existe — retratos gerados
+   * antes da ADR-0027 ou geração da miniatura que falhou: a web cai na original.
+   */
+  thumbUrl: string | null;
 }
 
 @Controller("api/v1/public/specimens")
@@ -49,6 +55,9 @@ export class PublicSpecimenController {
     const cacheKey = cacheKeyOf(s);
     const st = await stat(cacheKey);
     const imageUrl = st ? publicUrl(cacheKey, st.version) : null;
+    // Miniatura só faz sentido com o original presente (senão seria uma miniatura órfã).
+    const thumbSt = st ? await statThumb(cacheKey) : null;
+    const thumb = thumbSt ? thumbUrl(cacheKey, thumbSt.version) : null;
 
     return {
       id: s.id,
@@ -58,6 +67,7 @@ export class PublicSpecimenController {
       sex: s.sex,
       generation: s.generation,
       imageUrl,
+      thumbUrl: thumb,
     };
   }
 }

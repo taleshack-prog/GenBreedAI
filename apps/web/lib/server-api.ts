@@ -30,6 +30,8 @@ export interface PublicSpecimen {
   sex: Sex | null;
   generation: number;
   imageUrl: string | null;
+  /** Miniatura 600×600 JPEG (ADR-0027) pra og:image; `null`/ausente = usar a original (retratos antigos ou API sem a miniatura). */
+  thumbUrl?: string | null;
 }
 
 /** `null` quando o espécime não existe (404) — nunca lança pra esse caso; outros erros HTTP lançam. */

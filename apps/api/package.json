@@ -17,6 +17,7 @@
     "db:backfill-sex": "node --import=@swc-node/register/esm-register src/db/backfill-sex.ts",
     "images:seed": "node --import=@swc-node/register/esm-register src/images/seed-portraits.ts",
     "images:regenerate-founders": "node --import=@swc-node/register/esm-register src/images/regenerate-founders.ts",
+    "images:backfill-thumbs": "node --import=@swc-node/register/esm-register src/images/backfill-thumbnails-cli.ts",
     "start:prod": "node --import=@swc-node/register/esm-register src/main.ts"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.35.4",
     "stripe": "^22.6.2"
   },
   "devDependencies": {

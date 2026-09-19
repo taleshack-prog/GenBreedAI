@@ -61,3 +61,31 @@ export function stripCacheBustQuery(url: string): string {
   const i = url.indexOf("?");
   return i === -1 ? url : url.slice(0, i);
 }
+
+/** Miniatura gerada pela API (ADR-0027): 600×600 JPEG. Mudar aqui só junto de `thumbnail.ts` na API. */
+export const OG_THUMB_SIZE = 600;
+/** Retrato original (fal.ai, `square_hd`): PNG 1024×1024. */
+export const OG_ORIGINAL_SIZE = 1024;
+
+export interface OgImage { url: string; width?: number; height?: number; type: string; alt: string }
+
+/**
+ * Imagem da prévia (og:image e twitter:image) de `/f/[id]`. O WhatsApp ignora
+ * imagem grande (limite prático ~300 KB) e o retrato original passa de 1 MB,
+ * então prefere a MINIATURA (600×600 JPEG). Ordem: miniatura → original
+ * (retratos anteriores à miniatura, ou geração que falhou — como sempre foi) →
+ * imagem genérica `fallbackUrl` (sem retrato ainda). Só dimensões/tipo que o
+ * arquivo de fato tem: nunca declara 1024×1024 pro fallback, nem PNG pra miniatura.
+ * Meta tags só: tira o `?v=` (a página continua exibindo a original COM `?v=`).
+ */
+export function pickOgImage(
+  specimen: { displayName: string; imageUrl: string | null; thumbUrl?: string | null },
+  fallbackUrl: string,
+): OgImage {
+  const alt = specimen.displayName;
+  const thumb = absoluteImageUrl(specimen.thumbUrl ?? null);
+  if (thumb) return { url: stripCacheBustQuery(thumb), width: OG_THUMB_SIZE, height: OG_THUMB_SIZE, type: "image/jpeg", alt };
+  const original = absoluteImageUrl(specimen.imageUrl);
+  if (original) return { url: stripCacheBustQuery(original), width: OG_ORIGINAL_SIZE, height: OG_ORIGINAL_SIZE, type: "image/png", alt };
+  return { url: stripCacheBustQuery(fallbackUrl), type: "image/jpeg", alt };
+}

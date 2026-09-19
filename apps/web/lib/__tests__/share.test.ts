@@ -3,7 +3,7 @@
  * URL, sem rede; displayName no lugar do slug; ref preservado.
  */
 import { describe, it, expect } from "vitest";
-import { buildPublicSpecimenUrl, auraStarsText, buildShareMessage, buildWhatsAppUrl, absoluteImageUrl, stripCacheBustQuery, PUBLIC_SHARE_ORIGIN } from "../share";
+import { buildPublicSpecimenUrl, auraStarsText, buildShareMessage, buildWhatsAppUrl, absoluteImageUrl, stripCacheBustQuery, pickOgImage, PUBLIC_SHARE_ORIGIN } from "../share";
 import { displayName } from "../display";
 
 describe("buildPublicSpecimenUrl — ref preservado", () => {
@@ -103,6 +103,36 @@ describe("compartilhar pelo CapsuleCard (Gene Bank etc.) é IDÊNTICO ao da tela
     const fromGeneBank = buildWhatsAppUrl(message, url);
     const fromReveal = buildWhatsAppUrl(message, url);
     expect(fromGeneBank).toBe(fromReveal);
+  });
+});
+
+describe("pickOgImage — miniatura (ADR-0027) → original → fallback", () => {
+  const FALLBACK = "https://genbreed.com.br/hero-tigre-albino.jpg";
+  const base = { displayName: "Onça-pintada" };
+  const ORIGINAL = "https://img.genbreed.com.br/generated/abc.png?v=1737000000";
+  const THUMB = "https://img.genbreed.com.br/generated/abc_thumb.jpg?v=1737000001";
+
+  it("com miniatura: usa a miniatura, 600×600 image/jpeg, sem '?v='", () => {
+    const og = pickOgImage({ ...base, imageUrl: ORIGINAL, thumbUrl: THUMB }, FALLBACK);
+    expect(og).toEqual({ url: "https://img.genbreed.com.br/generated/abc_thumb.jpg", width: 600, height: 600, type: "image/jpeg", alt: "Onça-pintada" });
+  });
+
+  it("sem miniatura (retrato antigo): cai na ORIGINAL, como sempre foi — 1024×1024 image/png", () => {
+    for (const thumbUrl of [null, undefined]) {
+      const og = pickOgImage({ ...base, imageUrl: ORIGINAL, thumbUrl }, FALLBACK);
+      expect(og).toEqual({ url: "https://img.genbreed.com.br/generated/abc.png", width: 1024, height: 1024, type: "image/png", alt: "Onça-pintada" });
+    }
+  });
+
+  it("sem retrato nenhum: imagem genérica, sem declarar dimensão", () => {
+    const og = pickOgImage({ ...base, imageUrl: null, thumbUrl: null }, FALLBACK);
+    expect(og).toEqual({ url: FALLBACK, type: "image/jpeg", alt: "Onça-pintada" });
+    expect(og).not.toHaveProperty("width");
+  });
+
+  it("URL relativa (dev sem R2) vira absoluta no domínio público", () => {
+    const og = pickOgImage({ ...base, imageUrl: "/assets/generated/abc.png?v=1", thumbUrl: "/assets/generated/abc_thumb.jpg?v=2" }, FALLBACK);
+    expect(og.url).toBe(`${PUBLIC_SHARE_ORIGIN}/assets/generated/abc_thumb.jpg`);
   });
 });
 
