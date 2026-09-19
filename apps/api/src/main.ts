@@ -11,12 +11,16 @@ import {
 } from "@nestjs/platform-fastify";
 import { AppModule } from "./app.module";
 import { assertAuthSecretForBoot } from "./common/auth-secret";
+import { assertDatabaseForBoot } from "./common/database-url";
 
 export async function buildApp(): Promise<NestFastifyApplication> {
-  // ANTES de criar qualquer coisa: em produção sem AUTH_SECRET válida a API NÃO
-  // sobe (lança aqui) — falhar ao subir é melhor que assinar JWT com segredo
-  // fraco. Fora de produção só avisa que está usando o padrão de dev.
+  // ANTES de criar qualquer coisa: em produção a API NÃO sobe (lança aqui) sem
+  // AUTH_SECRET válida (assinaria JWT com segredo fraco) nem sem DATABASE_URL
+  // (rodaria em memória e perderia tudo a cada reinício, em silêncio) — falhar ao
+  // subir é melhor que subir inseguro/sem persistência. Fora de produção só
+  // avisa (segredo padrão de dev; dados em memória).
   assertAuthSecretForBoot();
+  assertDatabaseForBoot();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),

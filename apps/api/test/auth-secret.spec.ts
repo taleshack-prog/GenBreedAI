@@ -115,9 +115,10 @@ describe("boot da API (buildApp)", () => {
     await expect(buildApp()).rejects.toThrow(/AUTH_SECRET inválida em produção/);
   });
 
-  it("PRODUÇÃO com AUTH_SECRET válida → sobe normal", async () => {
+  it("PRODUÇÃO com AUTH_SECRET válida → sobe normal (com DATABASE_URL, também exigida em produção)", async () => {
     process.env.NODE_ENV = "production";
     process.env.AUTH_SECRET = STRONG;
+    process.env.DATABASE_URL = "postgresql://user:pass@127.0.0.1:5432/genbreed_test"; // o Pool do pg só conecta na 1ª query — nada de rede no boot
     const app = await buildApp();
     try { await app.init(); expect(app).toBeDefined(); } finally { await app.close(); }
   });

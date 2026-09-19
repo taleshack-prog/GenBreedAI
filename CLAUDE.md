@@ -87,7 +87,8 @@ genbreedai/
   Auth **própria**: JWT (`jsonwebtoken`) + `bcryptjs` + login Google (`google-auth-library`). Imagens: fal.ai + Cloudflare
   R2 (`@aws-sdk/client-s3`). Pagamentos: Stripe.
 - Arquitetura da API: portas (classes abstratas `*Repository`) com adapter in-memory (dev/teste) e adapter Drizzle
-  (ADR-0005/0006). Sem `DATABASE_URL`, tudo roda em memória.
+  (ADR-0005/0006). Sem `DATABASE_URL`, tudo roda em memória — **só fora de produção**: com `NODE_ENV=production` a API não sobe sem
+  ela (seção 10).
 - **Não existem hoje:** Redis, BullMQ, Auth.js/NextAuth, Playwright, chat. **Nenhum processo agendado** (cron/job/fila):
   tudo roda por requisição — limpezas são preguiçosas (ex.: incubadora, ADR-0023).
 - Testes: Vitest (unit, golden e "e2e" via `app.inject` do Fastify).
@@ -121,7 +122,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 5. **Referral — D1 e D7 NÃO implementados** (ADR-0024): dependem de tarefa agendada (não há cron/fila) ou de avaliação preguiçosa +
    definição de "retornou" (login? bônus diário? nascimento?). As colunas `d1`/`d7` existem sem escritor; a tela mostra "em breve".
    O vínculo no cadastro e a conversão (assinatura) JÁ funcionam, server-side; só a conversão paga.
-6. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
+   no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
+   definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
+7. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
 ## 7. Convenções de código
@@ -227,8 +231,11 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   **`AUTH_SECRET` é obrigatório em produção** (`common/auth-secret.ts`): com `NODE_ENV=production` a API **não sobe** sem um valor
   válido (≥ 32 caracteres, sem placeholder/padrão de dev) — `buildApp()` lança e o processo sai com código 1; `AuthService` também se
   recusa a assinar/verificar JWT sem ele. Fora de produção o padrão inseguro de dev continua, com aviso no log 1x por processo.
+  **`DATABASE_URL` também é obrigatória em produção** (`common/database-url.ts`, mesmo lugar e padrão: `buildApp()` lança, saída 1):
+  sem ela tudo cairia nos repositórios em memória e os dados sumiriam a cada reinício, em silêncio. Fora de produção o modo em
+  memória continua, com aviso "os dados NÃO persistem" 1x por processo. **Boot novo = função `assert…ForBoot()` chamada em `buildApp()`.**
   Os demais segredos ausentes falham FECHADO (webhook Stripe 400, login Google 400, sem fal.ai só o modo procedural) — nenhum
-  tem fallback inseguro; os que só degradam em silêncio estão no `DEPLOY.md` §3.1.
+  tem fallback inseguro; os que só degradam em silêncio estão no `DEPLOY.md` §3.1 (ver pendência sobre `R2_*` na seção 6).
 
 ## 11. Definition of Done (todo PR)
 
