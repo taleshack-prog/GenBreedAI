@@ -161,28 +161,77 @@ export async function remove(cacheKey: string): Promise<void> {
   try { await rm(join(dir(), `${cacheKey}.png`)); } catch { /* já não existe */ }
 }
 
+/** De onde o storage está lendo/gravando de fato (R2 só com as CINCO `R2_*`; senão, disco local). */
+export function storageMode(): { kind: "r2"; bucket: string } | { kind: "local"; dir: string } {
+  return useR2 ? { kind: "r2", bucket: R2.bucket! } : { kind: "local", dir: dir() };
+}
+
 /**
- * Backfill de miniaturas (`images:backfill-thumbs`): todas as cacheKeys com
- * ORIGINAL gravado (`<cacheKey>.png`) — R2: lista `generated/` paginado; disco: a pasta.
+ * `true` quando ALGUMA `R2_*` está definida mas não as cinco — o storage cai no
+ * disco local em silêncio (pendência do CLAUDE.md §6). Scripts de administração
+ * usam isto pra abortar em vez de operar na pasta errada.
  */
-export async function listCacheKeys(): Promise<string[]> {
+export function r2PartiallyConfigured(): boolean {
+  const set = [R2.account, R2.key, R2.secret, R2.bucket, R2.publicUrl].filter(Boolean).length;
+  return set > 0 && !useR2;
+}
+
+/** Uma página de listagem: as chaves e o token da PRÓXIMA página (`undefined` = era a última). */
+export interface ListPage { keys: string[]; nextToken?: string }
+
+/**
+ * Percorre TODAS as páginas de uma listagem paginada por token (ListObjectsV2 devolve no
+ * máximo 1000 objetos por chamada) e junta as chaves antes de qualquer decisão. Nunca
+ * termina em silêncio com um subconjunto: token repetido (laço) ou teto de páginas
+ * estourado LANÇAM. Pura em relação ao S3 — `fetchPage` é injetado (testável sem rede).
+ */
+export async function collectAllPages(
+  fetchPage: (token: string | undefined) => Promise<ListPage>,
+  maxPages = 100_000,
+): Promise<{ keys: string[]; pages: number }> {
   const keys: string[] = [];
+  const seen = new Set<string>();
+  let token: string | undefined;
+  let pages = 0;
+  do {
+    const page = await fetchPage(token);
+    pages++;
+    for (const k of page.keys) keys.push(k);
+    token = page.nextToken;
+    if (token !== undefined) {
+      if (seen.has(token)) throw new Error(`paginação em laço: ContinuationToken repetido na página ${pages}`);
+      seen.add(token);
+      if (pages >= maxPages) throw new Error(`listagem passou de ${maxPages} páginas — abortada por segurança`);
+    }
+  } while (token !== undefined);
+  return { keys, pages };
+}
+
+/**
+ * Inventário do storage pro backfill (`images:backfill-thumbs`): TODOS os nomes de arquivo
+ * do prefixo `generated/` (originais `.png` E miniaturas `_thumb.jpg`, sem o prefixo),
+ * paginando até o fim. R2: ListObjectsV2 paginado; disco: a pasta. Erros LANÇAM
+ * (nada de devolver lista vazia por engano) — exceto pasta local ainda inexistente = vazia.
+ */
+export async function listStoredNames(): Promise<{ names: string[]; pages: number }> {
   if (useR2) {
-    let token: string | undefined;
-    do {
-      const res = await client().send(new ListObjectsV2Command({ Bucket: R2.bucket!, Prefix: "generated/", ContinuationToken: token }));
-      for (const o of res.Contents ?? []) {
-        const m = /^generated\/(.+)\.png$/.exec(o.Key ?? "");
-        if (m) keys.push(m[1]!);
+    const prefix = "generated/";
+    const { keys, pages } = await collectAllPages(async (token) => {
+      const res = await client().send(new ListObjectsV2Command({ Bucket: R2.bucket!, Prefix: prefix, ContinuationToken: token }));
+      if (res.IsTruncated && !res.NextContinuationToken) {
+        throw new Error("R2 indicou listagem truncada sem NextContinuationToken — listagem incompleta, abortada");
       }
-      token = res.IsTruncated ? res.NextContinuationToken : undefined;
-    } while (token);
-    return keys;
+      const keys = (res.Contents ?? []).map((o) => o.Key ?? "").filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+      return { keys, nextToken: res.IsTruncated ? res.NextContinuationToken : undefined };
+    });
+    return { names: keys, pages };
   }
   try {
-    for (const f of await readdir(dir())) if (f.endsWith(".png")) keys.push(f.slice(0, -".png".length));
-  } catch { /* pasta ainda não existe */ }
-  return keys;
+    return { names: await readdir(dir()), pages: 1 };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { names: [], pages: 1 }; // pasta ainda não existe
+    throw e;
+  }
 }
 
 /** Bytes do retrato original (só leitura) — `null` se não existe. Nunca gera imagem. */

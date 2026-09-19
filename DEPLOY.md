@@ -153,7 +153,7 @@ Todo retrato novo grava também `generated/<cacheKey>_thumb.jpg` (600×600 JPEG,
 2. Deploy. Sem o `sharp` nada quebra: o retrato é salvo e a miniatura falha com aviso `[thumbnail]` no log; a prévia cai no original.
 3. Retratos gerados **antes** não têm miniatura — backfill (só lê o PNG do R2 e redimensiona; **não** chama a fal.ai nem altera o original):
 ```
-pnpm --filter @genbreedai/api images:backfill-thumbs                                          # dry-run (padrão): só conta quantos faltam
+pnpm --filter @genbreedai/api images:backfill-thumbs                                          # dry-run (padrão): lista tudo (todas as páginas) e conta: retratos / com miniatura / faltam
 pnpm --filter @genbreedai/api images:backfill-thumbs --apply --confirm-bucket=<bucket> [--max=<N>]
 ```
 O token do R2 precisa poder gravar/listar/ler qualquer chave do bucket (o backfill usa List/Get/Put); o token de produção da API já grava.

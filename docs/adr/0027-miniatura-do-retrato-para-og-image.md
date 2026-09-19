@@ -50,6 +50,26 @@ miniatura precisa existir como objeto próprio.
   --frozen-lockfile`; um `package.json` alterado sem o lockfile derruba o build.
   Até lá tudo degrada com segurança (retrato salvo, aviso no log, prévia usa o
   original).
+- **Backfill — transparência (revisão de 2026-09-19). A causa do silêncio NÃO foi
+  identificada.** Um dia o script imprimiu só o cabeçalho e não processou nada, sem
+  contagem nem erro. A hipótese inicial (paginação insuficiente do ListObjectsV2,
+  ≤1000 objetos por chamada) **foi descartada**: o bucket tem 852 objetos — UMA
+  página — e a paginação já existia e funcionava. A hipótese seguinte (configuração
+  PARCIAL do R2, que faria o storage cair no disco local em silêncio) **segue sem
+  confirmação**: a execução seguinte, com R2 completo, mostrou `Storage: R2
+  (genbreed-images)`, 852 objetos em 1 página, 478 retratos, 374 com miniatura, 104
+  faltando — correto. O que foi corrigido **não é uma causa conhecida**: o script
+  passou a ser transparente. Junta TODAS as páginas (`ContinuationToken`) antes de
+  decidir — só é candidato o `.png` sem `_thumb.jpg` na lista —, trata token repetido
+  ou truncado-sem-token como ERRO (nunca um subconjunto em silêncio), imprime SEMPRE
+  a contagem (existem / já têm / faltam, inclusive zero) e de onde está lendo
+  (`Storage:`), mostra progresso a cada 10 e `GERADAS: n | FALHAS: n`, sai com 1 se a
+  listagem falhar, aborta se a configuração do R2 for parcial e avisa se o processo
+  encerrar sem concluir. Se o silêncio voltar, a saída agora deve dizer onde ele
+  acontece.
+- **Testes do backfill:** a paginação é coberta por listagem simulada (1000+200 e o
+  cenário 500 já com miniatura na 1ª página / 104 faltando na 2ª), embora o bucket
+  real hoje caiba em uma página; ela protege contra crescimento futuro (>1000 objetos).
 - Um objeto a mais por retrato no R2 (~100–200 KB) e uma leitura de HEAD a mais
   em `GET /public/specimens/:id`.
 - Mesmo bucket e mesmas credenciais: não exige configuração nova do R2, salvo se o

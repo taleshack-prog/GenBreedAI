@@ -232,8 +232,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   a API (detalhes em `DEPLOY.md`).
 - **`db:backfill-sex`:** dry-run por padrão; `--apply` só grava com `--confirm-host=<host igual ao de DATABASE_URL>`.
 - **`images:regenerate-founders`:** dry-run por padrão; `--apply` exige `--confirm-bucket=<bucket real>` e `--max=N` acima de 10 retratos.
-- **`images:backfill-thumbs`** (ADR-0027): dry-run por padrão (só conta os retratos sem miniatura); `--apply` exige `--confirm-bucket=<bucket real>`,
-  `--max=N` opcional. Só lê o PNG e grava `_thumb.jpg` — sem fal.ai, sem tocar no original. Requer `sharp`.
+- **`images:backfill-thumbs`** (ADR-0027): dry-run por padrão (lista TODAS as páginas do R2 e conta retratos / com miniatura / faltam — sempre impresso,
+  inclusive com zero faltando); `--apply` exige `--confirm-bucket=<bucket real>`, `--max=N` opcional; progresso a cada 10 e `GERADAS: n | FALHAS: n` no fim.
+  Só lê o PNG e grava `_thumb.jpg` — sem fal.ai, sem tocar no original. Requer `sharp`. Falha na listagem → erro + saída 1; config PARCIAL do R2 → aborta.
 - **Flags de dev** (`common/dev-flags.ts`, `isDevFlagEnabled` — a função ÚNICA; flag nova de dev usa ela): `QUOTA_UNLIMITED_DEV` (e o
   alias depreciado `CROSS_QUOTA_UNLIMITED`), `IMAGE_QUOTA_UNLIMITED`, `AUTH_DEV_HEADERS` e `BILLING_STUB_ENABLED` são **ignoradas quando
   `NODE_ENV=production`**, mesmo definidas, com aviso no log 1x por processo. Mesmo assim, não as defina em produção (`DEPLOY.md` §3.3).
