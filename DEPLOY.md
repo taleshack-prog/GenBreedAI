@@ -52,6 +52,7 @@ Guarde a `DATABASE_URL` do projeto. Toda mudança de schema é aplicada **à mã
 | `STRIPE_WEBHOOK_SECRET` | Verifica a assinatura de `POST /api/v1/billing/webhook` | O webhook responde 400: pagamentos feitos no Stripe **nunca creditam** pacote nem ativam/atualizam assinatura. |
 | `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL` | Retorno do Checkout | O Checkout redireciona para `http://localhost:3000/...` (padrão de dev): o cliente paga e volta para o localhost. Use as URLs de `genbreed.com.br` (ex.: `/app/profile?billing=success&session_id={CHECKOUT_SESSION_ID}` e `/app/profile?billing=cancel`). |
 | `GOOGLE_CLIENT_ID` | Login Google (opcional) | O login Google responde 400 ("não configurado"); e-mail/senha segue funcionando. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web Push ("Gestação concluída", ADR-0028). Gere o par uma vez (ver "Notificações (Web Push)" na seção 8); a privada NUNCA sai do servidor. `VAPID_SUBJECT` é opcional (`mailto:` ou URL do responsável; padrão `https://genbreed.com.br`) | **Recurso DESLIGADO, nada quebra:** `GET /push/config` → `enabled:false`, `POST /push/subscribe` → 503, a web esconde o botão "Avisar quando nascer" e o `push:dispatch` imprime "DESLIGADO" e sai com 0 sem marcar nenhuma entrada. Só UMA das duas definida = configuração incompleta: também desliga, e o `push:dispatch` aborta com erro. |
 | `NODE_ENV=production` | Já definido no `Dockerfile` — **não sobrescreva** | É o que faz o código ignorar as flags de dev (seção 3.3) **e** exigir `AUTH_SECRET` e `DATABASE_URL` válidas no boot. Sem ele a API roda em modo "dev" (segredo padrão inseguro e dados em memória incluídos). |
 | `PORT` | O Railway injeta | — |
 
@@ -59,6 +60,9 @@ Guarde a `DATABASE_URL` do projeto. Toda mudança de schema é aplicada **à mã
 - `API_URL` — **opcional**: em produção o `next.config.mjs` já aponta por padrão para a API pública do Railway. Defina só se a
   URL da API mudar (sem `/api` no fim).
 - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` — opcional; sem ela o botão de login Google não aparece.
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — opcional; a MESMA chave pública de `VAPID_PUBLIC_KEY` da API. Sem ela o botão "Avisar quando
+  nascer" não aparece. É inlinada no build: mudar exige novo deploy da web. Se for diferente da da API, as assinaturas são aceitas
+  mas o envio falha (o serviço de push recusa a assinatura VAPID).
 
 ### 3.3 Variáveis que NÃO podem existir em produção
 
@@ -158,6 +162,39 @@ pnpm --filter @genbreedai/api images:backfill-thumbs --apply --confirm-bucket=<b
 ```
 O token do R2 precisa poder gravar/listar/ler qualquer chave do bucket (o backfill usa List/Get/Put); o token de produção da API já grava.
 Depois de subir, o WhatsApp guarda em cache a prévia antiga de um link por um tempo — teste com um link novo ou aguarde.
+
+### Notificações (Web Push) — "Gestação concluída" (ADR-0028)
+
+O jogador é avisado quando a gestação termina (o nascimento em si é sempre ele quem dispara). O aviso sai de um **cron externo do
+Railway** que roda `push:dispatch` a cada 5 minutos. Ordem de subida:
+
+1. **Dependência** `web-push` (ainda **não instalada**): `pnpm --filter @genbreedai/api add web-push` (e `-D @types/web-push` se quiser os
+   tipos) e commitar `apps/api/package.json` **e** `pnpm-lock.yaml` juntos (o Dockerfile usa `--frozen-lockfile`). Sem ela nada quebra: o
+   recurso só falha na hora de enviar, e o `push:dispatch` aborta com erro **antes** de marcar qualquer entrada.
+2. **Migração** (gerar com `pnpm --filter @genbreedai/api db:generate`; **não foi gerada**): cria a tabela `push_subscriptions`, a coluna
+   `incubator_entries.ready_notified_at` e os índices `incubator_entries_gestation_ends_idx` e `push_subscriptions_user_idx`. Aplicar
+   **antes** do merge (seção 7) — o Drizzle enumera todas as colunas: código novo sem a coluna quebra `GET /incubator`, gestar e nascer.
+   Todas as entradas existentes ficam com `ready_notified_at = NULL`: na primeira execução do cron elas são **reivindicadas** (marcadas)
+   sem enviar nada, pois ninguém tem assinatura ainda.
+3. **Chaves VAPID** — gere UMA vez (não rode de novo: trocar a chave invalida todas as assinaturas):
+   ```
+   npx web-push generate-vapid-keys
+   ```
+   `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` no Railway (API **e** no serviço do cron), `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (a mesma pública) no
+   Vercel, e redeploy da web. `VAPID_SUBJECT` opcional.
+4. **Cron do Railway:** novo serviço a partir do MESMO repositório/Dockerfile, com as variáveis `DATABASE_URL`, `VAPID_PUBLIC_KEY`,
+   `VAPID_PRIVATE_KEY` (e `VAPID_SUBJECT`), **comando de início** `pnpm --filter @genbreedai/api push:dispatch` e **agendamento**
+   `*/5 * * * *` (o mínimo do Railway é 5 minutos — a gestação de 5 minutos da 1ª vez pode avisar até 5 minutos depois). O processo
+   sai sozinho ao terminar; **não** use o `start:prod` nesse serviço.
+5. **Ler o log de cada execução** — nunca fica mudo:
+   ```
+   ENCONTRADAS: n | AVISADAS: n | SEM ASSINATURA: n | FALHAS: n
+   Usuários: n | Assinaturas removidas (404/410): n
+   ```
+   `Web Push DESLIGADO …` = faltam as chaves (sai 0, nada marcado). Saída 1 = erro ou FALHAS > 0 (aviso perdido: a entrada é marcada
+   ANTES do envio — "no máximo uma vez").
+
+Limitação do iPhone: notificação só com o app **instalado na tela inicial** (pelo Safari) e **iOS 16.4+** (ADR-0026/0028).
 
 ## 9) Stripe (produção)
 - **Webhook:** endpoint `https://<API>/api/v1/billing/webhook`, com o segredo em `STRIPE_WEBHOOK_SECRET`. Eventos tratados:

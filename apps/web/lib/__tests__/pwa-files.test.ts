@@ -114,4 +114,21 @@ describe("public/sw.js — service worker mínimo, sem cache offline", () => {
     expect(code).not.toMatch(/respondWith/);
     expect(code).not.toMatch(/\bcache\.(add|put|match)/i);
   });
+
+  it("push (ADR-0028): SEMPRE mostra uma notificação (o Safari/iOS revoga quem recebe push sem exibir), com título, corpo e ícone 192", () => {
+    expect(code).toMatch(/addEventListener\(\s*"push"/);
+    expect(code).toMatch(/showNotification\(\s*title\s*,\s*options\s*\)/);
+    expect(code).toMatch(/event\.waitUntil\(\s*self\.registration\.showNotification/);
+    expect(code).toMatch(/icon-192\.png/);
+    expect(existsSync(web("public/icon-192.png"))).toBe(true);
+  });
+
+  it("clique na notificação (ADR-0028): fecha, abre/foca o app na Incubadora, só na MESMA origem", () => {
+    expect(code).toMatch(/addEventListener\(\s*"notificationclick"/);
+    expect(code).toMatch(/event\.notification\.close\(\)/);
+    expect(code).toMatch(/clients\.openWindow\(/);
+    expect(code).toMatch(/\.focus\(\)/);
+    expect(code).toMatch(/const DEFAULT_URL = "\/app\/incubadora"/);
+    expect(code).toMatch(/url\.origin === self\.location\.origin/); // nunca abre URL de outra origem
+  });
 });

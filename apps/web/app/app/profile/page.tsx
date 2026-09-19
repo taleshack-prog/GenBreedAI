@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { listSpecimens, getWallet, claimDaily, claimBiweekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack, type MyTier } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
+import { NotifyButton } from "../../../components/NotifyButton";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
 import { birthUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
@@ -110,6 +111,7 @@ export default function ProfilePage() {
           </Link>
         )}
       </div>
+      <NotifyButton />
       {(() => { const u = getUser(); return u ? (
         <div className="mb-5 flex items-center justify-between rounded-card border border-white/10 bg-bg-800/70 p-4">
           <div>

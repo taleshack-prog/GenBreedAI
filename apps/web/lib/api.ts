@@ -279,6 +279,25 @@ export async function discardEntry(id: string): Promise<void> {
   if (!res.ok) throw await apiErrorFrom(res, `Falha ao descartar (${res.status}).`);
 }
 
+/** Web Push (ADR-0028): a API só liga o recurso com as chaves VAPID — sem elas `enabled` é `false` e a web esconde o botão. Rota pública. */
+export async function getPushConfig(): Promise<{ enabled: boolean }> {
+  const res = await fetch("/api/v1/push/config", { cache: "no-store" });
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao consultar as notificações.");
+  return res.json();
+}
+/** Forma de `PushSubscription.toJSON()` que a API grava (uma linha por dispositivo). */
+export interface PushSubscriptionJson { endpoint: string; keys: { p256dh: string; auth: string } }
+/** Grava (ou atualiza) a assinatura deste aparelho. 503 = recurso desligado no servidor. */
+export async function subscribePush(sub: PushSubscriptionJson): Promise<void> {
+  const res = await fetch("/api/v1/push/subscribe", { method: "POST", headers: demoHeaders(), body: JSON.stringify(sub) });
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao ativar os avisos (${res.status}).`);
+}
+/** Remove a assinatura deste aparelho (só a dele). */
+export async function unsubscribePush(endpoint: string): Promise<void> {
+  const res = await fetch("/api/v1/push/subscribe", { method: "DELETE", headers: demoHeaders(), body: JSON.stringify({ endpoint }) });
+  if (!res.ok) throw await apiErrorFrom(res, `Falha ao desativar os avisos (${res.status}).`);
+}
+
 export async function claimDaily(): Promise<{ claimed: boolean; gain?: { catalisadores: number; biomassa: number }; wallet: Wallet }> {
   const res = await fetch("/api/v1/wallet/daily", { method: "POST", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao coletar diário.");

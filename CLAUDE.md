@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0027) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0028) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -84,15 +84,19 @@ genbreedai/
 - Gerenciador: pnpm 9 + Turborepo. Node 22 (Dockerfile). TypeScript estrito.
 - Web: Next.js 15, React 19, Tailwind 3. PWA instalável (ADR-0026): `public/manifest.webmanifest` + `public/sw.js` **mínimo, sem cache
   offline** (registrado só no cliente/produção); **não há `next-pwa`** e nada de cache offline sem ADR. Ícones PNG oficiais em `public/` (192, 512, maskable 512,
-  apple-touch 180; cromossomo com bandas, fundo `#070b11`); o `icon.svg` **não é mais referenciado** (arte antiga, órfão). Push ainda não existe.
+  apple-touch 180; cromossomo com bandas, fundo `#070b11`); o `icon.svg` **não é mais referenciado** (arte antiga, órfão). Push: ver ADR-0028 abaixo.
 - API: NestJS 10 + Fastify 4, Drizzle ORM (0.36) sobre PostgreSQL (genoma em JSONB), `pg` (Neon) / PGlite nos testes.
   Auth **própria**: JWT (`jsonwebtoken`) + `bcryptjs` + login Google (`google-auth-library`). Imagens: fal.ai + Cloudflare
   R2 (`@aws-sdk/client-s3`). Pagamentos: Stripe.
 - Arquitetura da API: portas (classes abstratas `*Repository`) com adapter in-memory (dev/teste) e adapter Drizzle
   (ADR-0005/0006). Sem `DATABASE_URL`, tudo roda em memória — **só fora de produção**: com `NODE_ENV=production` a API não sobe sem
   ela (seção 10).
-- **Não existem hoje:** Redis, BullMQ, Auth.js/NextAuth, Playwright, chat. **Nenhum processo agendado** (cron/job/fila):
-  tudo roda por requisição — limpezas são preguiçosas (ex.: incubadora, ADR-0023).
+- **Não existem hoje:** Redis, BullMQ, Auth.js/NextAuth, Playwright, chat. **Nenhum processo agendado DENTRO da API** (cron/job/fila):
+  tudo roda por requisição — limpezas são preguiçosas (ex.: incubadora, ADR-0023). **Única exceção externa (ADR-0028):** um cron do
+  Railway (a cada 5 min) executa o script `push:dispatch`, que avisa por Web Push as gestações concluídas; a API em si continua sem agendador.
+- **Web Push (ADR-0028):** `apps/api/src/push/` (assinaturas, envio, `dispatch-ready`); `public/sw.js` trata `push` e o clique; botão
+  "Avisar quando nascer" no Perfil e na Incubadora. **Desligado sem `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`** (nada quebra). Requer a
+  dependência `web-push` (**ainda não instalada**). No iPhone só com o app instalado na tela inicial e iOS 16.4+.
 - Testes: Vitest (unit, golden e "e2e" via `app.inject` do Fastify).
 
 | Comando | O que faz |
@@ -106,7 +110,7 @@ genbreedai/
 | `pnpm lint` | **No-op hoje** — os scripts de lint dos apps são `echo 'skip'` (pendência, seção 6) |
 
 Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:migrate`, `db:seed`, `db:reset`,
-`db:backfill-sex`, `images:seed`, `images:regenerate-founders`, `images:backfill-thumbs`. Operação na seção 10.
+`db:backfill-sex`, `images:seed`, `images:regenerate-founders`, `images:backfill-thumbs`, `push:dispatch`. Operação na seção 10.
 
 ## 6. Pendências registradas (não bloqueiam features)
 
@@ -130,7 +134,12 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 7. **`sharp` não instalado na API** (ADR-0027): sem ele nenhuma miniatura é gerada (o retrato é salvo normalmente, com aviso no log).
    Instalar com `pnpm --filter @genbreedai/api add sharp` e commitar `package.json` + `pnpm-lock.yaml` juntos (Dockerfile usa
    `--frozen-lockfile`). Retratos anteriores à ADR-0027 ficam sem miniatura até rodar `images:backfill-thumbs`.
-8. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
+8. **Web Push (ADR-0028) — pendências de subida:** (a) dependência `web-push` não instalada (`pnpm --filter @genbreedai/api add web-push`,
+   `package.json` + lockfile juntos); (b) **migração ainda NÃO gerada** (`db:generate`): tabela `push_subscriptions`, coluna
+   `incubator_entries.ready_notified_at` e 2 índices — aplicar antes do merge (código novo sem a coluna quebra a incubadora); (c) chaves
+   VAPID e `NEXT_PUBLIC_VAPID_PUBLIC_KEY`; (d) o serviço de cron do Railway com `push:dispatch` a cada 5 min (DEPLOY.md §8). Não
+   verificado em aparelho real.
+9. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
 ## 7. Convenções de código
@@ -207,7 +216,8 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 |---|---|
 | `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp, `first_gestation_at`, `first_gestation_entry_id` (nullable; ADR-0025, migração pendente) |
 | `specimens` | Espécimes e fundadores. Genótipo/fenótipo em JSONB; `sex`, `fertility`, `haldane_status` (anuláveis, ADR-0015; legado fica NULL), `included_portrait` ("vale" de retrato da ADR-0019, hoje `false` nos nascimentos), `status` (ALIVE/FROZEN), `cache_key`, `created_at` (= instante do nascimento, base do ciclo de vida, ADR-0023) |
-| `incubator_entries` | Descrições geradas por cruzamento: `cross_id`, genótipo/fenótipo, `prob`, aura, `sex`, `gestation_started_at`, `gestation_ends_at`, `born_specimen_id`; `frozen` é órfão (sem escritor). Índice `(owner_id, created_at)` |
+| `incubator_entries` | Descrições geradas por cruzamento: `cross_id`, genótipo/fenótipo, `prob`, aura, `sex`, `gestation_started_at`, `gestation_ends_at`, `born_specimen_id`, `ready_notified_at` (aviso "Gestação concluída" já reivindicado, ADR-0028; migração pendente); `frozen` é órfão (sem escritor). Índices `(owner_id, created_at)` e `gestation_ends_at` |
+| `push_subscriptions` | Assinaturas de Web Push por dispositivo (ADR-0028; migração pendente): `user_id`, `endpoint` (único), `p256dh`, `auth`, `user_agent`, `created_at`, `last_used_at`, `failed_at` |
 | `cross_reservations` | Reservas do limite técnico de 60/h de `POST /cross` |
 | `birth_reservations` | Reservas das vagas de nascimento (`birthQuota`). Ambas: `RESERVED`/`CONFIRMED`; `RESERVED` com mais de 10 min não conta |
 | `wallets` | catalisadores, biomassa, `last_daily`, `last_biweekly`, `image_credits` |
@@ -235,6 +245,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 - **`images:backfill-thumbs`** (ADR-0027): dry-run por padrão (lista TODAS as páginas do R2 e conta retratos / com miniatura / faltam — sempre impresso,
   inclusive com zero faltando); `--apply` exige `--confirm-bucket=<bucket real>`, `--max=N` opcional; progresso a cada 10 e `GERADAS: n | FALHAS: n` no fim.
   Só lê o PNG e grava `_thumb.jpg` — sem fal.ai, sem tocar no original. Requer `sharp`. Falha na listagem → erro + saída 1; config PARCIAL do R2 → aborta.
+- **`push:dispatch`** (ADR-0028): roda no cron externo do Railway a cada 5 min. Reivindica (`UPDATE … WHERE ready_notified_at IS NULL … RETURNING`) as
+  gestações vencidas, não nascidas e não avisadas, e manda o push "Gestação concluída"; sem cota, sem custo, idempotente, "no máximo uma vez".
+  Sempre imprime `ENCONTRADAS | AVISADAS | SEM ASSINATURA | FALHAS`; sem VAPID → "DESLIGADO", sai 0 sem marcar nada; erro ou falhas → saída 1.
+  Precisa de `DATABASE_URL`, das chaves VAPID e de `web-push`. Assinatura que devolve 404/410 é apagada.
 - **Flags de dev** (`common/dev-flags.ts`, `isDevFlagEnabled` — a função ÚNICA; flag nova de dev usa ela): `QUOTA_UNLIMITED_DEV` (e o
   alias depreciado `CROSS_QUOTA_UNLIMITED`), `IMAGE_QUOTA_UNLIMITED`, `AUTH_DEV_HEADERS` e `BILLING_STUB_ENABLED` são **ignoradas quando
   `NODE_ENV=production`**, mesmo definidas, com aviso no log 1x por processo. Mesmo assim, não as defina em produção (`DEPLOY.md` §3.3).
@@ -265,7 +279,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0028). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0029). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -286,6 +300,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0025** — (produto, não genética) Primeira gestação de cada conta = 5 min (cortesia, `users.first_gestation_at`); complementa a 0021.
 - **0026** — (produto/web, não genética) PWA instalável: manifest + service worker mínimo sem cache offline; instruções na landing.
 - **0027** — (produto/imagem, não genética) Miniatura 600×600 JPEG do retrato para a og:image do WhatsApp; melhor-esforço; backfill por script.
+- **0028** — (produto/infra, não genética) Web Push: aviso "Gestação concluída" via cron externo do Railway (`push:dispatch`); assinaturas por dispositivo; desligado sem VAPID; limitação do iPhone.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
@@ -306,7 +321,7 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
 - ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
   cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
-- PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; `public/icon.svg` órfão (arte antiga — apagar ou
+- PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; Web Push (ADR-0028) não testado em aparelho real; o serviço de cron do Railway ainda não foi criado; `public/icon.svg` órfão (arte antiga — apagar ou
   atualizar); sem tela de abertura do iOS (`apple-touch-startup-image`); push (Web Push) não decidido.
 - Metas de performance (bundle/TTI): sem medição no repo.
 - Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).

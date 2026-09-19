@@ -168,4 +168,5 @@ export const CURRENT_ART_VERSION = "art-v2" as const;
 
 export { SPECIES_INFO, speciesInfo, biologicalSpecies, normalizeBiologicalSpecies, type SpeciesInfo, type PoolGroup } from "./species";
 export { BREEDS, breedInfo, DOG_BREEDS, dogBreedInfo, type BreedInfo } from "./breeds";
+export { cap, phenoSummary } from "./phenotype-summary";
 export { WILD_FELINE_FOUNDER_NAMES, wildFelineFounderName, baseFounderId, resolveDisplayName, resolveScientificName, revealTitleWord } from "./display";

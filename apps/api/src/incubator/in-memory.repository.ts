@@ -41,6 +41,8 @@ export interface StoredIncubatorEntry {
    * `imageCacheKey`/`revealedAt`); ver nota equivalente em `db/schema.ts`.
    */
   frozen: boolean;
+  /** ADR-0028 — quando o aviso "Gestação concluída" foi reivindicado por `push:dispatch` (`null` = ainda não). Ver `claimReadyForNotification`. */
+  readyNotifiedAt: Date | null;
   createdAt: Date;
 }
 
@@ -78,7 +80,7 @@ export interface IncubatorListResult {
 export type IncubatorStateCounts = Record<IncubatorState, number>;
 
 export abstract class IncubatorRepository {
-  abstract create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry>;
+  abstract create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen" | "readyNotifiedAt">): Promise<StoredIncubatorEntry>;
   abstract get(id: string): Promise<StoredIncubatorEntry | undefined>;
   /** Paginado (ADR-0021 item 2) — ordenado por `createdAt` desc, `id` desc como desempate estável. */
   abstract listByOwner(ownerId: string, opts: IncubatorListOptions): Promise<IncubatorListResult>;
@@ -112,6 +114,16 @@ export abstract class IncubatorRepository {
   abstract listOldestNonGestatedBeyondCap(ownerId: string, cap: number): Promise<string[]>;
   /** Apaga várias de uma vez (ciclo de vida) — devolve quantas de fato existiam e foram apagadas. */
   abstract deleteMany(ids: string[]): Promise<number>;
+  /**
+   * ADR-0028 — reivindica, ATOMICAMENTE, até `limit` entradas com a gestação VENCIDA
+   * (`gestationEndsAt <= now`), ainda NÃO nascidas e ainda NÃO avisadas
+   * (`readyNotifiedAt === null`), gravando `readyNotifiedAt = now`, e devolve as que
+   * ESTA chamada reivindicou (mais antigas primeiro). No Postgres: `UPDATE ... WHERE
+   * ready_notified_at IS NULL ... RETURNING` — duas execuções simultâneas nunca
+   * reivindicam a mesma entrada, então cada uma é avisada uma vez só. Entrada que o
+   * jogador já fez nascer (`bornSpecimenId`) NÃO é candidata.
+   */
+  abstract claimReadyForNotification(now: Date, limit: number): Promise<StoredIncubatorEntry[]>;
 }
 
 const EMPTY_COUNTS = (): IncubatorStateCounts => ({ NA_INCUBADORA: 0, GESTANDO: 0, PRONTO: 0, NASCIDO: 0 });
@@ -120,10 +132,10 @@ const EMPTY_COUNTS = (): IncubatorStateCounts => ({ NA_INCUBADORA: 0, GESTANDO: 
 export class InMemoryIncubatorRepository extends IncubatorRepository {
   private readonly store = new Map<string, StoredIncubatorEntry>();
 
-  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry> {
+  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen" | "readyNotifiedAt">): Promise<StoredIncubatorEntry> {
     const id = `incu_${randomUUID()}`;
     const full: StoredIncubatorEntry = {
-      ...entry, id, gestationStartedAt: null, gestationEndsAt: null, bornSpecimenId: null, frozen: false, createdAt: new Date(),
+      ...entry, id, gestationStartedAt: null, gestationEndsAt: null, bornSpecimenId: null, frozen: false, readyNotifiedAt: null, createdAt: new Date(),
     };
     this.store.set(id, full);
     return full;
@@ -212,5 +224,21 @@ export class InMemoryIncubatorRepository extends IncubatorRepository {
     let n = 0;
     for (const id of ids) if (this.store.delete(id)) n++;
     return n;
+  }
+
+  /** Síncrono dentro do método (sem `await` entre ler e gravar) — atômico como o UPDATE ... RETURNING do Postgres. */
+  async claimReadyForNotification(now: Date, limit: number): Promise<StoredIncubatorEntry[]> {
+    const due = [...this.store.values()]
+      .filter((e) => e.gestationStartedAt !== null && e.gestationEndsAt !== null
+        && e.gestationEndsAt.getTime() <= now.getTime() && e.bornSpecimenId === null && e.readyNotifiedAt === null)
+      .sort((a, b) => a.gestationEndsAt!.getTime() - b.gestationEndsAt!.getTime() || a.id.localeCompare(b.id))
+      .slice(0, Math.max(0, limit));
+    const claimed: StoredIncubatorEntry[] = [];
+    for (const e of due) {
+      const updated: StoredIncubatorEntry = { ...e, readyNotifiedAt: now };
+      this.store.set(e.id, updated);
+      claimed.push(updated);
+    }
+    return claimed;
   }
 }

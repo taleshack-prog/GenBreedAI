@@ -53,6 +53,19 @@ describe("requisições sem corpo próprio nunca mandam Content-Type: applicatio
     assertNoEmptyJsonBody(init);
   });
 
+  it("subscribePush / unsubscribePush (Web Push, ADR-0028) — POST e DELETE sempre com corpo JSON (a assinatura / o endpoint)", async () => {
+    const sub = { endpoint: "https://fcm.googleapis.com/fcm/send/abc", keys: { p256dh: "p", auth: "a" } };
+    const post = await captureRequestInit(() => api.subscribePush(sub));
+    expect(post.method).toBe("POST");
+    assertNoEmptyJsonBody(post);
+    expect(JSON.parse(post.body as string)).toEqual(sub);
+
+    const del = await captureRequestInit(() => api.unsubscribePush(sub.endpoint));
+    expect(del.method).toBe("DELETE");
+    assertNoEmptyJsonBody(del);
+    expect(JSON.parse(del.body as string)).toEqual({ endpoint: sub.endpoint });
+  });
+
   it("claimDaily — já mandava body '{}', continua correto", async () => {
     const init = await captureRequestInit(() => api.claimDaily());
     assertNoEmptyJsonBody(init);

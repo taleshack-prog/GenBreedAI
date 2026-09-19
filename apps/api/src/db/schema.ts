@@ -209,12 +209,46 @@ export const incubatorEntries = pgTable("incubator_entries", {
    * decisão explícita de remover ou não numa próxima rodada.
    */
   frozen: boolean("frozen").notNull().default(false),
+  /**
+   * ADR-0028 — instante em que o aviso "Gestação concluída" (Web Push) foi
+   * REIVINDICADO por `push:dispatch`. NULL = ainda não avisada. Gravado por
+   * `UPDATE ... WHERE ready_notified_at IS NULL ... RETURNING` (atômico: duas
+   * execuções simultâneas do script avisam uma vez só) e mesmo quando o dono não
+   * tem nenhuma assinatura de push (senão, ao assinar depois, ele receberia um
+   * aviso velho de uma gestação que já terminou há tempos). Nunca mais volta a NULL.
+   */
+  readyNotifiedAt: timestamp("ready_notified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   sexCheck: check("incubator_entries_sex_check", sql`${t.sex} IN ('M','F')`),
   fertilityCheck: check("incubator_entries_fertility_check", sql`${t.fertility} IS NULL OR (${t.fertility} >= 0 AND ${t.fertility} <= 100)`),
   haldaneStatusCheck: check("incubator_entries_haldane_status_check", sql`${t.haldaneStatus} IS NULL OR ${t.haldaneStatus} IN ('NONE','STERILE','REDUCED')`),
   ownerCreatedIdx: index("incubator_entries_owner_created_idx").on(t.ownerId, t.createdAt),
+  // ADR-0028: `push:dispatch` (a cada 5 min) busca gestações vencidas ainda não avisadas.
+  gestationEndsIdx: index("incubator_entries_gestation_ends_idx").on(t.gestationEndsAt),
+}));
+
+/**
+ * Assinaturas de Web Push (ADR-0028) — uma por dispositivo/navegador; uma pessoa
+ * pode ter vários. `endpoint` é ÚNICO (identifica o dispositivo no serviço de push:
+ * assinar de novo o mesmo endpoint atualiza a linha em vez de duplicar; se outra
+ * conta assina no mesmo navegador, a linha passa a ser dela). `p256dh`/`auth` são as
+ * chaves do dispositivo (`PushSubscription.toJSON().keys`) — segredo por assinatura,
+ * nunca devolvido por rota nem logado. `failed_at` = último erro de envio que NÃO
+ * foi 404/410 (esses apagam a linha); `last_used_at` = último envio que deu certo.
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  failedAt: timestamp("failed_at", { withTimezone: true }),
+}, (t) => ({
+  userIdx: index("push_subscriptions_user_idx").on(t.userId),
 }));
 
 export type DbSchema = {

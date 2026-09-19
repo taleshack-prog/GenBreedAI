@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { listIncubator, gestateEntry, bornEntry, discardEntry, getMyTier, type IncubatorEntry, type IncubatorState, type IncubatorStateCounts, type MyTier } from "../../../lib/api";
 import { Screen, ComingSoon } from "../../../components/Screen";
+import { NotifyButton } from "../../../components/NotifyButton";
 import { displayName } from "../../../lib/display";
 import { sexChar } from "../../../components/SexBadge";
 import { phenoSummary } from "../../../lib/phenotype-summary";
@@ -104,6 +105,7 @@ export default function IncubatorPage() {
           Gestar: {birthQuotaLabel(myTier.birthQuota)} — {myTier.birthQuota.used} de {myTier.birthQuota.limit} usadas
         </p>
       )}
+      <NotifyButton />
       <div className="mb-4 flex flex-wrap gap-2">
         {FILTROS.map((f) => (
           <button key={f.k} onClick={() => setFiltro(f.k)}

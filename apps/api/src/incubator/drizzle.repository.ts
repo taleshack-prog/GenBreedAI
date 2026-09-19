@@ -24,7 +24,7 @@ function toStored(r: Row): StoredIncubatorEntry {
     generation: r.generation, sex: r.sex as StoredIncubatorEntry["sex"],
     fertility: r.fertility ?? null, haldaneStatus: (r.haldaneStatus as StoredIncubatorEntry["haldaneStatus"]) ?? null,
     gestationStartedAt: r.gestationStartedAt, gestationEndsAt: r.gestationEndsAt, bornSpecimenId: r.bornSpecimenId,
-    frozen: r.frozen, createdAt: r.createdAt,
+    frozen: r.frozen, readyNotifiedAt: r.readyNotifiedAt ?? null, createdAt: r.createdAt,
   };
 }
 
@@ -48,7 +48,7 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
   // `db` é tipado como any para permitir tanto node-postgres quanto PGlite.
   constructor(private readonly db: any) { super(); }
 
-  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen">): Promise<StoredIncubatorEntry> {
+  async create(entry: Omit<StoredIncubatorEntry, "id" | "createdAt" | "gestationStartedAt" | "gestationEndsAt" | "bornSpecimenId" | "frozen" | "readyNotifiedAt">): Promise<StoredIncubatorEntry> {
     const id = `incu_${randomUUID()}`;
     const row = {
       id, ownerId: entry.ownerId, crossId: entry.crossId, sireId: entry.sireId, damId: entry.damId,
@@ -174,5 +174,35 @@ export class DrizzleIncubatorRepository extends IncubatorRepository {
     if (ids.length === 0) return 0;
     const rows: Array<{ id: string }> = await this.db.delete(incubatorEntries).where(inArray(incubatorEntries.id, ids)).returning({ id: incubatorEntries.id });
     return rows.length;
+  }
+
+  /**
+   * ADR-0028 — UPDATE único: a subconsulta escolhe até `limit` candidatas (mais antigas
+   * primeiro) e o UPDATE externo REPETE `ready_notified_at IS NULL` e `born_specimen_id IS
+   * NULL`. No Postgres (READ COMMITTED) um UPDATE concorrente que espera o lock da linha
+   * reavalia essa condição depois de obtê-lo — a segunda execução simultânea vê a linha já
+   * marcada e a pula. Resultado: cada entrada é reivindicada por UMA execução só.
+   */
+  async claimReadyForNotification(now: Date, limit: number): Promise<StoredIncubatorEntry[]> {
+    const candidates = this.db
+      .select({ id: incubatorEntries.id })
+      .from(incubatorEntries)
+      .where(and(
+        isNotNull(incubatorEntries.gestationStartedAt),
+        lte(incubatorEntries.gestationEndsAt, now),
+        isNull(incubatorEntries.bornSpecimenId),
+        isNull(incubatorEntries.readyNotifiedAt),
+      ))
+      .orderBy(incubatorEntries.gestationEndsAt, incubatorEntries.id)
+      .limit(Math.max(0, limit));
+    const rows: Row[] = await this.db.update(incubatorEntries)
+      .set({ readyNotifiedAt: now })
+      .where(and(
+        inArray(incubatorEntries.id, candidates),
+        isNull(incubatorEntries.readyNotifiedAt),
+        isNull(incubatorEntries.bornSpecimenId),
+      ))
+      .returning();
+    return rows.map(toStored);
   }
 }
