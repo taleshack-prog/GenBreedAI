@@ -78,8 +78,14 @@ export const NOTIFY_OFF_LABEL = "Desativar avisos";
 export const NOTIFY_EXPLANATION =
   "Receba uma notificação quando a gestação terminar e o filhote estiver pronto para nascer — mesmo com o app fechado.";
 export const NOTIFY_SUBSCRIBED_TEXT = "Avisos ativados neste aparelho.";
+/**
+ * iPhone sem o app instalado: SÓ a regra e o caminho — os passos de instalação vivem num lugar só, o
+ * cartão "Instale o app" do Perfil (`InstallApp variant="compact"`), pra qual o link abaixo aponta
+ * (`installCardHref`). Nada de repetir a lista de passos aqui.
+ */
 export const NOTIFY_IOS_INSTALL_TEXT =
-  "No iPhone, os avisos só funcionam com o app instalado na tela inicial. Instale primeiro (Safari → Compartilhar → “Adicionar à Tela de Início”), abra o GenBreedAI pelo ícone novo e volte aqui.";
+  "No iPhone, os avisos só funcionam com o app instalado na tela inicial. Depois de instalar, abra o GenBreedAI pelo ícone novo e volte aqui.";
+export const NOTIFY_INSTALL_LINK_LABEL = "Ver como instalar o app";
 export const NOTIFY_IOS_SAFARI_TEXT =
   "No iPhone, a instalação (e, por isso, os avisos) só funciona pelo Safari. Abra este endereço no Safari e instale o app na tela inicial.";
 export const NOTIFY_IOS_TOO_OLD_TEXT =

@@ -67,9 +67,11 @@ desligado sem quebrar nada.
     mesma origem). Continua **sem cache offline** (ADR-0026).
 11. **Web:** botão "Avisar quando nascer" no Perfil e na Incubadora: pede a permissão num clique, registra o
     SW se preciso, assina (`userVisibleOnly`) e envia à API. Permissão **negada** → explica como reverter por
-    sistema. iPhone sem o app instalado → mostra primeiro a instrução de instalar; iPhone fora do Safari →
-    abrir no Safari; iOS < 16.4 → atualizar. Sem suporte → aviso. Decisão de qual estado mostrar em função
-    pura (`lib/push.ts`).
+    sistema. iPhone sem o app instalado → diz a regra e **aponta para o cartão "Instale o app" do Perfil**
+    (`InstallApp variant="compact"`, âncora `#instalar-app`; na Incubadora o link leva ao Perfil já no cartão) —
+    os passos de instalação vivem só nesse cartão, sem duplicar texto; iPhone fora do Safari → abrir no
+    Safari (com o mesmo link); iOS < 16.4 → atualizar. Sem suporte → aviso. Decisão de qual estado mostrar em
+    função pura (`lib/push.ts`); qual instrução/rota do cartão, em `lib/install-guide.ts`.
 
 ## Limitação do iPhone
 

@@ -4,7 +4,7 @@
  * offline (cache mal feito serve conteúdo velho — ADR-0026).
  */
 import { describe, it, expect } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const web = (rel: string) => fileURLToPath(new URL(`../../${rel}`, import.meta.url));
@@ -98,6 +98,31 @@ describe("ícones PNG (arte oficial: cromossomo com bandas, fundo #070b11)", () 
   it("nada aponta para o icon.svg (não é mais a arte oficial): nem o manifest nem o layout", () => {
     expect(JSON.stringify(manifest)).not.toMatch(/icon\.svg/);
     expect(readFileSync(web("app/layout.tsx"), "utf8")).not.toMatch(/icon\.svg/);
+  });
+});
+
+describe("textos da web não tratam a notificação como futura (o aviso de gestação concluída já funciona — ADR-0028)", () => {
+  // Varre o código-fonte da web (fora de testes) atrás de frase que fale de aviso/notificação/push junto de "ainda não",
+  // "em breve", "próxima atualização"… — foi exatamente o que ficou desatualizado em `INSTALL_WHY` depois que o push subiu.
+  const files = (["app", "components", "lib"] as const).flatMap((dir) =>
+    (readdirSync(web(dir), { recursive: true }) as string[])
+      .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__"))
+      .map((f) => `${dir}/${f}`));
+  const FUTURE = /(avis|notifica|push)[^\n]{0,100}(ainda n[aã]o|em breve|pr[oó]xima atualiza|vai permitir|chega(m)? (em|depois))/i;
+
+  it("acha os arquivos (o guarda não passa por não olhar nada)", () => {
+    expect(files.length).toBeGreaterThan(20);
+    expect(files).toContain("lib/install-guide.ts");
+  });
+
+  it("nenhum texto fala de aviso/notificação/push como algo futuro", () => {
+    const offenders: string[] = [];
+    for (const f of files) {
+      readFileSync(web(f), "utf8").split("\n").forEach((line, i) => {
+        if (FUTURE.test(line)) offenders.push(`${f}:${i + 1}: ${line.trim().slice(0, 140)}`);
+      });
+    }
+    expect(offenders).toEqual([]);
   });
 });
 

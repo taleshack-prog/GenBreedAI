@@ -96,7 +96,9 @@ genbreedai/
   Railway (a cada 5 min) executa o script `push:dispatch`, que avisa por Web Push as gestações concluídas; a API em si continua sem agendador.
 - **Web Push (ADR-0028):** `apps/api/src/push/` (assinaturas, envio, `dispatch-ready`); `public/sw.js` trata `push` e o clique; botão
   "Avisar quando nascer" no Perfil e na Incubadora. **Desligado sem `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`** (nada quebra). Requer a
-  dependência `web-push` (**ainda não instalada**). No iPhone só com o app instalado na tela inicial e iOS 16.4+.
+  dependência `web-push` (instalada). **Em produção (informado):** cron `push-cron` a cada 5 min; aviso "Gestação concluída" confirmado em
+  aparelho Android. No iPhone só com o app instalado na tela inicial e iOS 16.4+ (não verificado em iPhone). Nenhum texto da web pode tratar
+  o aviso como futuro — há teste que varre o código (`pwa-files.test.ts`).
 - Testes: Vitest (unit, golden e "e2e" via `app.inject` do Fastify).
 
 | Comando | O que faz |
@@ -134,11 +136,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 7. **`sharp` não instalado na API** (ADR-0027): sem ele nenhuma miniatura é gerada (o retrato é salvo normalmente, com aviso no log).
    Instalar com `pnpm --filter @genbreedai/api add sharp` e commitar `package.json` + `pnpm-lock.yaml` juntos (Dockerfile usa
    `--frozen-lockfile`). Retratos anteriores à ADR-0027 ficam sem miniatura até rodar `images:backfill-thumbs`.
-8. **Web Push (ADR-0028) — pendências de subida:** (a) dependência `web-push` não instalada (`pnpm --filter @genbreedai/api add web-push`,
-   `package.json` + lockfile juntos); (b) **migração ainda NÃO gerada** (`db:generate`): tabela `push_subscriptions`, coluna
-   `incubator_entries.ready_notified_at` e 2 índices — aplicar antes do merge (código novo sem a coluna quebra a incubadora); (c) chaves
-   VAPID e `NEXT_PUBLIC_VAPID_PUBLIC_KEY`; (d) o serviço de cron do Railway com `push:dispatch` a cada 5 min (DEPLOY.md §8). Não
-   verificado em aparelho real.
+8. **Web Push (ADR-0028) — no ar (informado).** Subida concluída: `web-push` instalada, migração aplicada, chaves VAPID definidas, cron
+   `push-cron` rodando `push:dispatch` a cada 5 min, aviso confirmado em aparelho Android. **Ainda não verificado:** iPhone (app instalado,
+   iOS 16.4+) e desktop. Ver DEPLOY.md §8 para a operação e a ordem de uma recriação.
 9. Comentários antigos no `schema.ts` ("Stripe inexistente", "Auth.js") e ADR-0008 (criaturas procedurais, "aceito")
    não refletem o estado atual.
 
@@ -321,7 +321,7 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
 - ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
   cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
-- PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; Web Push (ADR-0028) não testado em aparelho real; o serviço de cron do Railway ainda não foi criado; `public/icon.svg` órfão (arte antiga — apagar ou
-  atualizar); sem tela de abertura do iOS (`apple-touch-startup-image`); push (Web Push) não decidido.
+- PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; Web Push (ADR-0028) confirmado em Android (informado), **não** em iPhone nem desktop; `public/icon.svg` órfão (arte antiga — apagar ou
+  atualizar); sem tela de abertura do iOS (`apple-touch-startup-image`).
 - Metas de performance (bundle/TTI): sem medição no repo.
 - Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).

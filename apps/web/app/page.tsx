@@ -111,7 +111,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5. INSTALE O APP (PWA — pré-requisito do push; no iPhone só instalado recebe notificação) */}
+      {/* 5. INSTALE O APP (PWA — no iPhone o aviso de gestação concluída só funciona com o app instalado) */}
       <InstallApp />
 
       {/* 6. RODAPÉ */}

@@ -166,12 +166,13 @@ Depois de subir, o WhatsApp guarda em cache a prévia antiga de um link por um t
 ### Notificações (Web Push) — "Gestação concluída" (ADR-0028)
 
 O jogador é avisado quando a gestação termina (o nascimento em si é sempre ele quem dispara). O aviso sai de um **cron externo do
-Railway** que roda `push:dispatch` a cada 5 minutos. Ordem de subida:
+Railway** que roda `push:dispatch` a cada 5 minutos (serviço `push-cron`). **Status: em produção (informado)** — aviso confirmado em
+Android; iPhone e desktop ainda não verificados. Os passos abaixo ficam como referência para recriar o ambiente:
 
-1. **Dependência** `web-push` (ainda **não instalada**): `pnpm --filter @genbreedai/api add web-push` (e `-D @types/web-push` se quiser os
+1. **Dependência** `web-push` (já instalada): `pnpm --filter @genbreedai/api add web-push` (e `-D @types/web-push` se quiser os
    tipos) e commitar `apps/api/package.json` **e** `pnpm-lock.yaml` juntos (o Dockerfile usa `--frozen-lockfile`). Sem ela nada quebra: o
    recurso só falha na hora de enviar, e o `push:dispatch` aborta com erro **antes** de marcar qualquer entrada.
-2. **Migração** (gerar com `pnpm --filter @genbreedai/api db:generate`; **não foi gerada**): cria a tabela `push_subscriptions`, a coluna
+2. **Migração** (gerada com `pnpm --filter @genbreedai/api db:generate` e aplicada): cria a tabela `push_subscriptions`, a coluna
    `incubator_entries.ready_notified_at` e os índices `incubator_entries_gestation_ends_idx` e `push_subscriptions_user_idx`. Aplicar
    **antes** do merge (seção 7) — o Drizzle enumera todas as colunas: código novo sem a coluna quebra `GET /incubator`, gestar e nascer.
    Todas as entradas existentes ficam com `ready_notified_at = NULL`: na primeira execução do cron elas são **reivindicadas** (marcadas)

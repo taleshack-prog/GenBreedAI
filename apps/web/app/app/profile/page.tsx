@@ -4,6 +4,7 @@ import Link from "next/link";
 import { listSpecimens, getWallet, claimDaily, claimBiweekly, getImageQuota, getReferral, referralUrl, getCreditPacks, buyCredits, getMyTier, type ApiSpecimen, type Tier, type Wallet, type ImageQuota, type Referral, type CreditPack, type MyTier } from "../../../lib/api";
 import { Screen } from "../../../components/Screen";
 import { NotifyButton } from "../../../components/NotifyButton";
+import { InstallApp } from "../../../components/InstallApp";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
 import { birthUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
@@ -112,6 +113,8 @@ export default function ProfilePage() {
         )}
       </div>
       <NotifyButton />
+      {/* Quem está logado nunca vê a landing (middleware: `/` → `/app`) — o "Instale o app" também mora aqui. Some se já instalado. */}
+      <InstallApp variant="compact" />
       {(() => { const u = getUser(); return u ? (
         <div className="mb-5 flex items-center justify-between rounded-card border border-white/10 bg-bg-800/70 p-4">
           <div>

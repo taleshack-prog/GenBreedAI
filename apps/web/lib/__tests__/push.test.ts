@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   decidePushUi, urlBase64ToUint8Array, iosVersionFromUserAgent, iosSupportsPush, deniedHelp,
-  NOTIFY_BUTTON_LABEL, NOTIFY_IOS_INSTALL_TEXT, type PushUiInput,
+  NOTIFY_BUTTON_LABEL, NOTIFY_IOS_INSTALL_TEXT, NOTIFY_INSTALL_LINK_LABEL, type PushUiInput,
 } from "../push";
 
 const base: PushUiInput = {
@@ -95,10 +95,12 @@ describe("textos", () => {
     expect(NOTIFY_BUTTON_LABEL).toBe("Avisar quando nascer");
   });
 
-  it("iPhone sem instalar: o texto manda instalar primeiro (Safari → Compartilhar → Adicionar à Tela de Início)", () => {
+  it("iPhone sem instalar: o texto diz a REGRA (só com o app instalado) e o caminho é um link pro cartão — sem repetir os passos", () => {
     expect(NOTIFY_IOS_INSTALL_TEXT).toMatch(/instalado na tela inicial/);
-    expect(NOTIFY_IOS_INSTALL_TEXT).toMatch(/Safari/);
-    expect(NOTIFY_IOS_INSTALL_TEXT).toMatch(/Adicionar à Tela de Início/);
+    expect(NOTIFY_IOS_INSTALL_TEXT).toMatch(/iPhone/);
+    // os passos de instalação vivem só no cartão "Instale o app" (install-guide.ts) — não aqui
+    expect(NOTIFY_IOS_INSTALL_TEXT).not.toMatch(/Compartilhar|Adicionar à Tela de Início/);
+    expect(NOTIFY_INSTALL_LINK_LABEL).toBe("Ver como instalar o app");
   });
 });
 

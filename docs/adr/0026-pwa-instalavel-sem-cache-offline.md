@@ -33,7 +33,9 @@ jogador (CLAUDE.md: "não há service worker nem `next-pwa`").
    Início", deixando claro que só o Safari serve). O aparelho detectado vem
    primeiro (`lib/install-guide.ts`), a outra instrução nunca é escondida. O
    texto **não promete** notificação já ativa: diz que os avisos chegam em
-   atualização futura.
+   atualização futura. *(Superado em 2026-09-19: o Web Push subiu — ADR-0028 —
+   e o texto passou a dizer que o aviso de gestação concluída já funciona; ver
+   Consequências.)*
 
 ## Consequências
 
@@ -57,13 +59,24 @@ jogador (CLAUDE.md: "não há service worker nem `next-pwa`").
   ícone monocromático para os ícones temáticos do Android 13+, `favicon.ico` de
   32/48 px e ícones do iPad (152/167 — o iOS reduz o de 180).
 - Quem já tem sessão nunca vê a landing (`middleware.ts` redireciona `/` →
-  `/app`): as instruções alcançam só visitantes deslogados. Um cartão de
-  instalação dentro do app (Perfil) fica como passo seguinte.
+  `/app`): as instruções da landing alcançam só visitantes deslogados.
+  **Resolvido (2026-09-19):** o Perfil ganhou o cartão "Instale o app" — o MESMO
+  componente `InstallApp` com `variant="compact"`: versão curta, só do sistema
+  detectado (Android → Android; iPhone → iPhone; desktop → nada, salvo se o
+  navegador oferecer o convite nativo), com a âncora `#instalar-app`; some quando o
+  app já roda instalado. O botão "Avisar quando nascer" (ADR-0028) aponta para ele
+  no iPhone sem o app instalado, sem repetir os passos (`installCardHref`).
+  **Pendência do texto `INSTALL_WHY` — resolvida (2026-09-19):** o Web Push está em
+  produção (cron `push-cron` a cada 5 minutos; aviso "Gestação concluída" confirmado
+  em aparelho Android) e o texto da landing foi atualizado: o aviso já funciona; no
+  Android e no computador chega pelo navegador; no iPhone só com o app instalado na
+  tela inicial e iOS 16.4+. Um teste (`pwa-files.test.ts`) varre o código da web e
+  falha se algum texto voltar a tratar aviso/notificação/push como futuro.
 - O service worker novo é uma peça a mais em produção: uma versão quebrada de
   `sw.js` afeta todos os visitantes que o registraram. Por isso é mínimo e
   coberto por teste (sem `caches`, sem `respondWith`).
-- Push (Web Push/VAPID, assinatura, envio) **não** está implementado nem
-  decidido aqui; no iOS exige 16.4+ e o app instalado.
+- Push (Web Push/VAPID, assinatura, envio) **não** é decidido aqui — é o
+  ADR-0028 (em produção). No iOS exige 16.4+ e o app instalado.
 
 ## Alternativas consideradas
 

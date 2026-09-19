@@ -4,9 +4,12 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  detectInstallPlatform, installGuideOrder, isRunningInstalled,
+  detectInstallPlatform, installGuideOrder, isRunningInstalled, installGuidesFor, installCompactSteps, installCardHref,
   INSTALL_IOS_WARNING, INSTALL_ANDROID_STEPS, INSTALL_IOS_STEPS, INSTALL_WHY,
+  INSTALL_CARD_ID, INSTALL_CARD_PAGE, INSTALL_COMPACT_ANDROID_STEPS, INSTALL_COMPACT_IOS_STEPS, INSTALL_COMPACT_INTRO, INSTALL_COMPACT_WHY,
+  type InstallPlatform,
 } from "../install-guide";
+import { NOTIFY_BUTTON_LABEL } from "../push";
 
 const UA = {
   iphoneSafari: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
@@ -97,8 +100,85 @@ describe("textos da seção (o que a landing promete)", () => {
     expect(INSTALL_IOS_WARNING).toMatch(/Chrome/);
   });
 
-  it("não promete notificação já ativa: os avisos vêm 'em uma próxima atualização' (push ainda não existe)", () => {
-    expect(INSTALL_WHY).toMatch(/filhote nascer/);
-    expect(INSTALL_WHY).toMatch(/ainda não estão ativos/);
+  it("o aviso de gestação concluída JÁ funciona (ADR-0028): Android e computador pelo navegador; iPhone só com o app instalado e iOS 16.4+", () => {
+    expect(INSTALL_WHY).toMatch(/Gestação concluída/);
+    expect(INSTALL_WHY).toMatch(/já funciona/);
+    expect(INSTALL_WHY).toMatch(/pronto para nascer/);
+    expect(INSTALL_WHY).toMatch(/Android e no computador/);
+    expect(INSTALL_WHY).toMatch(/pelo navegador/);
+    expect(INSTALL_WHY).toMatch(/iPhone só funciona com o app instalado na tela inicial/);
+    expect(INSTALL_WHY).toMatch(/iOS 16\.4/);
+    expect(INSTALL_WHY).toContain(`“${NOTIFY_BUTTON_LABEL}”`); // o nome do botão vem da mesma constante
+  });
+
+  it("NÃO trata a notificação como futura (nada de 'ainda não', 'em breve', 'próxima atualização', 'vai permitir')", () => {
+    expect(INSTALL_WHY).not.toMatch(/ainda não|em breve|próxima atualização|vai permitir|chega(m)? (em|depois)/i);
+  });
+});
+
+describe("cartão 'Instale o app' no Perfil (variante compact) — só o sistema detectado", () => {
+  const ALL: InstallPlatform[] = ["android", "ios-safari", "ios-other", "other"];
+
+  it("landing: SEMPRE as duas instruções, a do aparelho primeiro (nada escondido) — igual ao comportamento de antes", () => {
+    for (const p of ALL) {
+      expect(installGuidesFor(p, "landing")).toEqual([...installGuideOrder(p)]);
+      expect([...installGuidesFor(p, "landing")].sort()).toEqual(["android", "ios"]);
+    }
+  });
+
+  it("compact: Android → só Android; iPhone (Safari ou outro navegador) → só iPhone", () => {
+    expect(installGuidesFor("android", "compact")).toEqual(["android"]);
+    expect(installGuidesFor("ios-safari", "compact")).toEqual(["ios"]);
+    expect(installGuidesFor("ios-other", "compact")).toEqual(["ios"]);
+  });
+
+  it("compact em desktop/desconhecido: nada — a menos que o navegador ofereça o convite nativo (aí só o botão 'Instalar')", () => {
+    expect(installGuidesFor("other", "compact")).toEqual([]);
+    expect(installGuidesFor("other", "compact", false)).toEqual([]);
+    expect(installGuidesFor("other", "compact", true)).toEqual(["android"]);
+    // o convite nativo não muda o que o iPhone mostra
+    expect(installGuidesFor("ios-safari", "compact", true)).toEqual(["ios"]);
+  });
+
+  it("os passos do compact são MAIS CURTOS que os da landing e não repetem o texto dela", () => {
+    expect(INSTALL_COMPACT_ANDROID_STEPS.length).toBeLessThan(INSTALL_ANDROID_STEPS.length);
+    expect(INSTALL_COMPACT_IOS_STEPS.length).toBeLessThan(INSTALL_IOS_STEPS.length);
+    for (const s of INSTALL_COMPACT_IOS_STEPS) expect(INSTALL_IOS_STEPS).not.toContain(s);
+    for (const s of INSTALL_COMPACT_ANDROID_STEPS) expect(INSTALL_ANDROID_STEPS).not.toContain(s);
+    expect(INSTALL_COMPACT_INTRO.length).toBeLessThan(80);
+    expect(installCompactSteps("ios")).toBe(INSTALL_COMPACT_IOS_STEPS);
+    expect(installCompactSteps("android")).toBe(INSTALL_COMPACT_ANDROID_STEPS);
+  });
+
+  it("os passos curtos continuam corretos: Compartilhar → Adicionar à Tela de Início (iPhone); menu ⋮ → Instalar app (Android)", () => {
+    expect(INSTALL_COMPACT_IOS_STEPS.join(" ")).toMatch(/Safari/);
+    expect(INSTALL_COMPACT_IOS_STEPS.join(" ")).toMatch(/Compartilhar/);
+    expect(INSTALL_COMPACT_IOS_STEPS.join(" ")).toMatch(/Adicionar à Tela de Início/);
+    expect(INSTALL_COMPACT_ANDROID_STEPS.join(" ")).toMatch(/⋮/);
+    expect(INSTALL_COMPACT_ANDROID_STEPS.join(" ")).toMatch(/Instalar app/);
+    expect(INSTALL_COMPACT_WHY).toMatch(/iPhone/);
+    expect(INSTALL_COMPACT_WHY).toMatch(/gestação concluída/);
+  });
+
+  it("o cartão do Perfil tem a âncora #instalar-app e mora em /app/profile", () => {
+    expect(INSTALL_CARD_ID).toBe("instalar-app");
+    expect(INSTALL_CARD_PAGE).toBe("/app/profile");
+  });
+});
+
+describe("installCardHref — pra onde o botão 'Avisar quando nascer' aponta", () => {
+  it("no próprio Perfil: só a âncora (rola pro cartão na mesma página)", () => {
+    expect(installCardHref("/app/profile")).toBe("#instalar-app");
+    expect(installCardHref("/app/profile/")).toBe("#instalar-app");
+  });
+  it("em qualquer outra tela (ex.: Incubadora): leva ao Perfil já no cartão", () => {
+    expect(installCardHref("/app/incubadora")).toBe("/app/profile#instalar-app");
+    expect(installCardHref("/app")).toBe("/app/profile#instalar-app");
+    expect(installCardHref("")).toBe("/app/profile#instalar-app");
+    expect(installCardHref(null)).toBe("/app/profile#instalar-app");
+    expect(installCardHref(undefined)).toBe("/app/profile#instalar-app");
+  });
+  it("o alvo existe: a âncora do link é o id do cartão", () => {
+    expect(installCardHref("/app/incubadora").endsWith(`#${INSTALL_CARD_ID}`)).toBe(true);
   });
 });

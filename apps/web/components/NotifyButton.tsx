@@ -1,9 +1,11 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { getPushConfig, subscribePush, unsubscribePush, type PushSubscriptionJson } from "../lib/api";
-import { detectInstallPlatform, isRunningInstalled, INSTALL_IOS_STEPS, type InstallPlatform } from "../lib/install-guide";
+import { detectInstallPlatform, isRunningInstalled, installCardHref, type InstallPlatform } from "../lib/install-guide";
 import {
-  decidePushUi, urlBase64ToUint8Array, iosVersionFromUserAgent, deniedHelp,
+  decidePushUi, urlBase64ToUint8Array, iosVersionFromUserAgent, deniedHelp, NOTIFY_INSTALL_LINK_LABEL,
   NOTIFY_BUTTON_LABEL, NOTIFY_OFF_LABEL, NOTIFY_EXPLANATION, NOTIFY_SUBSCRIBED_TEXT, NOTIFY_IOS_INSTALL_TEXT,
   NOTIFY_IOS_SAFARI_TEXT, NOTIFY_IOS_TOO_OLD_TEXT, NOTIFY_UNSUPPORTED_TEXT, type PushUiState,
 } from "../lib/push";
@@ -18,6 +20,7 @@ const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
  * na web ou sem o recurso na API, não renderiza nada (recurso desligado, nada quebra).
  */
 export function NotifyButton() {
+  const pathname = usePathname();
   const [ui, setUi] = useState<PushUiState>("loading");
   const [platform, setPlatform] = useState<InstallPlatform>("other");
   const [busy, setBusy] = useState(false);
@@ -92,6 +95,14 @@ export function NotifyButton() {
 
   if (ui === "hidden" || ui === "loading") return null;
 
+  // Os passos de instalação vivem só no cartão "Instale o app" do Perfil (InstallApp compact): aqui só o link.
+  // No próprio Perfil basta a âncora; em outras telas (ex.: Incubadora) o link leva ao Perfil já no cartão.
+  const installLink = (
+    <Link href={installCardHref(pathname)} className="mt-1.5 inline-block font-mono text-[0.7rem] uppercase text-cyan underline decoration-dotted transition hover:text-ink">
+      {NOTIFY_INSTALL_LINK_LABEL} →
+    </Link>
+  );
+
   const box = "mb-4 rounded-card border border-cyan/25 bg-bg-800 p-3 text-left";
   const note = "text-[0.72rem] leading-relaxed text-ink-muted";
 
@@ -120,12 +131,15 @@ export function NotifyButton() {
       {ui === "ios-install" && (
         <div className="mt-2 rounded-lg border border-warn/40 bg-warn/10 p-2.5">
           <p className="text-[0.72rem] font-semibold text-warn">{NOTIFY_IOS_INSTALL_TEXT}</p>
-          <ol className="mt-1.5 list-decimal space-y-0.5 pl-5 text-[0.7rem] text-ink-muted">
-            {INSTALL_IOS_STEPS.map((s) => <li key={s}>{s}</li>)}
-          </ol>
+          {installLink}
         </div>
       )}
-      {ui === "ios-open-in-safari" && <p className="mt-2 text-[0.72rem] font-semibold text-warn">{NOTIFY_IOS_SAFARI_TEXT}</p>}
+      {ui === "ios-open-in-safari" && (
+        <div className="mt-2 rounded-lg border border-warn/40 bg-warn/10 p-2.5">
+          <p className="text-[0.72rem] font-semibold text-warn">{NOTIFY_IOS_SAFARI_TEXT}</p>
+          {installLink}
+        </div>
+      )}
       {ui === "ios-too-old" && <p className="mt-2 text-[0.72rem] font-semibold text-warn">{NOTIFY_IOS_TOO_OLD_TEXT}</p>}
       {ui === "unsupported" && <p className="mt-2 text-[0.72rem] text-ink-muted">{NOTIFY_UNSUPPORTED_TEXT}</p>}
       {ui === "denied" && <p className="mt-2 text-[0.72rem] font-semibold text-warn">{deniedHelp(platform)}</p>}
