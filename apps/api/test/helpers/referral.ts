@@ -13,8 +13,8 @@ import { SystemClock } from "../../src/common/clock";
 export function makeReferralStack(wallet: WalletService, subs: InMemorySubscriptionsRepository = new InMemorySubscriptionsRepository()) {
   delete process.env.DATABASE_URL; // ReferralService escolhe memória vs Postgres no construtor
   const grants = new InMemoryGrantedTiersRepository();
-  const tiers = new TierService(subs, grants);
   const clock = new SystemClock();
+  const tiers = new TierService(subs, grants, clock); // o MESMO relógio: concessão (referral) e resolução de tier veem o mesmo "agora"
   const referral = new ReferralService(wallet, grants, tiers, clock);
   return { referral, subs, grants, tiers, clock };
 }

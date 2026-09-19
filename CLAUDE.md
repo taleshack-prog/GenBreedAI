@@ -137,8 +137,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
    **Tempo (ADR-0029, adendo):** `WalletService` e `ImageQuotaService` agora usam `Clock`. **Fuso único (ADR-0029, decisão 2026-09-19):** o jogo tem UM "dia" —
    o dia civil de São Paulo — para o bônus diário, o mês da cota de retratos e a vaga de nascimento (`common/sao-paulo-time.ts`; bônus quinzenal é intervalo
    entre instantes, sem fuso). **Ao subir: ajuste de dados opcional** (SQL no ADR-0029, seção "Transição": rodar na mesma noite do deploy, entre 21h e 23h59
-   de Brasília, senão quem coletou nessa noite perde o bônus do dia seguinte); a cota mensal não tem ajuste confiável. Ainda sem `Clock`: expiração de
-   `granted_tiers` e `PAST_DUE` em `subscriptions` (repositórios de tier; rodada própria).
+   de Brasília, senão quem coletou nessa noite perde o bônus do dia seguinte); a cota mensal não tem ajuste confiável. **Tier efetivo com `Clock` (ADR-0029):** o `TierService` lê o
+   `Clock` e passa o `now` aos repositórios (`findActiveForUser(userId, now)`) — expiração de `granted_tiers` e `PAST_DUE` testáveis; nenhum outro ponto do servidor
+   decide regra pela data do sistema (sobram só auditoria/ids/cache). Na web, duas cópias de exibição da regra `PAST_DUE` usam `Date.now()` (não gateiam nada).
 6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
    no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
    definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.

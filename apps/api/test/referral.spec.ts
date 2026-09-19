@@ -125,26 +125,22 @@ describe("Referral — marco 'converteu' (recordConversion)", () => {
   });
 
   it("PHD com indicador FREE → 1 mês de JUNIOR via granted_tiers (30 dias, reason com a origem), sem créditos", async () => {
-    // Sem HTTP/Fastify aqui, então fake timers globais são seguros — e cobrem
-    // Clock (new Date()) E o Date.now() dos repositórios em memória de uma vez.
+    // Relógio simulado (`Clock`): o ReferralService (que concede) e o TierService (que resolve) leem o MESMO `clock`
+    // (ver `helpers/referral.ts`) — sem fake timers globais (ADR-0029). Mais casos de tempo em `tier-clock.spec.ts`.
     const start = new Date("2026-09-18T12:00:00Z");
-    vi.useFakeTimers(); vi.setSystemTime(start);
-    try {
-      await invite();
-      const r = await ref.recordConversion("bob", { id: "sub_phd", tier: "PHD" });
-      expect(r).toEqual({ credited: 0, grantedTier: "JUNIOR" });
-      const grant = await grants.findActiveForUser("alice");
-      expect(grant?.tier).toBe("JUNIOR");
-      expect(grant?.expiresAt.getTime()).toBe(start.getTime() + REFERRAL_GRANT_DAYS * 24 * 60 * 60 * 1000);
-      expect(grant?.reason).toBe("REFERRAL_PHD:bob:sub_phd");
-      expect(await tiers.resolve("alice")).toBe("JUNIOR"); // o indicador FREE passa a JUNIOR
-      expect(await credits("alice")).toBe(0); // PHD dá tier, não créditos
-      // e expira: 31 dias depois volta a FREE
-      vi.setSystemTime(new Date(start.getTime() + 31 * 24 * 60 * 60 * 1000));
-      expect(await tiers.resolve("alice")).toBe("FREE");
-    } finally {
-      vi.useRealTimers();
-    }
+    clock.setForTesting(start);
+    await invite();
+    const r = await ref.recordConversion("bob", { id: "sub_phd", tier: "PHD" });
+    expect(r).toEqual({ credited: 0, grantedTier: "JUNIOR" });
+    const grant = await grants.findActiveForUser("alice", clock.now());
+    expect(grant?.tier).toBe("JUNIOR");
+    expect(grant?.expiresAt.getTime()).toBe(start.getTime() + REFERRAL_GRANT_DAYS * 24 * 60 * 60 * 1000);
+    expect(grant?.reason).toBe("REFERRAL_PHD:bob:sub_phd");
+    expect(await tiers.resolve("alice")).toBe("JUNIOR"); // o indicador FREE passa a JUNIOR
+    expect(await credits("alice")).toBe(0); // PHD dá tier, não créditos
+    // e expira: 31 dias depois volta a FREE
+    clock.setForTesting(new Date(start.getTime() + 31 * 24 * 60 * 60 * 1000));
+    expect(await tiers.resolve("alice")).toBe("FREE");
   });
 
   it("PHD com indicador que já é SENIOR → concede o plano DELE (SENIOR), não JUNIOR", async () => {
@@ -152,7 +148,7 @@ describe("Referral — marco 'converteu' (recordConversion)", () => {
     await invite();
     const r = await ref.recordConversion("bob", { id: "sub_phd", tier: "PHD" });
     expect(r.grantedTier).toBe("SENIOR");
-    expect((await grants.findActiveForUser("alice"))?.tier).toBe("SENIOR");
+    expect((await grants.findActiveForUser("alice", clock.now()))?.tier).toBe("SENIOR");
   });
 
   it("PHD repetido não concede duas vezes", async () => {

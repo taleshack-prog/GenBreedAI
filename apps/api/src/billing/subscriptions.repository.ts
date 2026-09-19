@@ -43,8 +43,12 @@ export abstract class SubscriptionsRepository {
   abstract updateLifecycle(id: string, patch: { status: SubscriptionStatus; currentPeriodEnd: Date; cancelAtPeriodEnd: boolean }): Promise<void>;
   /** customer.subscription.deleted / invoice.payment_failed: só status. */
   abstract updateStatus(id: string, status: SubscriptionStatus): Promise<void>;
-  /** ACTIVE, ou PAST_DUE ainda dentro do período — é o que TierService.resolve() consulta. */
-  abstract findActiveForUser(userId: string): Promise<SubscriptionRow | null>;
+  /**
+   * ACTIVE (sempre vale — quem muda o status é o webhook), ou PAST_DUE ainda dentro do período
+   * (`currentPeriodEnd > now`, ESTRITO); CANCELED e INCOMPLETE nunca valem. É o que TierService.resolve() consulta.
+   * O `now` é PARÂMETRO — vem do `Clock` do `TierService` (ADR-0029): o repositório é só dado, não conhece relógio.
+   */
+  abstract findActiveForUser(userId: string, now: Date): Promise<SubscriptionRow | null>;
   /** A assinatura mais recente do usuário, qualquer status — pra GET /billing/subscription. */
   abstract findLatestForUser(userId: string): Promise<SubscriptionRow | null>;
   /** Customer Stripe já usado pelo usuário (reuso — Customers duplicados quebram o portal). */
@@ -72,10 +76,9 @@ export class InMemorySubscriptionsRepository extends SubscriptionsRepository {
     return [...this.rows.values()].filter((r) => r.userId === userId);
   }
 
-  async findActiveForUser(userId: string): Promise<SubscriptionRow | null> {
-    const now = Date.now();
+  async findActiveForUser(userId: string, now: Date): Promise<SubscriptionRow | null> {
     const active = this.forUser(userId)
-      .filter((r) => r.status === "ACTIVE" || (r.status === "PAST_DUE" && r.currentPeriodEnd.getTime() > now))
+      .filter((r) => r.status === "ACTIVE" || (r.status === "PAST_DUE" && r.currentPeriodEnd.getTime() > now.getTime()))
       .sort((a, b) => b.currentPeriodEnd.getTime() - a.currentPeriodEnd.getTime());
     return active[0] ?? null;
   }
@@ -132,10 +135,9 @@ export class DrizzleSubscriptionsRepository extends SubscriptionsRepository {
     }));
   }
 
-  async findActiveForUser(userId: string): Promise<SubscriptionRow | null> {
-    const now = Date.now();
+  async findActiveForUser(userId: string, now: Date): Promise<SubscriptionRow | null> {
     const rows = await this.rowsForUser(userId);
-    return rows.find((r) => r.status === "ACTIVE" || (r.status === "PAST_DUE" && r.currentPeriodEnd.getTime() > now)) ?? null;
+    return rows.find((r) => r.status === "ACTIVE" || (r.status === "PAST_DUE" && r.currentPeriodEnd.getTime() > now.getTime())) ?? null;
   }
 
   async findLatestForUser(userId: string): Promise<SubscriptionRow | null> {

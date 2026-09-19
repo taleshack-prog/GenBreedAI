@@ -25,8 +25,12 @@ export interface GrantedTierRow {
 
 export abstract class GrantedTiersRepository {
   abstract grant(row: GrantedTierRow): Promise<void>;
-  /** O tier concedido ainda não expirado de maior posto, se houver mais de um. */
-  abstract findActiveForUser(userId: string): Promise<GrantedTierRow | null>;
+  /**
+   * O tier concedido ainda não expirado de maior posto, se houver mais de um. "Ainda vale" = `expiresAt > now`
+   * (ESTRITO: no instante exato do vencimento já não vale). O `now` é PARÂMETRO — vem do `Clock` do `TierService`
+   * (ADR-0029: regra dependente de tempo nunca lê a data do sistema; o repositório é só dado, não conhece relógio).
+   */
+  abstract findActiveForUser(userId: string, now: Date): Promise<GrantedTierRow | null>;
 }
 
 export class InMemoryGrantedTiersRepository extends GrantedTiersRepository {
@@ -34,10 +38,9 @@ export class InMemoryGrantedTiersRepository extends GrantedTiersRepository {
 
   async grant(row: GrantedTierRow): Promise<void> { this.rows.set(row.id, { ...row }); }
 
-  async findActiveForUser(userId: string): Promise<GrantedTierRow | null> {
-    const now = Date.now();
+  async findActiveForUser(userId: string, now: Date): Promise<GrantedTierRow | null> {
     const active = [...this.rows.values()]
-      .filter((r) => r.userId === userId && r.expiresAt.getTime() > now)
+      .filter((r) => r.userId === userId && r.expiresAt.getTime() > now.getTime())
       .sort((a, b) => RANK[b.tier] - RANK[a.tier]);
     return active[0] ?? null;
   }
@@ -52,9 +55,9 @@ export class DrizzleGrantedTiersRepository extends GrantedTiersRepository {
     }).onConflictDoNothing({ target: grantedTiers.id });
   }
 
-  async findActiveForUser(userId: string): Promise<GrantedTierRow | null> {
+  async findActiveForUser(userId: string, now: Date): Promise<GrantedTierRow | null> {
     const rows = await this.db.select().from(grantedTiers)
-      .where(and(eq(grantedTiers.userId, userId), gt(grantedTiers.expiresAt, new Date())));
+      .where(and(eq(grantedTiers.userId, userId), gt(grantedTiers.expiresAt, now)));
     const best = rows
       .map((r) => ({ id: r.id, userId: r.userId, tier: r.tier as Tier, expiresAt: r.expiresAt, reason: r.reason }))
       .sort((a, b) => RANK[b.tier] - RANK[a.tier]);

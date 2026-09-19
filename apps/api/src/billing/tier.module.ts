@@ -5,6 +5,7 @@ import { GrantedTiersRepository, InMemoryGrantedTiersRepository, DrizzleGrantedT
 import { TierService } from "./tier.service";
 import { MeController } from "./me.controller";
 import { QuotaModule } from "../quota/quota.module";
+import { ClockModule } from "../common/clock.module";
 
 const subscriptionsRepositoryProvider = {
   provide: SubscriptionsRepository,
@@ -32,7 +33,7 @@ const grantedTiersRepositoryProvider = {
  * ganhar acesso sem import extra.
  */
 @Module({
-  imports: [QuotaModule], // MeController usa QuotaService pra devolver birthQuota (ADR-0021)
+  imports: [QuotaModule, ClockModule], // MeController usa QuotaService pra devolver birthQuota (ADR-0021); TierService lê "agora" de Clock (ADR-0029)
   controllers: [MeController],
   providers: [TierService, subscriptionsRepositoryProvider, grantedTiersRepositoryProvider],
   exports: [TierService, SubscriptionsRepository, GrantedTiersRepository],

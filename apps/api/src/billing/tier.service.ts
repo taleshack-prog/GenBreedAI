@@ -17,12 +17,21 @@ import type { Tier } from "@genbreedai/shared";
 import { SubscriptionsRepository } from "./subscriptions.repository";
 import { GrantedTiersRepository } from "./granted-tiers.repository";
 import { isDevFlagEnabled } from "../common/dev-flags";
+import { Clock, SystemClock } from "../common/clock";
 
 @Injectable()
 export class TierService {
+  /**
+   * "Agora" (a concessão de 30 dias ainda vale? a assinatura PAST_DUE ainda está no período?) vem de `Clock`
+   * (`common/clock.ts`, ADR-0029) e é PASSADO como parâmetro aos repositórios — eles ficam sem relógio (só dado), o
+   * que mantém as portas simples e os adapters (in-memory e Drizzle) idênticos. O padrão `SystemClock` mantém
+   * produção idêntica (relógio real) e as chamadas `new TierService(subs, grants)` de testes/helpers válidas;
+   * em produção o Nest injeta o `Clock` compartilhado (`TierModule` importa `ClockModule`).
+   */
   constructor(
     private readonly subscriptions: SubscriptionsRepository,
     private readonly grants: GrantedTiersRepository,
+    private readonly clock: Clock = new SystemClock(),
   ) {}
 
   /**
@@ -32,9 +41,10 @@ export class TierService {
    * nenhuma, pra dar pra simular tier sem escrever linha na tabela.
    */
   async resolve(userId: string, devHint?: Tier): Promise<Tier> {
-    const sub = await this.subscriptions.findActiveForUser(userId);
+    const now = this.clock.now(); // UM instante para a decisão inteira (assinatura E concessão veem o mesmo "agora")
+    const sub = await this.subscriptions.findActiveForUser(userId, now);
     if (sub) return sub.tier;
-    const grant = await this.grants.findActiveForUser(userId);
+    const grant = await this.grants.findActiveForUser(userId, now);
     if (grant) return grant.tier;
     if (devHint && isDevFlagEnabled("AUTH_DEV_HEADERS")) return devHint;
     return "FREE";

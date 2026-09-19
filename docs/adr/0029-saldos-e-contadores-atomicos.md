@@ -70,12 +70,30 @@ Cobertura nova (`wallet-clock.spec.ts`): diário (recusa no mesmo dia, aceita ap
 → uma só), quinzenal (recusa agora e aos 14 dias, aceita aos 15, a janela recomeça a cada coleta, FREE → 403), cota
 mensal (zera na virada do mês), e virada de mês/ano/bissexto nas três regras.
 
-**Usos de `new Date()`/`Date.now()` que decidem regra e AINDA não usam `Clock` (fora desta rodada):**
-`granted_tiers` — se o tier concedido ainda vale (`granted-tiers.repository.ts`) — e `subscriptions` — se uma
-assinatura `PAST_DUE` ainda conta como ativa (`subscriptions.repository.ts`). Corrigir muda a assinatura das portas
-de repositório de tier (o `TierService` passaria o instante); recomendável numa rodada própria, pois hoje a expiração
-de 30 dias do prêmio de indicação não é testável. Os demais usos são timestamps de auditoria, ids, versão de cache de
-imagem e valor padrão do fim do período Stripe — não decidem regra.
+**Tier efetivo (`granted_tiers` e `subscriptions`) — resolvido (2026-09-19).** Os dois últimos pontos do servidor que
+decidiam regra pela data do sistema — se o tier concedido ainda vale (o mês grátis de 30 dias do prêmio de indicação PHD)
+e se uma assinatura `PAST_DUE` ainda conta como ativa — agora recebem o instante do `Clock`. **A regra NÃO mudou:**
+- `granted_tiers`: vale enquanto `expiresAt > agora` (**estrito**: no instante exato do vencimento já não vale).
+- `subscriptions`: `ACTIVE` sempre vale; `PAST_DUE` vale enquanto `currentPeriodEnd > agora` (**estrito**); `CANCELED` e
+  `INCOMPLETE` nunca valem. Prioridade do `TierService`: assinatura válida vence a concessão (mesmo de tier maior);
+  concessão vencida não promove.
+
+**Como o instante chega ao repositório (sem poluir a interface):** o `TierService` — que já é quem decide — lê o `Clock`
+**uma vez por decisão** e o passa como PARÂMETRO: `findActiveForUser(userId, now)` nas duas portas. Os repositórios (in-memory
+e Drizzle) continuam sem relógio, só dado. Alternativa descartada: injetar `Clock` em cada adapter — exigiria dependência
+nas fábricas dos módulos e nos construtores usados em vários testes, e deixaria a regra de tempo espalhada em quatro
+classes em vez de uma. `TierService` recebe `clock: Clock = new SystemClock()` (produção idêntica; as chamadas
+`new TierService(subs, grants)` continuam válidas) e o `TierModule` importa `ClockModule`. Cobertura em
+`tier-clock.spec.ts`: concessão de 30 dias (dia 29, último instante do dia 30, vencimento), PAST_DUE até `currentPeriodEnd`,
+CANCELED/INCOMPLETE, prioridade, viradas de mês/ano/bissexto e a via real do prêmio de indicação.
+
+**Varredura final no servidor:** nenhum outro uso de `new Date()`/`Date.now()` decide regra. Os que sobram são timestamps
+de auditoria (`updated_at`, `credited_at`, `createdAt` em memória), ids (usuário, pagamento simulado, reserva), versão de
+cache de imagem, o horário do log de `push:dispatch` e o valor padrão do fim do período Stripe quando ele não vem no evento
+(`billing.service.ts`). **Na web** há duas cópias da regra "PAST_DUE ainda vale" com `Date.now()`
+(`effectiveTierFromSubscription` em `lib/api.ts` e a checagem de assinatura ativa em `app/app/planos/page.tsx`) — só
+exibição; o servidor (`TierService`) é a fonte de verdade e a web não usa isso para liberar nada. Ficam como estão
+(recomendável dar um parâmetro `now` a essas funções se um dia precisarem de teste).
 
 ### Decisão de produto (2026-09-19): FUSO ÚNICO — o "dia" do jogo é o dia civil de São Paulo
 
