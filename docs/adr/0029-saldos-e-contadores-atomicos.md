@@ -52,6 +52,42 @@ Aplicado nesta rodada (`WalletRepository`): `addImageCredits`, `takeImageCredit`
 `claimDaily`, `claimBiweekly`; `ImageQuotaService.tryConsume` com o limite em `ON CONFLICT ... WHERE used < limite`.
 `WalletService` só delega.
 
+## Regra de tempo (adendo, 2026-09-19): regra de negócio dependente de tempo usa `Clock`, nunca a data do sistema
+
+> **Toda decisão de regra de negócio que depende de "agora" (dia do bônus, janela de dias, mês da cota, expiração,
+> prazo) lê o instante de `Clock` (`apps/api/src/common/clock.ts`), injetado — NUNCA `new Date()` / `Date.now()`
+> direto num serviço.** Sem isso a passagem do tempo não é testável (o teste teria que esperar de verdade) e a regra
+> nova nasce sem cobertura. Os testes fixam o relógio com `SystemClock.setForTesting(...)` (nunca `vi.useFakeTimers()`,
+> que trava o `app.inject()` do Fastify).
+
+Aplicado: `WalletService` (bônus diário e quinzenal) e `ImageQuotaService` (mês da cota) passaram a receber
+`clock: Clock = new SystemClock()` — o valor padrão mantém o comportamento de produção idêntico e as 39 chamadas
+`new WalletService(repo)` de testes/scripts válidas; em produção o Nest injeta o `Clock` compartilhado
+(`EconomyModule` e `ImageModule` importam `ClockModule`; esquecer o import derruba o boot, não passa em silêncio).
+Cobertura nova (`wallet-clock.spec.ts`): diário (recusa no mesmo dia, aceita após a meia-noite, coletas simultâneas
+→ uma só), quinzenal (recusa agora e aos 14 dias, aceita aos 15, a janela recomeça a cada coleta, FREE → 403), cota
+mensal (zera na virada do mês), e virada de mês/ano/bissexto nas três regras.
+
+**Usos de `new Date()`/`Date.now()` que decidem regra e AINDA não usam `Clock` (fora desta rodada):**
+`granted_tiers` — se o tier concedido ainda vale (`granted-tiers.repository.ts`) — e `subscriptions` — se uma
+assinatura `PAST_DUE` ainda conta como ativa (`subscriptions.repository.ts`). Corrigir muda a assinatura das portas
+de repositório de tier (o `TierService` passaria o instante); recomendável numa rodada própria, pois hoje a expiração
+de 30 dias do prêmio de indicação não é testável. Os demais usos são timestamps de auditoria, ids, versão de cache de
+imagem e valor padrão do fim do período Stripe — não decidem regra.
+
+### Ponto de decisão de produto — o "dia" e o "mês" são em UTC (não corrigido)
+
+- **Bônus diário:** o dia é `AAAA-MM-DD` do instante em **UTC**; recusa se `last_daily` for igual a hoje. Em São
+  Paulo (UTC−3) o "dia" vira às **21:00**, não à meia-noite: quem coleta às 20:30 pode coletar de novo às 21:30 do
+  mesmo dia civil local.
+- **Cota mensal de retratos extras:** o mês é `AAAA-MM` em UTC — reinicia às **21:00** de São Paulo do último dia.
+- **Bônus quinzenal:** janela móvel de 15 × 24 h entre dois INSTANTES (aceita a partir de exatamente 15 dias); não
+  depende de fuso.
+- **Inconsistência:** a vaga de nascimento diária de SENIOR/PHD usa o dia civil de **America/Sao_Paulo**
+  (`startOfSaoPauloDay`). Se o produto quiser um único "dia" para o jogador, é decisão de regra (e de migração: quem
+  coletou perto da virada); os testes marcados "COMPORTAMENTO ATUAL" em `wallet-clock.spec.ts` documentam o que
+  existe e mudam junto com a regra.
+
 ## Consequências
 
 - **Correção de comportamento:** créditos comprados e as janelas do bônus deixam de ser apagados por
@@ -60,8 +96,8 @@ Aplicado nesta rodada (`WalletRepository`): `addImageCredits`, `takeImageCredit`
   "Saldo insuficiente." só no caso raro de outro pedido gastar no meio. Nenhuma mudança de schema/migração.
 - **Comparação de janela do bônus quinzenal:** `last_biweekly` é texto ISO 8601 UTC (`toISOString()`), então
   `last_biweekly <= cutoff` em texto equivale a comparar instantes (mesmo formato, mesmo tamanho).
-- `WalletService` continua usando `new Date()` (não `Clock`) para o dia/janela do bônus — herança anterior,
-  fora do escopo desta ADR; quando entrar `Clock`, o instante é só um parâmetro dos métodos atômicos.
+- *(Atualização 2026-09-19 — resolvido: ver "Regra de tempo" abaixo.)* `WalletService` usava `new Date()` para o
+  dia/janela do bônus; agora usa `Clock`.
 - Os adapters Drizzle não têm teste em PGlite (não há teste de carteira em banco de mentira e as migrações
   refletem só o schema antigo para as tabelas de indicação); a exclusividade é coberta no adapter em memória.
 - Lacuna conhecida (não é saldo): entre reivindicar o trio/bônus e creditar não há transação com outra tabela;

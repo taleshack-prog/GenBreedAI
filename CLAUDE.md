@@ -134,6 +134,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
    **Carteira (ADR-0029, 2026-09-19): corrigida.** Todo ajuste de saldo/cota virou `UPDATE` atômico (`addImageCredits`, `takeImageCredit`,
    `addResources`, `spendResources`, `claimDaily`, `claimBiweekly`, `tryConsume`). Achado por leitura de código, não reproduzido: o `save` antigo de
    `charge`/`credit`/`claimDaily` regravava a carteira inteira e **zerava os créditos comprados** — conferir a produção (jogadores que perderam créditos).
+   **Tempo (ADR-0029, adendo):** `WalletService` e `ImageQuotaService` agora usam `Clock`. **Ponto de decisão de produto, NÃO corrigido:** o "dia" do bônus
+   diário e o "mês" da cota de retratos são em **UTC** — viram às 21:00 em São Paulo (a vaga de nascimento diária usa o dia civil de São Paulo). Ainda sem
+   `Clock`: expiração de `granted_tiers` e `PAST_DUE` em `subscriptions` (repositórios de tier; rodada própria).
 6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
    no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
    definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
@@ -160,6 +163,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   NUNCA leitura seguida de escrita** (`get` + `save`). A condição ("tem saldo?", "já coletou?", "cabe na cota?") vai no `WHERE`; cada operação só toca as
   colunas que muda (proibido regravar a linha/carteira inteira); o adapter em memória faz o método inteiro sem `await` entre ler e gravar. Vale para
   carteira, cotas, bônus, claims e contadores novos, nos DOIS adapters. Escreva o teste de concorrência (`Promise.all`) junto.
+- **Tempo (regra 3 + ADR-0029):** regra de negócio que depende de "agora" lê `Clock` injetado — nunca `new Date()`/`Date.now()` num serviço. Testes fixam o
+  relógio com `SystemClock.setForTesting(...)` (nunca `vi.useFakeTimers()` com `app.inject()`). Construtor com `clock: Clock = new SystemClock()` quando há muitos
+  chamadores diretos; o módulo importa `ClockModule`.
 - Nenhum merge sem `pnpm test:golden` e `pnpm typecheck` verdes (e `pnpm test`).
 
 ## 8. Regras de produto em vigor (conferidas em `tiers.ts`, `tier-access.ts`, ADRs 0016/0019–0023)

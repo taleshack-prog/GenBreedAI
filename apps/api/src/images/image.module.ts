@@ -6,6 +6,7 @@ import { ImageQuotaService } from "../economy/image-quota.service";
 import { EconomyModule } from "../economy/economy.module";
 import { SpecimensModule } from "../specimens/specimens.module";
 import { TierModule } from "../billing/tier.module";
+import { ClockModule } from "../common/clock.module";
 
 /**
  * `PreviewController` (`POST /api/v1/cross/preview`, antes hospedado em
@@ -25,7 +26,7 @@ import { TierModule } from "../billing/tier.module";
  * importam `ImageModule` ou `CrossModule` de volta.
  */
 @Module({
-  imports: [EconomyModule, SpecimensModule, TierModule],
+  imports: [EconomyModule, SpecimensModule, TierModule, ClockModule], // ClockModule: `ImageQuotaService` lê o mês da cota de `Clock`
   controllers: [ImageController, ImageQuotaController],
   providers: [ImageService, ImageJobRepository, ImageQuotaService],
   exports: [ImageService],

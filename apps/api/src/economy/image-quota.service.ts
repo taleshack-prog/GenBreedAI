@@ -15,6 +15,7 @@ import { imageQuota } from "../db/schema";
 import { createDb } from "../db/client";
 import { tierPolicy } from "../common/tiers";
 import { isDevFlagEnabled } from "../common/dev-flags";
+import { Clock, SystemClock } from "../common/clock";
 
 /** Cota de retratos EXTRAS (prévia/regenerar) — NÃO conta o retrato incluído no cruzamento (ADR-0019). */
 export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyExtraImages ?? 0; }
@@ -37,16 +38,18 @@ export function modelForTier(tier: string): string {
   }
   return process.env.FAL_MODEL ?? "fal-ai/flux-2-pro";
 }
-function ym(): string { return new Date().toISOString().slice(0, 7); }
+/** Mês da cota (`AAAA-MM`, em UTC — vira às 21:00 no horário de São Paulo do último dia do mês; comportamento atual, ver ADR-0029). */
+function ym(now: Date): string { return now.toISOString().slice(0, 7); }
 
 @Injectable()
 export class ImageQuotaService {
   private readonly mem = new Map<string, number>(); // "owner|ym" → used (fallback)
   private db: ReturnType<typeof createDb>["db"] | null = null;
-  constructor() { const url = process.env.DATABASE_URL; if (url) this.db = createDb(url).db; }
+  /** "Agora" (mês da cota) vem de `Clock` (ADR-0029), nunca `new Date()` direto; o padrão `SystemClock` mantém `new ImageQuotaService()` válido. */
+  constructor(private readonly clock: Clock = new SystemClock()) { const url = process.env.DATABASE_URL; if (url) this.db = createDb(url).db; }
 
   async used(owner: string): Promise<number> {
-    const m = ym();
+    const m = ym(this.clock.now());
     if (this.db) {
       const rows = await this.db.select().from(imageQuota).where(and(eq(imageQuota.ownerId, owner), eq(imageQuota.ym, m)));
       return rows[0]?.used ?? 0;
@@ -67,7 +70,7 @@ export class ImageQuotaService {
     if (isDevFlagEnabled("IMAGE_QUOTA_UNLIMITED")) return true; // modo DEV: cota ilimitada — em produção é ignorada
     const limit = monthlyImageLimit(tier);
     if (limit <= 0) return false;
-    const m = ym();
+    const m = ym(this.clock.now());
     if (this.db) {
       const rows = await this.db.insert(imageQuota).values({ ownerId: owner, ym: m, used: 1 })
         .onConflictDoUpdate({

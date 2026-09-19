@@ -8,6 +8,7 @@
  */
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { WalletRepository, type Wallet } from "./wallet.repository";
+import { Clock, SystemClock } from "../common/clock";
 
 export type { Wallet };
 export const FREEZE_COST = { catalisadores: 20 };
@@ -17,7 +18,13 @@ const BIWEEKLY_WINDOW_MS = 15 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly repo: WalletRepository) {}
+  /**
+   * "Agora" (dia do bônus diário, janela de 15 dias do quinzenal) vem de `Clock` (`common/clock.ts`, regra 3 do
+   * CLAUDE.md, ADR-0029), NUNCA de `new Date()` direto — senão a passagem do tempo não é testável. Em produção o
+   * Nest injeta o `Clock` compartilhado (`ClockModule`); o padrão `SystemClock` (relógio real, comportamento de
+   * antes, byte a byte) mantém válidas as chamadas `new WalletService(repo)` de testes e scripts.
+   */
+  constructor(private readonly repo: WalletRepository, private readonly clock: Clock = new SystemClock()) {}
   get(owner: string): Promise<Wallet> { return this.repo.get(owner); }
 
   /** Gasta recursos (congelar/descongelar). Atômico: só desconta se o saldo cobre o custo — nunca fica negativo, nem sob concorrência. */
@@ -63,16 +70,20 @@ export class WalletService {
    * simultâneas concedem UMA vez.
    */
   async claimBiweekly(owner: string): Promise<{ claimed: boolean; wallet: Wallet }> {
-    const now = new Date();
+    const now = this.clock.now();
     const cutoff = new Date(now.getTime() - BIWEEKLY_WINDOW_MS);
     const claimed = await this.repo.claimBiweekly(owner, now.toISOString(), cutoff.toISOString());
     if (claimed) return { claimed: true, wallet: claimed };
     return { claimed: false, wallet: await this.repo.get(owner) };
   }
 
-  /** Recompensa diária por tier (fonte principal — streak/cota). 1x por dia. ATÔMICO: "já coletou hoje" é a condição do `UPDATE`. */
+  /**
+   * Recompensa diária por tier (fonte principal — streak/cota). 1x por dia. ATÔMICO: "já coletou hoje" é a condição do `UPDATE`.
+   * O "dia" é o dia civil em UTC (`AAAA-MM-DD` do `Clock`) — ou seja, vira às 21:00 no horário de São Paulo, não à meia-noite
+   * (comportamento atual, registrado no ADR-0029 como ponto de decisão de produto; não mudado aqui).
+   */
   async claimDaily(owner: string, tier: string): Promise<{ claimed: boolean; gain?: Partial<Wallet>; wallet: Wallet }> {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = this.clock.now().toISOString().slice(0, 10);
     const byTier: Record<string, { catalisadores: number; biomassa: number }> = {
       FREE: { catalisadores: 80, biomassa: 4000 }, JUNIOR: { catalisadores: 160, biomassa: 8000 },
       SENIOR: { catalisadores: 300, biomassa: 15000 }, PHD: { catalisadores: 600, biomassa: 30000 },
