@@ -83,8 +83,8 @@ genbreedai/
 
 - Gerenciador: pnpm 9 + Turborepo. Node 22 (Dockerfile). TypeScript estrito.
 - Web: Next.js 15, React 19, Tailwind 3. PWA instalável (ADR-0026): `public/manifest.webmanifest` + `public/sw.js` **mínimo, sem cache
-  offline** (registrado só no cliente/produção); **não há `next-pwa`** e nada de cache offline sem ADR. Ícones PNG (192/512/maskable/
-  apple-touch 180) ainda **não existem** — só `icon.svg`. Push ainda não existe.
+  offline** (registrado só no cliente/produção); **não há `next-pwa`** e nada de cache offline sem ADR. Ícones PNG oficiais em `public/` (192, 512, maskable 512,
+  apple-touch 180; cromossomo com bandas, fundo `#070b11`); o `icon.svg` **não é mais referenciado** (arte antiga, órfão). Push ainda não existe.
 - API: NestJS 10 + Fastify 4, Drizzle ORM (0.36) sobre PostgreSQL (genoma em JSONB), `pg` (Neon) / PGlite nos testes.
   Auth **própria**: JWT (`jsonwebtoken`) + `bcryptjs` + login Google (`google-auth-library`). Imagens: fal.ai + Cloudflare
   R2 (`@aws-sdk/client-s3`). Pagamentos: Stripe.
@@ -306,7 +306,7 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
 - ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
   cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
-- PWA (ADR-0026): PNGs de ícone pendentes (origem `public/icon.svg`); instalabilidade no Android/iPhone não verificada em aparelho
-  real; push (Web Push) não decidido.
+- PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; `public/icon.svg` órfão (arte antiga — apagar ou
+  atualizar); sem tela de abertura do iOS (`apple-touch-startup-image`); push (Web Push) não decidido.
 - Metas de performance (bundle/TTI): sem medição no repo.
 - Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).

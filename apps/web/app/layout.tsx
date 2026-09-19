@@ -11,11 +11,14 @@ export const metadata: Metadata = {
   // iPhone (app instalado pelo Safari): capable + título + barra de status. "black" (opaca) e não
   // "black-translucent": a translúcida faz o conteúdo passar POR BAIXO da barra e o app não trata safe-area.
   appleWebApp: { capable: true, title: "GenBreedAI", statusBarStyle: "black" },
+  // MESMA arte do manifest (cromossomo com bandas, fundo #070b11) — nunca o SVG antigo, que não é mais a arte oficial.
+  // O iOS ignora SVG e exige PNG opaco 180×180 para a tela inicial.
   icons: {
-    icon: "/icon.svg",
-    // PENDENTE (ícone PNG 180×180 ainda não existe em public/ — o iOS ignora SVG). Quando `public/apple-touch-icon.png`
-    // existir, descomente a linha abaixo; não referenciar arquivo inexistente.
-    // apple: "/apple-touch-icon.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

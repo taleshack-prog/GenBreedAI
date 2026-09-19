@@ -37,13 +37,25 @@ jogador (CLAUDE.md: "não há service worker nem `next-pwa`").
 
 ## Consequências
 
-- **Ícones PNG pendentes (não foram inventados):** `icon-192.png`,
-  `icon-512.png`, `icon-maskable-512.png` (fundo cheio, glifo na zona segura)
-  e `apple-touch-icon.png` (180×180, opaco). Origem: `public/icon.svg`. Até
-  existirem, o manifest declara só o SVG (`sizes: any`) — o Chrome o aceita —
-  e o iPhone monta o ícone da tela inicial a partir de uma captura da página.
-  Quando o PNG de 180 existir, descomentar `icons.apple` no `layout.tsx`. O
-  teste `pwa-files.test.ts` falha se o manifest apontar para arquivo inexistente.
+- **Ícones (atualização de 2026-09-19):** a arte oficial (cromossomo com bandas e
+  anel de escala, fundo opaco `#070b11`) foi gerada em PNG e está em `public/`:
+  `icon-192.png` (192×192), `icon-512.png` (512×512), `icon-maskable-512.png`
+  (512×512, fundo cheio, desenho nos ~80% centrais) e `apple-touch-icon.png`
+  (180×180, opaco). O manifest declara os três primeiros (`purpose: any`, `any`,
+  `maskable`); o layout aponta `icons.apple` para o de 180 e os ícones de aba para
+  os de 192/512. **O `icon.svg` deixou de ser referenciado** (é um desenho anterior,
+  não a arte oficial): manifest e PNG não podem apontar para artes diferentes.
+  O arquivo continua em `public/` como órfão — apagar ou atualizar para a arte nova
+  é decisão do dono. `pwa-files.test.ts` confere que o tamanho declarado é o real
+  (cabeçalho do PNG), que são opacos e que nada aponta para o `icon.svg`.
+  `icon-512.png` e `icon-maskable-512.png` são **byte a byte idênticos** — aceitável:
+  a arte já cabe na zona segura do maskable (o anel de escala tem ~77% da largura,
+  dentro do círculo de 80%) e o fundo já é cheio até a borda.
+- **Lacunas opcionais de ícone/abertura (não bloqueiam a instalação):** telas de
+  abertura do iOS (`apple-touch-startup-image`, uma por tamanho de aparelho — sem
+  elas o iPhone pode mostrar um instante de tela branca ao abrir o app instalado),
+  ícone monocromático para os ícones temáticos do Android 13+, `favicon.ico` de
+  32/48 px e ícones do iPad (152/167 — o iOS reduz o de 180).
 - Quem já tem sessão nunca vê a landing (`middleware.ts` redireciona `/` →
   `/app`): as instruções alcançam só visitantes deslogados. Um cartão de
   instalação dentro do app (Perfil) fica como passo seguinte.
