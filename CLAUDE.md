@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0024) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0026) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -82,7 +82,9 @@ genbreedai/
 ## 5. Stack e comandos
 
 - Gerenciador: pnpm 9 + Turborepo. Node 22 (Dockerfile). TypeScript estrito.
-- Web: Next.js 15, React 19, Tailwind 3. Só há `manifest.webmanifest`; **não há service worker nem `next-pwa`**.
+- Web: Next.js 15, React 19, Tailwind 3. PWA instalável (ADR-0026): `public/manifest.webmanifest` + `public/sw.js` **mínimo, sem cache
+  offline** (registrado só no cliente/produção); **não há `next-pwa`** e nada de cache offline sem ADR. Ícones PNG (192/512/maskable/
+  apple-touch 180) ainda **não existem** — só `icon.svg`. Push ainda não existe.
 - API: NestJS 10 + Fastify 4, Drizzle ORM (0.36) sobre PostgreSQL (genoma em JSONB), `pg` (Neon) / PGlite nos testes.
   Auth **própria**: JWT (`jsonwebtoken`) + `bcryptjs` + login Google (`google-auth-library`). Imagens: fal.ai + Cloudflare
   R2 (`@aws-sdk/client-s3`). Pagamentos: Stripe.
@@ -255,7 +257,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0026). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0027). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -274,6 +276,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0023** — Ciclo de vida da incubadora: nascida some em 7 dias; teto de 200 não gestadas.
 - **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; D1/D7 pendentes.
 - **0025** — (produto, não genética) Primeira gestação de cada conta = 5 min (cortesia, `users.first_gestation_at`); complementa a 0021.
+- **0026** — (produto/web, não genética) PWA instalável: manifest + service worker mínimo sem cache offline; instruções na landing.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
@@ -294,6 +297,7 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
 - ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
   cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
-- Se PWA instalável é meta ativa (há manifest, não há service worker).
+- PWA (ADR-0026): PNGs de ícone pendentes (origem `public/icon.svg`); instalabilidade no Android/iPhone não verificada em aparelho
+  real; push (Web Push) não decidido.
 - Metas de performance (bundle/TTI): sem medição no repo.
 - Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).

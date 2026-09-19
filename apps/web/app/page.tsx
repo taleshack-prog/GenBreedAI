@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eyebrow } from "../components/Eyebrow";
 import { PlanPicker } from "../components/PlanPicker";
+import { InstallApp } from "../components/InstallApp";
 
 const IMG_BASE = "https://img.genbreed.com.br/generated";
 
@@ -110,7 +111,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5. RODAPÉ */}
+      {/* 5. INSTALE O APP (PWA — pré-requisito do push; no iPhone só instalado recebe notificação) */}
+      <InstallApp />
+
+      {/* 6. RODAPÉ */}
       <footer className="border-t border-white/10 px-5 py-8">
         <div className="mx-auto flex max-w-4xl flex-col items-center gap-3 text-center">
           <div className="font-display text-sm font-bold uppercase tracking-wide text-ink">GenBreed<span className="text-cyan">AI</span></div>

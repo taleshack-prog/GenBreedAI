@@ -1,11 +1,15 @@
 {
+  "id": "/app",
   "name": "GenBreedAI",
   "short_name": "GenBreed",
   "description": "Laboratório de genética aplicada: cruze, preveja e fixe fenótipos.",
-  "start_url": "/",
+  "lang": "pt-BR",
+  "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#050A0F",
-  "theme_color": "#050A0F",
+  "orientation": "portrait",
+  "background_color": "#070b11",
+  "theme_color": "#070b11",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
