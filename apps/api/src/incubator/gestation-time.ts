@@ -33,3 +33,17 @@ export function gestationEndFor(aura: number, startedAt: Date): Date {
   const hours = gestationHoursForAura(aura);
   return new Date(startedAt.getTime() + hours * 60 * 60 * 1000);
 }
+
+/**
+ * ADR-0025 — a PRIMEIRA gestação de cada conta dura 5 minutos, qualquer que
+ * seja a aura (cortesia de boas-vindas: o jogador novo decide se fica nas
+ * primeiras horas). Uma vez por conta, não por cruzamento; quem decide se é a
+ * primeira é a marca `users.first_gestation_at` (`UserRepository`), não esta
+ * função. As seguintes usam a tabela por aura acima. Só pacing — nunca toca o
+ * resultado genético (anti-P2W, igual para todo tier).
+ */
+export const FIRST_GESTATION_MINUTES = 5;
+
+export function firstGestationEndFor(startedAt: Date): Date {
+  return new Date(startedAt.getTime() + FIRST_GESTATION_MINUTES * 60 * 1000);
+}

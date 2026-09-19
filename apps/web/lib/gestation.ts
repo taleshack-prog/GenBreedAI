@@ -17,6 +17,18 @@ export const GESTATION_HOURS_BY_AURA: Readonly<Record<number, number>> = {
   5: 48,
 };
 
+/**
+ * ADR-0025 — a PRIMEIRA gestação de cada conta dura 5 minutos, qualquer aura
+ * (cortesia de boas-vindas). Mesmo valor de `FIRST_GESTATION_MINUTES` na API
+ * (`gestation-time.ts`); a web só o mostra — quem decide é o servidor
+ * (`firstGestationAvailable` em `GET /me/tier`, `firstGestation` na entrada).
+ */
+export const FIRST_GESTATION_MINUTES = 5;
+
+/** Menor e maior prazo da tabela por aura ("De 12h a 48h") — derivados da tabela, nunca digitados à parte. */
+export const GESTATION_MIN_HOURS = Math.min(...Object.values(GESTATION_HOURS_BY_AURA));
+export const GESTATION_MAX_HOURS = Math.max(...Object.values(GESTATION_HOURS_BY_AURA));
+
 export function gestationHoursForAura(aura: number): number {
   const hours = GESTATION_HOURS_BY_AURA[aura];
   if (hours === undefined) {

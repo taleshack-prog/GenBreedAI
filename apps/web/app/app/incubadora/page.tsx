@@ -9,7 +9,7 @@ import { sexChar } from "../../../components/SexBadge";
 import { phenoSummary } from "../../../lib/phenotype-summary";
 import { birthQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
 import { gestationRemainingLabel, incubatorExitLabel } from "../../../lib/gestation";
-import { DISCARD_CONFIRM_TEXT } from "../../../lib/incubator-texts";
+import { DISCARD_CONFIRM_TEXT, FIRST_GESTATION_DURING_TEXT, gestationPreviewLabel } from "../../../lib/incubator-texts";
 import { GenotypeToggle, FullPhenotype, AuraStars } from "../../../components/Genome";
 import { FetusPlaceholder } from "../../../components/FetusPlaceholder";
 
@@ -142,7 +142,7 @@ export default function IncubatorPage() {
                       <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
                       <FullPhenotype loci={e.phenotype.loci} />
                       <GenotypeToggle genotype={e.genotype} />
-                      <p className="mt-2 text-center text-[0.6rem] text-ink-muted">Gestação: {e.gestationHours}h</p>
+                      <p className="mt-2 text-center text-[0.6rem] text-ink-muted">{gestationPreviewLabel(e.aura, myTier?.firstGestationAvailable === true)}</p>
                       <button disabled={busy === e.id} onClick={() => onGestate(e.id)}
                         className="mt-1 block w-full rounded-lg border border-ok/40 bg-ok/5 py-2 text-center font-display text-[0.65rem] uppercase text-ok transition hover:bg-ok/10 disabled:opacity-60">
                         {busy === e.id ? "gestando…" : `◈ Gestar — usa 1 ${hasVaga ? "das suas vagas" : "crédito"}`}
@@ -166,6 +166,9 @@ export default function IncubatorPage() {
                       <div className="mt-1 text-center font-mono text-[0.7rem] text-purple">
                         {e.gestationEndsAt ? gestationRemainingLabel(e.gestationEndsAt, new Date(nowMs)) : "Gestando…"}
                       </div>
+                      {e.firstGestation && (
+                        <p className="mt-1 text-center text-[0.6rem] text-ink-muted">{FIRST_GESTATION_DURING_TEXT}</p>
+                      )}
                     </>
                   )}
 

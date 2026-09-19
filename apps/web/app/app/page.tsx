@@ -8,7 +8,8 @@ import { displayName } from "../../lib/display";
 import { methodLabel } from "../../lib/method-label";
 import { phenoSummary } from "../../lib/phenotype-summary";
 import { birthQuotaLabel, nextAvailableLabel } from "../../lib/quota-format";
-import { gestationHoursForAura } from "../../lib/gestation";
+import { gestationHoursForAura, FIRST_GESTATION_MINUTES } from "../../lib/gestation";
+import { FIRST_GESTATION_DURING_TEXT, gestationPreviewLabel } from "../../lib/incubator-texts";
 import { CapsuleCard } from "../../components/CapsuleCard";
 import { sexChar } from "../../components/SexBadge";
 import { FertilizationCore } from "../../components/FertilizationCore";
@@ -25,16 +26,22 @@ const METHODS = ["F1", "F2", "F3", "BC1", "LINE", "INBREED", "OUTCROSS"] as cons
  * da incubadora, direto daqui) ou "Guardar na incubadora" (não faz nada —
  * a descrição já ESTÁ salva, livre, desde o cruzamento; só leva pra lá).
  */
-function CrossResultCard({ e, myTier, router }: { e: IncubatorDescription; myTier: MyTier | null; router: ReturnType<typeof useRouter> }) {
+function CrossResultCard({ e, myTier, router, onGestated }: { e: IncubatorDescription; myTier: MyTier | null; router: ReturnType<typeof useRouter>; onGestated: () => void }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  // ADR-0025: a gestação que acabou de começar foi a 1ª da conta (cortesia de 5 min)?
+  const [wasFirst, setWasFirst] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const hasVaga = !!myTier && myTier.birthQuota.used < myTier.birthQuota.limit;
   const hours = gestationHoursForAura(e.aura);
 
   async function onGestate() {
     setBusy(true); setMsg(null);
-    try { await gestateEntry(e.id); setDone(true); }
+    try {
+      const g = await gestateEntry(e.id);
+      setWasFirst(g.firstGestation === true); setDone(true);
+      onGestated(); // os outros cards do cruzamento precisam saber que a cortesia já foi usada
+    }
     catch (ex) { setMsg((ex as Error).message); }
     finally { setBusy(false); }
   }
@@ -42,7 +49,8 @@ function CrossResultCard({ e, myTier, router }: { e: IncubatorDescription; myTie
   if (done) {
     return (
       <div className="rounded-lg border border-ok/30 bg-bg-900/60 p-3 text-center">
-        <p className="text-[0.7rem] text-ok">Gestando — {hours}h até nascer.</p>
+        <p className="text-[0.7rem] text-ok">{wasFirst ? `Gestando — ${FIRST_GESTATION_MINUTES} minutos até nascer.` : `Gestando — ${hours}h até nascer.`}</p>
+        {wasFirst && <p className="mt-1 text-[0.6rem] text-ink-muted">{FIRST_GESTATION_DURING_TEXT}</p>}
         <button onClick={() => router.push("/app/incubadora")} className="mt-2 block w-full rounded border border-ok/40 py-1.5 text-center font-display text-[0.6rem] uppercase text-ok transition hover:bg-ok/10">
           Acompanhar na Incubadora
         </button>
@@ -59,7 +67,7 @@ function CrossResultCard({ e, myTier, router }: { e: IncubatorDescription; myTie
       <div className="text-center text-[0.7rem] text-ink">{phenoSummary(e.phenotype.loci)}</div>
       <FullPhenotype loci={e.phenotype.loci} />
       <GenotypeToggle genotype={e.genotype} />
-      <p className="mt-2 text-center text-[0.6rem] text-ink-muted">Gestação: {hours}h</p>
+      <p className="mt-2 text-center text-[0.6rem] text-ink-muted">{gestationPreviewLabel(e.aura, myTier?.firstGestationAvailable === true)}</p>
       <button disabled={busy} onClick={onGestate}
         className="mt-1 block w-full rounded border border-ok/40 bg-ok/5 py-1.5 text-center font-display text-[0.65rem] uppercase text-ok transition hover:bg-ok/10 disabled:opacity-60">
         {busy ? "gestando…" : `◈ Gestar — usa 1 ${hasVaga ? "vaga" : "crédito"}`}
@@ -272,7 +280,7 @@ function LabInner() {
           </h3>
           <p className="mb-3 text-[0.7rem] text-ink-muted">As descrições ficam na Incubadora, livres, até você gestar.</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {crossEntries.map((e) => <CrossResultCard key={e.id} e={e} myTier={myTier} router={router} />)}
+            {crossEntries.map((e) => <CrossResultCard key={e.id} e={e} myTier={myTier} router={router} onGestated={() => { getMyTier().then(setMyTier).catch(() => {}); }} />)}
           </div>
         </section>
       )}

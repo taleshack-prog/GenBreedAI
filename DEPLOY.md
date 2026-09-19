@@ -121,6 +121,11 @@ Use esta ordem sempre que o `apps/api/src/db/schema.ts` mudar:
    logs (e sem o aviso `[quota] … IGNORADA`, que indica variável proibida presente); (b) `GET /api/v1/billing/packs` responde
    200 com os 3 pacotes; (c) no site: login e a tela da incubadora carregam.
 
+> **Atenção — `users.first_gestation_at` e `users.first_gestation_entry_id` (ADR-0025, duas colunas na mesma migração):** o Drizzle enumera todas as colunas do schema em todo `select()`/`insert` de
+> `users`. Fazer o merge do código que a declara **antes** de aplicar a migração dessa coluna quebra **login e cadastro** em produção
+> (não só a gestação). A migração é aditiva (coluna nullable): aplique-a primeiro; o código antigo continua funcionando com ela.
+> Contas existentes ficam com `NULL` e ganham a cortesia de 5 minutos na próxima gestação (backfill = decisão do dono).
+
 Se o passo 2 ou 3 falhar: **não faça o merge**. Restaure pelo backup do passo 1 se o banco ficou inconsistente.
 
 ## 8) Banco novo ou vazio: schema + fundadores

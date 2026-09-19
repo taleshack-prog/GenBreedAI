@@ -28,6 +28,22 @@ export const users = pgTable("users", {
   tier: text("tier").notNull().default("FREE"),
   streak: integer("streak").notNull().default(0),
   xp: integer("xp").notNull().default(0),
+  /**
+   * ADR-0025 — instante da PRIMEIRA gestação da conta (cortesia de boas-vindas
+   * de 5 min). Gravado uma única vez (UPDATE ... WHERE first_gestation_at IS
+   * NULL) e nunca mais alterado; NULL = a cortesia ainda está disponível.
+   * Vive no usuário (não se deduz das entradas da incubadora: elas somem —
+   * nascida em 7 dias, ADR-0023; descartada é apagada).
+   */
+  firstGestationAt: timestamp("first_gestation_at", { withTimezone: true }),
+  /**
+   * ADR-0025 — id da entrada da incubadora que foi a 1ª gestação. Sem FK de
+   * propósito (a entrada some, nascida em 7 dias/descartada). Gravado junto de
+   * `first_gestation_at` no mesmo UPDATE. É ISTO que identifica "qual entrada
+   * foi a acelerada": comparar timestamps não serve (duas gestações no mesmo
+   * milissegundo ficariam ambas marcadas).
+   */
+  firstGestationEntryId: text("first_gestation_entry_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

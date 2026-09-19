@@ -29,6 +29,7 @@ import { IncubatorRepository, InMemoryIncubatorRepository } from "../src/incubat
 import { IncubatorService } from "../src/incubator/incubator.service";
 import { enforceNonGestatedCap, NON_GESTATED_CAP } from "../src/incubator/incubator-lifecycle";
 import { InMemorySpecimenRepository } from "../src/specimens/in-memory.repository";
+import { InMemoryUserRepository } from "../src/auth/user.repository";
 import { ImageService } from "../src/images/image.service";
 import { ImageJobRepository } from "../src/images/image-job.repository";
 import { ImageQuotaService } from "../src/economy/image-quota.service";
@@ -248,8 +249,9 @@ describe("Incubadora — instanciação direta (fallback de crédito, gestaçõe
     const clock = new SystemClock();
     const quota = new QuotaService(clock);
     const cross = new CrossService(specimenRepo, wallet);
-    const incubator = new IncubatorService(incubatorRepo, specimenRepo, images, quota, wallet, clock);
-    return { incubatorRepo, specimenRepo, images, wallet, quota, cross, incubator, clock };
+    const users = new InMemoryUserRepository();
+    const incubator = new IncubatorService(incubatorRepo, specimenRepo, images, quota, wallet, clock, users);
+    return { incubatorRepo, specimenRepo, images, wallet, quota, cross, incubator, clock, users };
   }
 
   const genotype: Genotype = { loci: { A: ["a", "a"] }, qtl: {} };

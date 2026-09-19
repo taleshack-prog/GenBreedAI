@@ -24,4 +24,11 @@ describe("gestationHoursForAura — tabela exata pedida (ADR-0021)", () => {
     expect(gestationEndFor(1, start).toISOString()).toBe("2026-01-01T12:00:00.000Z");
     expect(gestationEndFor(5, start).toISOString()).toBe("2026-01-03T00:00:00.000Z");
   });
+
+  it("gestationEndFor continua sendo SÓ a tabela — a cortesia da 1ª gestação (ADR-0025) é decidida por conta, em first-gestation.spec.ts", () => {
+    const start = new Date("2026-01-01T00:00:00Z");
+    for (const aura of [1, 2, 3, 4, 5]) {
+      expect(gestationEndFor(aura, start).getTime() - start.getTime()).toBe(GESTATION_HOURS_BY_AURA[aura]! * 3600000);
+    }
+  });
 });

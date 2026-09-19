@@ -15,7 +15,9 @@ const userRepositoryProvider = {
 };
 
 // Global: AuthService fica disponível ao AuthGuard em qualquer módulo.
+// `UserRepository` também é exportado (ADR-0025): a marca da primeira gestação
+// vive em `users`, e `IncubatorService`/`MeController` a leem/gravam.
 // `ReferralModule` (ADR-0024): o registro credita o marco "cadastrou" da indicação.
 @Global()
-@Module({ imports: [ReferralModule], controllers: [AuthController], providers: [AuthService, userRepositoryProvider], exports: [AuthService] })
+@Module({ imports: [ReferralModule], controllers: [AuthController], providers: [AuthService, userRepositoryProvider], exports: [AuthService, UserRepository] })
 export class AuthModule {}

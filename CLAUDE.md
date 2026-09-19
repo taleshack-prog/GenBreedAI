@@ -161,7 +161,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   | PHD | 3 | por dia civil (America/Sao_Paulo) | sim | 20 | completa (+ acesso ao Mercado) |
 
 - **Gestação por aura:** 1★ 12h · 2★ 18h · 3★ 24h · 4★ 36h · 5★ 48h (`gestation-time.ts`; regra de produto, vive na API,
-  nunca no motor).
+  nunca no motor). **Exceção (ADR-0025): a PRIMEIRA gestação de cada conta dura 5 minutos, qualquer aura** (cortesia de
+  boas-vindas, 1x por conta); a marca é `users.first_gestation_at` + `first_gestation_entry_id` (claim atômico, nunca muda — não se deduz das
+  entradas, que somem; a entrada acelerada se identifica pelo id, não por instante). Só o prazo muda: a 1ª gestação consome vaga/crédito normalmente. **A coluna exige migração AINDA NÃO gerada/aplicada:
+  aplicar antes do merge (DEPLOY.md §7) — código novo sem a coluna quebra login e cadastro.**
 - **Incubadora** (ADR-0020/0021/0023): guarda as descrições não gestadas sem prazo, com **teto de 200 não gestadas por
   jogador** — ao cruzar, as mais antigas não gestadas são descartadas até caber (`POST /cross` devolve `discardedForCap`);
   nunca descarta entrada em gestação nem nascida. Entrada **nascida some 7 dias corridos após o nascimento**; o espécime
@@ -195,7 +198,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 | Tabela | Papel |
 |---|---|
-| `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp |
+| `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp, `first_gestation_at`, `first_gestation_entry_id` (nullable; ADR-0025, migração pendente) |
 | `specimens` | Espécimes e fundadores. Genótipo/fenótipo em JSONB; `sex`, `fertility`, `haldane_status` (anuláveis, ADR-0015; legado fica NULL), `included_portrait` ("vale" de retrato da ADR-0019, hoje `false` nos nascimentos), `status` (ALIVE/FROZEN), `cache_key`, `created_at` (= instante do nascimento, base do ciclo de vida, ADR-0023) |
 | `incubator_entries` | Descrições geradas por cruzamento: `cross_id`, genótipo/fenótipo, `prob`, aura, `sex`, `gestation_started_at`, `gestation_ends_at`, `born_specimen_id`; `frozen` é órfão (sem escritor). Índice `(owner_id, created_at)` |
 | `cross_reservations` | Reservas do limite técnico de 60/h de `POST /cross` |
@@ -252,7 +255,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0025). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0026). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -270,6 +273,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0022** — Locus S canino: dominância completa → incompleta (S/s^p = branco residual).
 - **0023** — Ciclo de vida da incubadora: nascida some em 7 dias; teto de 200 não gestadas.
 - **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; D1/D7 pendentes.
+- **0025** — (produto, não genética) Primeira gestação de cada conta = 5 min (cortesia, `users.first_gestation_at`); complementa a 0021.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
@@ -288,6 +292,8 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Stripe em modo live e deploy automático da `main` (informados; sem registro no repo).
 - Procedimento de backup no Neon antes de migrar (informado; não documentado no repo).
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
+- ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
+  cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
 - Se PWA instalável é meta ativa (há manifest, não há service worker).
 - Metas de performance (bundle/TTI): sem medição no repo.
 - Preços dos planos (fonte: `apps/web/lib/plans.ts` e Stripe; a TDD §6 traz valores antigos).

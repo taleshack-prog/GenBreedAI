@@ -218,6 +218,8 @@ export interface IncubatorEntry extends IncubatorDescription {
   gestationEndsAt: string | null;
   /** Tempo total (h) previsto pela aura — sempre presente, mesmo antes de gestar. */
   gestationHours: number;
+  /** ADR-0025 — `true` quando a gestação desta entrada foi a 1ª da conta (cortesia de 5 min). `false` antes de gestar e nas demais. */
+  firstGestation: boolean;
   bornSpecimenId: string | null;
   createdAt: string;
   /** ADR-0023 — só entradas NASCIDAS têm valor: quando a entrada some da incubadora (7 dias corridos do nascimento). O espécime NUNCA é afetado, fica no Gene Bank pra sempre. */
@@ -379,7 +381,11 @@ export interface BirthQuotaInfo {
   /** null = tem vaga agora; senão, instante ISO em que volta a ter (ADR-0021). */
   nextAvailableAt: string | null;
 }
-export interface MyTier { tier: Tier; birthQuota: BirthQuotaInfo; monthlyExtraImages: number; biweeklyBonus: boolean; }
+export interface MyTier {
+  tier: Tier; birthQuota: BirthQuotaInfo; monthlyExtraImages: number; biweeklyBonus: boolean;
+  /** ADR-0025 — a 1ª gestação da conta (5 min) ainda não foi usada. Opcional: API antiga (deploy web antes da API) = ausente = não promete a cortesia. */
+  firstGestationAvailable?: boolean;
+}
 /**
  * Tier EFETIVO do usuário logado (GET /api/v1/me/tier) — TierService.resolve()
  * no backend (assinatura → concessão em granted_tiers → FREE). Única fonte de

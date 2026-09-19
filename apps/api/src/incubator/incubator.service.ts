@@ -27,7 +27,8 @@ import { QuotaService } from "../quota/quota.service";
 import { WalletService } from "../economy/wallet.service";
 import { tierPolicy } from "../common/tiers";
 import { Clock } from "../common/clock";
-import { gestationEndFor, gestationHoursForAura } from "./gestation-time";
+import { UserRepository } from "../auth/user.repository";
+import { gestationEndFor, gestationHoursForAura, firstGestationEndFor } from "./gestation-time";
 import { pruneExpiredBorn, BORN_RETENTION_DAYS } from "./incubator-lifecycle";
 
 export interface IncubatorEntryView {
@@ -46,8 +47,15 @@ export interface IncubatorEntryView {
    */
   state: IncubatorState;
   gestationEndsAt: string | null;
-  /** Tempo previsto pela aura (item 6) — sempre presente, independe do estado (útil pra UI mostrar "vai levar Xh" antes de gestar). */
+  /** Tempo previsto pela TABELA de aura (item 6) — sempre presente, independe do estado. A 1ª gestação da conta é a exceção de 5 min (`firstGestation`, ADR-0025). */
   gestationHours: number;
+  /**
+   * ADR-0025 — `true` quando a gestação desta entrada foi a PRIMEIRA da conta
+   * (cortesia de 5 min). Só faz sentido depois de gestar; `false` antes e nas
+   * demais. Deduzido comparando o id da entrada com `users.first_gestation_entry_id`
+   * (gravado no claim de `gestate()`), sem coluna na entrada.
+   */
+  firstGestation: boolean;
   bornSpecimenId: string | null;
   createdAt: string;
   /**
@@ -80,6 +88,7 @@ export class IncubatorService {
     private readonly quota: QuotaService,
     private readonly wallet: WalletService,
     private readonly clock: Clock,
+    private readonly users: UserRepository,
   ) {}
 
   /** `StoredIncubatorEntry` → objeto no formato `StoredSpecimen` que o pipeline de imagem (buildPrompt/generateForSpecimen) já entende. */
@@ -100,8 +109,14 @@ export class IncubatorService {
   }
 
   /** `bornAt` = `createdAt` do espécime já nascido (só quando resolvível) — usado pra `expiresAt` (ciclo de vida, ADR-0023). */
-  private toView(e: StoredIncubatorEntry, imageUrl: string | null, now: Date, bornAt: Date | null = null): IncubatorEntryView {
+  private toView(
+    e: StoredIncubatorEntry, imageUrl: string | null, now: Date, bornAt: Date | null = null,
+    firstGestationEntryId: string | null = null,
+  ): IncubatorEntryView {
     const state = incubatorStateOf(e, now);
+    // Por ID da entrada (gravado no claim), nunca por instante: dois pedidos no
+    // mesmo milissegundo teriam o mesmo `gestationStartedAt` e ambos "ganhariam".
+    const firstGestation = firstGestationEntryId !== null && e.id === firstGestationEntryId;
     const expiresAt = bornAt ? new Date(bornAt.getTime() + BORN_RETENTION_DAYS * 24 * 60 * 60 * 1000) : null;
     return {
       id: e.id, crossId: e.crossId, sireId: e.sireId, damId: e.damId, method: e.method,
@@ -109,7 +124,7 @@ export class IncubatorService {
       prob: e.prob, fPedigree: e.fPedigree, fixationIndex: e.fixationIndex, aura: e.aura, generation: e.generation,
       sex: e.sex, fertility: e.fertility, haldaneStatus: e.haldaneStatus,
       imageUrl, state, gestationEndsAt: e.gestationEndsAt ? e.gestationEndsAt.toISOString() : null,
-      gestationHours: gestationHoursForAura(e.aura),
+      gestationHours: gestationHoursForAura(e.aura), firstGestation,
       bornSpecimenId: e.bornSpecimenId, createdAt: e.createdAt.toISOString(),
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
     };
@@ -140,6 +155,7 @@ export class IncubatorService {
       this.repo.listByOwner(ownerId, { limit, cursor: opts.cursor, state: opts.state, now }),
       this.repo.countByState(ownerId, now),
     ]);
+    const firstGestationEntryId = (await this.users.getFirstGestation(ownerId))?.entryId ?? null;
     const entries: IncubatorEntryView[] = [];
     for (const e of page.entries) {
       let imageUrl: string | null = null;
@@ -153,7 +169,7 @@ export class IncubatorService {
           if (st) imageUrl = publicUrl(cacheKey, st.version);
         }
       }
-      entries.push(this.toView(e, imageUrl, now, bornAt));
+      entries.push(this.toView(e, imageUrl, now, bornAt, firstGestationEntryId));
     }
     return { entries, nextCursor: page.nextCursor, counts };
   }
@@ -165,7 +181,8 @@ export class IncubatorService {
    * extra; sem nenhum dos dois, 429 com `nextAvailableAt`). Nenhuma imagem é
    * gerada aqui — só marca
    * `gestationStartedAt`/`gestationEndsAt` (prazo pela aura, `gestation-
-   * time.ts`). Entrada já em gestação ou já nascida → 400.
+   * time.ts`; a PRIMEIRA gestação da conta dura 5 min, qualquer aura —
+   * ADR-0025). Entrada já em gestação ou já nascida → 400.
    */
   async gestate(id: string, ownerId: string, tier: Tier): Promise<IncubatorEntryView> {
     const entry = await this.getOwned(id, ownerId);
@@ -196,12 +213,20 @@ export class IncubatorService {
       else if (usedCredit) await this.wallet.creditImageCredits(ownerId, 1);
     };
 
+    // ADR-0025: a marca da 1ª gestação só é reivindicada DEPOIS de a vaga/crédito
+    // estar garantida (429 nunca queima a cortesia) e é desfeita se a gestação
+    // não chegar a acontecer (erro ou corrida na mesma entrada).
+    const startedAt = this.clock.now();
+    let firstGestation = false;
+    const releaseFirst = async () => { if (firstGestation) await this.users.releaseFirstGestation(ownerId, id).catch(() => {}); };
+
     let claimed: StoredIncubatorEntry | null;
     try {
-      const startedAt = this.clock.now();
-      const endsAt = gestationEndFor(entry.aura, startedAt);
+      firstGestation = await this.users.claimFirstGestation(ownerId, startedAt, id);
+      const endsAt = firstGestation ? firstGestationEndFor(startedAt) : gestationEndFor(entry.aura, startedAt);
       claimed = await this.repo.claimGestation(id, startedAt, endsAt);
     } catch (e) {
+      await releaseFirst();
       await refund();
       throw e;
     }
@@ -209,11 +234,12 @@ export class IncubatorService {
       // Corrida: outro pedido reivindicou a gestação desta MESMA entrada
       // entre o getOwned() e agora — estorna o que acabou de cobrar (nunca
       // cobra 2x pela mesma vaga) e responde 400 (item 3).
+      await releaseFirst();
       await refund();
       throw new BadRequestException("Esta descrição já está gestando.");
     }
     if (reservationId) await this.quota.confirm("birth", reservationId);
-    return this.toView(claimed, null, this.clock.now());
+    return this.toView(claimed, null, this.clock.now(), null, firstGestation ? id : null);
   }
 
   /**
