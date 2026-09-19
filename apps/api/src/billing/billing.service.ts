@@ -93,9 +93,15 @@ export class BillingService {
     const pack = findPack(intent.packId);
     if (!pack) throw new BadRequestException("Pacote inválido.");
     const won = await this.intents.claimCredit({ id: intentId, userId, kind: "PACK", packId: intent.packId, amountBRL: intent.amountBRL });
-    if (!won) return { status: "PAID", creditsAdded: 0, wallet: await this.wallet.get(userId) };
-    const wallet = await this.wallet.creditImageCredits(userId, pack.credits);
-    return { status: "PAID", creditsAdded: pack.credits, wallet };
+    let creditsAdded = 0;
+    if (won) {
+      await this.wallet.creditImageCredits(userId, pack.credits);
+      creditsAdded = pack.credits;
+    }
+    // Indicação (ADR-0024, rev. 2): a compra de pacote do INDICADO conta pro trio do indicador. Roda também
+    // quando `!won` (o webhook já creditou) — é idempotente por pagamento e recupera um registro que falhou.
+    await this.referral.recordPackPurchase(userId, pack.id, intentId);
+    return { status: "PAID", creditsAdded, wallet: await this.wallet.get(userId) };
   }
 
   /**
@@ -220,6 +226,11 @@ export class BillingService {
     const amountBRL = (session.amount_total ?? 0) / 100;
     const won = await this.intents.claimCredit({ id: session.id, userId, kind: "PACK", packId, amountBRL });
     if (won) await this.wallet.creditImageCredits(userId, pack.credits);
+    // Indicação (ADR-0024, rev. 2): se o COMPRADOR foi indicado, a compra entra no balde do tamanho do pacote e,
+    // a cada 3 iguais do mesmo indicado, o indicador é creditado. Idempotente POR PAGAMENTO (session.id) e roda mesmo
+    // quando `!won`: num reenvio do webhook (Stripe) ele recupera um registro que tenha falhado sem contar duas vezes.
+    // Se falhar, o erro sobe → webhook 500 → o Stripe reenvia. Comprador sem indicador: no-op.
+    await this.referral.recordPackPurchase(userId, pack.id, session.id);
   }
 
   /** Cria a linha em `subscriptions` a partir do checkout.session.completed (mode=subscription). */

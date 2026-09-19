@@ -5,6 +5,7 @@ import { listSpecimens, getWallet, claimDaily, claimBiweekly, getImageQuota, get
 import { Screen } from "../../../components/Screen";
 import { NotifyButton } from "../../../components/NotifyButton";
 import { InstallApp } from "../../../components/InstallApp";
+import { REFERRAL_INTRO, REFERRAL_SUBSCRIPTION_RULE, referralPackRule, referralPackLine } from "../../../lib/referral-packs";
 import { getUser, clearSession } from "../../../lib/auth";
 import { normalizeBiologicalSpecies } from "@genbreedai/shared";
 import { birthUsageLabel, nextAvailableLabel } from "../../../lib/quota-format";
@@ -191,7 +192,9 @@ export default function ProfilePage() {
       {ref && (
         <div className="mb-5 rounded-card border border-purple/30 bg-bg-800 p-4">
           <div className="mb-1 font-display text-xs font-bold uppercase text-purple">Indique e ganhe créditos</div>
-          <p className="mb-3 text-[0.7rem] text-ink-muted">Compartilhe seu link. O crédito vem quando quem entrou por ele <b className="text-ink">assina um plano</b>: Junior +15 créditos · Senior +30 créditos · PhD 1 mês grátis do seu plano (quem é Free ganha 1 mês de Junior). Só se cadastrar não rende nada. Retorno em D1 e D7: em breve.</p>
+          <p className="mb-2 text-[0.7rem] text-ink-muted">{REFERRAL_INTRO}</p>
+          <p className="mb-1 text-[0.7rem] text-ink-muted">{REFERRAL_SUBSCRIPTION_RULE}</p>
+          {ref.packs && ref.packs.length > 0 && <p className="mb-3 text-[0.7rem] text-ink-muted">{referralPackRule(ref.packs, ref.trioSize)}</p>}
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-white/10 bg-bg-900 p-2">
             <span className="flex-1 truncate font-mono text-xs text-ink">{referralUrl(ref.code)}</span>
             <button onClick={() => shareLink("copy")} className="rounded border border-cyan/40 px-2 py-1 text-[0.65rem] uppercase text-cyan">{copied ? "copiado!" : "copiar"}</button>
@@ -201,16 +204,31 @@ export default function ProfilePage() {
             <button onClick={() => shareLink("email")} className="rounded-lg border border-cyan/40 py-2 font-display text-xs uppercase text-cyan">Email</button>
             <button onClick={() => shareLink("sms")} className="rounded-lg border border-cyan/40 py-2 font-display text-xs uppercase text-cyan">SMS</button>
           </div>
-          <div className="grid grid-cols-5 gap-1 text-center text-[0.6rem]">
-            {/* "Cadastrou" é só informativo (vínculo gravado, sem crédito — ADR-0024); só "Assinou" paga.
-                D1/D7 ainda não são creditados (dependem de tarefa agendada): "em breve" em vez de um 0 permanente. */}
-            {[["Cliques", ref.clicks], ["Cadastrou", ref.installs], ["D1", "em breve"], ["D7", "em breve"], ["Assinou", ref.conversions]].map(([l, v]) => (
+          <div className="grid grid-cols-3 gap-1 text-center text-[0.6rem]">
+            {/* "Cadastrou" é só informativo (vínculo gravado, sem crédito — ADR-0024); só assinatura e compra de pacotes pagam.
+                D1/D7 foram cancelados (rev. 2): indicado que não gasta nunca gera crédito. */}
+            {[["Cliques", ref.clicks], ["Cadastrou", ref.installs], ["Assinou", ref.conversions]].map(([l, v]) => (
               <div key={l as string} className="rounded bg-bg-900/60 py-1.5">
-                <div className={typeof v === "number" ? "font-mono text-sm text-ink" : "font-mono text-[0.6rem] leading-5 text-ink-muted"}>{v}</div>
+                <div className="font-mono text-sm text-ink">{v}</div>
                 <div className="uppercase text-ink-muted">{l as string}</div>
               </div>
             ))}
           </div>
+          {ref.packs && ref.packs.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <div className="font-display text-[0.65rem] font-bold uppercase text-purple">Compras de pacotes dos seus indicados</div>
+              {ref.packs.map((p) => {
+                const line = referralPackLine(p, ref.trioSize);
+                return (
+                  <div key={p.packId} className="rounded bg-bg-900/60 px-2.5 py-1.5 text-[0.65rem]">
+                    <div className="font-display font-bold uppercase text-ink">{line.title} <span className="text-ok">· trio = +{p.reward} créditos</span></div>
+                    <div className="text-ink-muted">{line.stats}</div>
+                    <div className="text-ink-muted">{line.next}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="mt-2 text-center text-[0.7rem] text-purple">Créditos ganhos: {ref.creditsEarned}</div>
         </div>
       )}

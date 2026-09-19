@@ -48,6 +48,10 @@ async function main() {
   await db.execute(sql`ALTER TABLE wallets ADD COLUMN IF NOT EXISTS image_credits integer NOT NULL DEFAULT 0`);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS referral_links (owner_id text PRIMARY KEY, code text NOT NULL UNIQUE, clicks integer NOT NULL DEFAULT 0, installs integer NOT NULL DEFAULT 0, d1 integer NOT NULL DEFAULT 0, d7 integer NOT NULL DEFAULT 0, conversions integer NOT NULL DEFAULT 0, credits_earned integer NOT NULL DEFAULT 0)`);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS referral_referred (code text NOT NULL, referred_id text NOT NULL, install_credited boolean NOT NULL DEFAULT false, d1_credited boolean NOT NULL DEFAULT false, d7_credited boolean NOT NULL DEFAULT false, convert_credited boolean NOT NULL DEFAULT false, first_seen text, PRIMARY KEY (code, referred_id))`);
+  // ADR-0024 (rev. 2): compras de pacote por indicado + trios pagos (equivalente à migração, só pro reset LOCAL).
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS referral_pack_purchases (payment_id text PRIMARY KEY, referred_id text NOT NULL, pack_id text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS referral_pack_purchases_referred_pack_idx ON referral_pack_purchases (referred_id, pack_id)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS referral_pack_trios (referred_id text NOT NULL, pack_id text NOT NULL, trios_paid integer NOT NULL DEFAULT 0, PRIMARY KEY (referred_id, pack_id))`);
   await db.delete(crosses);
   await db.delete(specimens);
   for (const f of founderSeeds()) {

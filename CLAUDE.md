@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0028) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0029) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -127,9 +127,13 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 2. **Moderação de imagem própria** não existe (`moderate()` aprova sempre; regra 5 da seção 2).
 3. **`pnpm lint` é no-op** (há `eslint.config.js` na raiz, mas nenhum script o executa).
 4. **TDD §6/§7 desatualizadas** frente ao código (tiers, cotas, bônus, chat descrito mas inexistente).
-5. **Referral — D1 e D7 NÃO implementados** (ADR-0024): dependem de tarefa agendada (não há cron/fila) ou de avaliação preguiçosa +
-   definição de "retornou" (login? bônus diário? nascimento?). As colunas `d1`/`d7` existem sem escritor; a tela mostra "em breve".
-   O vínculo no cadastro e a conversão (assinatura) JÁ funcionam, server-side; só a conversão paga.
+5. **Referral — D1/D7 CANCELADOS** (ADR-0024, rev. 2, 2026-09-19): indicação só recompensa quando o indicado GASTA; indicado no Free nunca
+   gera crédito. As colunas `d1`/`d7`/`d1_credited`/`d7_credited` seguem no schema como `@deprecated` (sem escritor nem leitor) até uma
+   migração futura de DROP — dropar junto do deploy quebraria o código antigo na janela migrar→deploy. **Pendência:** a migração das 2 tabelas
+   novas da compra de pacotes (`referral_pack_purchases`, `referral_pack_trios`) ainda NÃO foi gerada (`db:generate`) — aplicar antes do merge.
+   **Carteira (ADR-0029, 2026-09-19): corrigida.** Todo ajuste de saldo/cota virou `UPDATE` atômico (`addImageCredits`, `takeImageCredit`,
+   `addResources`, `spendResources`, `claimDaily`, `claimBiweekly`, `tryConsume`). Achado por leitura de código, não reproduzido: o `save` antigo de
+   `charge`/`credit`/`claimDaily` regravava a carteira inteira e **zerava os créditos comprados** — conferir a produção (jogadores que perderam créditos).
 6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
    no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
    definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
@@ -152,6 +156,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   aparece em execução ("is not a function"). Ao adicionar método a uma porta (`*Repository`), implemente-o nos DOIS
   adapters (in-memory e Drizzle) e nos fakes de teste que o exercitem.
 - Mudança de schema (`apps/api/src/db/schema.ts`) exige migração gerada (`db:generate`) e registro; nunca aplicada pelo deploy.
+- **Saldos e contadores (ADR-0029): todo ajuste é UM `UPDATE ... SET x = x ± n [WHERE <condição>] RETURNING` (ou `INSERT ... ON CONFLICT DO UPDATE`) —
+  NUNCA leitura seguida de escrita** (`get` + `save`). A condição ("tem saldo?", "já coletou?", "cabe na cota?") vai no `WHERE`; cada operação só toca as
+  colunas que muda (proibido regravar a linha/carteira inteira); o adapter em memória faz o método inteiro sem `await` entre ler e gravar. Vale para
+  carteira, cotas, bônus, claims e contadores novos, nos DOIS adapters. Escreva o teste de concorrência (`Promise.all`) junto.
 - Nenhum merge sem `pnpm test:golden` e `pnpm typecheck` verdes (e `pnpm test`).
 
 ## 8. Regras de produto em vigor (conferidas em `tiers.ts`, `tier-access.ts`, ADRs 0016/0019–0023)
@@ -191,7 +199,10 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   usuário novo com código válido só **grava o vínculo** indicador→indicado (1x por indicado; auto-indicação por id/e-mail/alias não vincula)
   e **não credita nada** (sem verificação de e-mail seria farmável). **Só a assinatura paga:** assinatura do indicado ativa no Stripe
   (webhook): JUNIOR +15 créditos · SENIOR +30 · PHD = 1 mês grátis do plano do indicador em `granted_tiers` (FREE ganha 1 mês de JUNIOR),
-  1x por indicado. O indicado não ganha nada. D1/D7: pendentes (seção 6).
+  1x por indicado. **Também a COMPRA DE PACOTES de créditos (rev. 2, ADR-0024):** a cada 3 pacotes IGUAIS comprados pelo MESMO indicado, o indicador
+  ganha 2 (pacote de 10) · 5 (de 30) · 10 (de 60) créditos — baldes independentes por tamanho, o resto acumula, sem limite; compras de indicados
+  diferentes não se somam; idempotente por pagamento (`ReferralService.recordPackPurchase`, chamado pelo webhook). Só recompensa quando o indicado
+  GASTA: indicado no Free nunca gera crédito (D1/D7 cancelados). O indicado não ganha nada.
 - **Bônus quinzenal:** +1 crédito, janela móvel de 15 dias, a partir do JUNIOR. A **recompensa diária de recursos**
   (catalisadores/biomassa) continua diária, por tier (`wallet.service.ts`).
 - **Pool de espécies** (ADR-0016; espécie fora do pool responde 404, "escondida, sem cadeado"):
@@ -222,7 +233,8 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 | `birth_reservations` | Reservas das vagas de nascimento (`birthQuota`). Ambas: `RESERVED`/`CONFIRMED`; `RESERVED` com mais de 10 min não conta |
 | `wallets` | catalisadores, biomassa, `last_daily`, `last_biweekly`, `image_credits` |
 | `image_quota` | Uso mensal de retratos extras por usuário (`owner_id`, `ym`, `used`) |
-| `referral_links`, `referral_referred` | Indicação e marcos já creditados (anti-duplo-crédito) |
+| `referral_links`, `referral_referred` | Indicação e marcos já creditados (anti-duplo-crédito); colunas `d1`/`d7` `@deprecated` (ADR-0024 rev. 2) |
+| `referral_pack_purchases`, `referral_pack_trios` | Compras de pacote de créditos por INDICADO (1 linha por pagamento, `payment_id` PK) e trios já pagos por (`referred_id`, `pack_id`) — ADR-0024 rev. 2; migração pendente |
 | `payment_intents` | Compras de pacote; PK = id do gateway → crédito idempotente sob retry de webhook |
 | `subscriptions` | Assinaturas Stripe (tier, intervalo, status, fim do período) |
 | `granted_tiers` | Tiers concedidos fora do Stripe, com expiração |
@@ -279,7 +291,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0029). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0030). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -296,11 +308,12 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0021** — Gestação: o limite fica no nascimento; tempo por aura; bônus quinzenal.
 - **0022** — Locus S canino: dominância completa → incompleta (S/s^p = branco residual).
 - **0023** — Ciclo de vida da incubadora: nascida some em 7 dias; teto de 200 não gestadas.
-- **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; D1/D7 pendentes.
+- **0024** — (produto, não genética) Indicação server-side: cadastro só vincula (sem crédito), a assinatura do indicado paga; **rev. 2 (2026-09-19): só GASTAR recompensa — também a compra de pacotes (trios por indicado e por tamanho: 3×10→2, 3×30→5, 3×60→10); D1/D7 cancelados.**
 - **0025** — (produto, não genética) Primeira gestação de cada conta = 5 min (cortesia, `users.first_gestation_at`); complementa a 0021.
 - **0026** — (produto/web, não genética) PWA instalável: manifest + service worker mínimo sem cache offline; instruções na landing.
 - **0027** — (produto/imagem, não genética) Miniatura 600×600 JPEG do retrato para a og:image do WhatsApp; melhor-esforço; backfill por script.
 - **0028** — (produto/infra, não genética) Web Push: aviso "Gestação concluída" via cron externo do Railway (`push:dispatch`); assinaturas por dispositivo; desligado sem VAPID; limitação do iPhone.
+- **0029** — (economia/infra, não genética) Saldos e contadores: todo ajuste é `UPDATE` atômico, nunca leitura seguida de escrita; carteira e cota mensal de retratos corrigidas.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

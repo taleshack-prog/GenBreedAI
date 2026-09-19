@@ -1,8 +1,10 @@
 /**
  * Indicação (ADR-0024) — SERVER-SIDE: "cadastrou" (linkReferred) só GRAVA o
  * vínculo e NÃO credita (sem verificação de e-mail, cadastro é farmável);
- * "converteu" (recordConversion) é o ÚNICO que paga. D1/D7 não existem ainda
- * (precisam de tarefa agendada). Rota pública de marco não existe (removida em 14/09).
+ * "converteu" (recordConversion, assinatura) e a compra de pacotes de créditos
+ * (recordPackPurchase — ver referral-packs.spec.ts) são os ÚNICOS que pagam: só
+ * recompensa quando o indicado GASTA. D1/D7 foram CANCELADOS (ADR-0024, rev. 2).
+ * Rota pública de marco não existe (removida em 14/09).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ReferralService, CONVERT_CREDITS, REFERRAL_GRANT_DAYS } from "../src/referral/referral.service";

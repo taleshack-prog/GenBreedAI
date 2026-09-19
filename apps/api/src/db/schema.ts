@@ -291,7 +291,9 @@ export const referralLinks = pgTable("referral_links", {
   code: text("code").notNull().unique(),
   clicks: integer("clicks").notNull().default(0),
   installs: integer("installs").notNull().default(0),
+  /** @deprecated ADR-0024 (rev. 2): marcos D1/D7 CANCELADOS — indicado que não gasta nunca gera crédito. Sem uso; coluna mantida só até uma migração futura de DROP (dropar junto com o deploy quebraria o código antigo na janela migrar→deploy). */
   d1: integer("d1").notNull().default(0),
+  /** @deprecated ver `d1`. */
   d7: integer("d7").notNull().default(0),
   conversions: integer("conversions").notNull().default(0),
   creditsEarned: integer("credits_earned").notNull().default(0),
@@ -302,11 +304,42 @@ export const referralReferred = pgTable("referral_referred", {
   code: text("code").notNull(),
   referredId: text("referred_id").notNull(),
   installCredited: boolean("install_credited").notNull().default(false),
+  /** @deprecated ADR-0024 (rev. 2): D1/D7 cancelados; sem uso (ver `referral_links.d1`). */
   d1Credited: boolean("d1_credited").notNull().default(false),
+  /** @deprecated ver `d1Credited`. */
   d7Credited: boolean("d7_credited").notNull().default(false),
   convertCredited: boolean("convert_credited").notNull().default(false),
   firstSeen: text("first_seen"),
 }, (t) => ({ pk: primaryKey({ columns: [t.code, t.referredId] }) }));
+
+/**
+ * ADR-0024 (rev. 2) — compras de PACOTE DE CRÉDITOS feitas por INDICADOS. Uma linha por
+ * PAGAMENTO: `payment_id` (id da sessão Stripe, `cs_...`) é a PK, então registrar a mesma
+ * compra duas vezes (webhook reenviado, `confirm` + webhook) é `ON CONFLICT DO NOTHING` —
+ * idempotência por pagamento garantida pelo banco. Quantos pacotes de cada tamanho um
+ * indicado comprou = a CONTAGEM destas linhas por (`referred_id`, `pack_id`) — derivada, não
+ * um contador separado (não tem como divergir). `pack_id`: "pack-10" | "pack-30" | "pack-60".
+ */
+export const referralPackPurchases = pgTable("referral_pack_purchases", {
+  paymentId: text("payment_id").primaryKey(),
+  referredId: text("referred_id").notNull(),
+  packId: text("pack_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  referredPackIdx: index("referral_pack_purchases_referred_pack_idx").on(t.referredId, t.packId),
+}));
+
+/**
+ * ADR-0024 (rev. 2) — quantos TRIOS de pacotes (3 iguais do MESMO indicado) já foram PAGOS ao
+ * indicador, por (`referred_id`, `pack_id`) — os baldes por tamanho são independentes. Cada
+ * trio é reivindicado com `UPDATE ... SET trios_paid = trios_paid + 1 WHERE (trios_paid + 1) * 3
+ * <= <compras> RETURNING`: nunca se paga o mesmo trio duas vezes, mesmo sob concorrência.
+ */
+export const referralPackTrios = pgTable("referral_pack_trios", {
+  referredId: text("referred_id").notNull(),
+  packId: text("pack_id").notNull(),
+  triosPaid: integer("trios_paid").notNull().default(0),
+}, (t) => ({ pk: primaryKey({ columns: [t.referredId, t.packId] }) }));
 
 /**
  * Intents de pagamento (Stripe — integração ainda inexistente). PK = id do

@@ -9,7 +9,7 @@
  * vendidos em apps/web/lib/plans.ts) — não duplicar a tabela aqui.
  */
 import { Injectable } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { Tier } from "@genbreedai/shared";
 import { imageQuota } from "../db/schema";
 import { createDb } from "../db/client";
@@ -57,19 +57,32 @@ export class ImageQuotaService {
     if (isDevFlagEnabled("IMAGE_QUOTA_UNLIMITED")) return 9999; // DEV — em produção é ignorada
     return Math.max(0, monthlyImageLimit(tier) - (await this.used(owner)));
   }
-  /** Tenta consumir 1 imagem da cota; retorna false se esgotou (precisa crédito). */
+  /**
+   * Tenta consumir 1 imagem da cota; retorna false se esgotou (precisa crédito). ATÔMICO (ADR-0029): o limite é
+   * a condição do próprio `INSERT ... ON CONFLICT DO UPDATE ... WHERE used < limit RETURNING` — pedidos
+   * simultâneos nunca passam do limite mensal (antes: ler o uso, comparar e só depois incrementar deixava dois
+   * pedidos lerem o mesmo valor e ambos gerarem a imagem paga). Limite 0 nem chega a inserir.
+   */
   async tryConsume(owner: string, tier: string): Promise<boolean> {
     if (isDevFlagEnabled("IMAGE_QUOTA_UNLIMITED")) return true; // modo DEV: cota ilimitada — em produção é ignorada
     const limit = monthlyImageLimit(tier);
+    if (limit <= 0) return false;
     const m = ym();
-    const cur = await this.used(owner);
-    if (cur >= limit) return false;
     if (this.db) {
-      await this.db.insert(imageQuota).values({ ownerId: owner, ym: m, used: 1 })
-        .onConflictDoUpdate({ target: [imageQuota.ownerId, imageQuota.ym], set: { used: sql`${imageQuota.used} + 1` } });
-    } else {
-      this.mem.set(`${owner}|${m}`, cur + 1);
+      const rows = await this.db.insert(imageQuota).values({ ownerId: owner, ym: m, used: 1 })
+        .onConflictDoUpdate({
+          target: [imageQuota.ownerId, imageQuota.ym],
+          set: { used: sql`${imageQuota.used} + 1` },
+          setWhere: lt(imageQuota.used, limit),
+        })
+        .returning({ used: imageQuota.used });
+      return rows.length > 0;
     }
+    // Sem `await` entre ler e gravar: indivisível (o equivalente em memória do UPSERT condicional).
+    const key = `${owner}|${m}`;
+    const cur = this.mem.get(key) ?? 0;
+    if (cur >= limit) return false;
+    this.mem.set(key, cur + 1);
     return true;
   }
 }

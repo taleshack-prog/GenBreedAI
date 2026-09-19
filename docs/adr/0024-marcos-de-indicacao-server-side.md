@@ -1,6 +1,85 @@
-# ADR-0024 — Indicação (referral) no servidor: o cadastro vincula, só a assinatura paga
+# ADR-0024 — Indicação (referral) no servidor: o cadastro vincula; só GASTAR paga (assinatura ou pacotes de créditos)
 
-- **Status:** aceito · **Data:** 2026-09-18 (revisado no mesmo dia — ver "Correção")
+- **Status:** aceito · **Data:** 2026-09-18 (revisado no mesmo dia — ver "Correção"; **revisão 2 em 2026-09-19** — ver
+  "Revisão 2: só recompensa quando o indicado GASTA")
+
+## Revisão 2 (2026-09-19): só recompensa quando o indicado GASTA
+
+**Decisão do produto.** Indicação só recompensa quando o indicado gasta dinheiro. Duas mudanças:
+
+1. **D1 e D7 CANCELADOS** (antes "pendentes", seção 5 abaixo — mantida como histórico). Indicado que
+   fica no Free nunca gera crédito: retorno/login/nascimento de quem não paga não rende nada.
+2. **Compra de pacotes de créditos passa a contar**, além da assinatura (que segue igual: JUNIOR 15,
+   SENIOR 30, PHD 1 mês do plano do indicador). Regra, com **acumulação por indicado e por tamanho de pacote**:
+
+   | Pacotes comprados pelo MESMO indicado | Recompensa ao indicador |
+   |---|---|
+   | a cada 3 pacotes de **10** créditos | **2** créditos |
+   | a cada 3 pacotes de **30** créditos | **5** créditos |
+   | a cada 3 pacotes de **60** créditos | **10** créditos |
+
+   Os baldes são **independentes por tamanho** (2 de 10 + 2 de 30 não fecham nada); o resto (1 ou 2 pacotes)
+   fica acumulado para o próximo trio; **sem limite de vezes** (6 pacotes de 10 = 2 trios = 4 créditos).
+   **Compras de indicados diferentes nunca se somam** (2 do Bob + 2 da Carol não fecham trio).
+
+**Por quê.**
+- **Free não gera receita.** Recompensar cadastro/retorno de quem não paga é custo (1 crédito = 1
+  nascimento extra = imagem de IA paga) sem contrapartida. Só gasto real justifica crédito.
+- **A acumulação por indicado elimina o farmador.** O trio precisa ser do MESMO indicado e de pacotes IGUAIS: quem quiser
+  "farmar" tem que comprar 3 pacotes com dinheiro real numa conta (3 × R$ 5,90 = R$ 17,70 para receber 2 créditos —
+  cerca de 7% do gasto; nos pacotes maiores, ~5-6%), e espalhar a compra por várias contas não adianta porque os
+  pacotes de contas diferentes não se somam. O custo do golpe é sempre maior que a recompensa.
+
+**Como é feito** (`ReferralService.recordPackPurchase`, chamado pelo `BillingService` no webhook do Stripe quando
+o pagamento de um pacote é confirmado — e no `confirm` de dev, com o mesmo id de pagamento):
+- O comprador e o pacote vêm de `client_reference_id` e `metadata.packId` (nunca do e-mail); se o comprador não tem
+  indicador (não há linha em `referral_referred`), é no-op — nada quebra.
+- **Estado no banco** (2 tabelas novas — migração **não gerada** nesta rodada): `referral_pack_purchases` (1 linha por
+  PAGAMENTO, `payment_id` = PK) e `referral_pack_trios` (`(referred_id, pack_id)` → `trios_paid`). Quantos pacotes de cada
+  tamanho um indicado comprou é a CONTAGEM das linhas de compras — derivada, sem contador separado que possa divergir.
+- **Idempotência por pagamento:** registrar a mesma compra de novo (webhook reenviado, ou `confirm` + webhook) é
+  `INSERT … ON CONFLICT DO NOTHING`. A etapa de pagar trios roda SEMPRE, então uma falha no meio (compra registrada, crédito
+  não) se recupera no retry do Stripe, sem pagar em dobro e sem perder o trio.
+- **Cada trio é reivindicado atomicamente:** `UPDATE referral_pack_trios SET trios_paid = trios_paid + 1 WHERE (trios_paid + 1) * 3
+  <= (compras) RETURNING` — duas execuções simultâneas nunca pagam o mesmo trio. Se o crédito falha, o trio é devolvido
+  (`trios_paid - 1`), o erro sobe e o webhook responde 500 (o Stripe reenvia).
+- `GET /referral` devolve, por tamanho de pacote, `purchased`, `triosPaid`, `reward`, o progresso do indicado mais adiantado e
+  quantos pacotes faltam; a tela do Perfil mostra isso e o texto "só assinatura e compra de créditos recompensam".
+  **D1/D7 saíram** da resposta, do tipo da web, dos contadores da tela e dos textos "em breve".
+
+**Consequências da revisão.**
+- **Migração necessária e ainda não gerada:** `referral_pack_purchases` (+ índice `(referred_id, pack_id)`) e
+  `referral_pack_trios`. Só aditiva. **Aplicar antes do merge** (DEPLOY.md §7): código novo sem as tabelas quebra o `GET
+  /referral` de quem tem indicados e faz o webhook de compra de pacote de um INDICADO responder 500 (o comprador já teria sido
+  creditado; o Stripe reenvia e só se recupera depois da migração) — por isso a ordem migrar → merge é obrigatória. Comprador
+  sem indicador não toca nas tabelas novas.
+- **Colunas D1/D7 mantidas no schema** (`referral_links.d1/d7`, `referral_referred.d1_credited/d7_credited`), marcadas
+  `@deprecated`, sem escritor nem leitor. NÃO foram removidas do `schema.ts` de propósito: o `db:generate` emitiria `DROP
+  COLUMN`, e como a migração roda ANTES do deploy, o código antigo em produção (que seleciona essas colunas) quebraria na janela
+  migrar → deploy. O DROP fica para uma migração futura, depois deste deploy.
+- **Crédito concorrente na carteira — achado e corrigido (2026-09-19).** O teste de compras simultâneas
+  esperava 4 créditos e recebeu 2. A contagem dos trios estava certa (2 trios reivindicados); o que se perdia era o crédito:
+  `WalletService.creditImageCredits` fazia `get` + `save` (ler, somar, gravar), então dois créditos ao mesmo tempo na
+  MESMA carteira liam o mesmo saldo e o segundo gravava por cima. Vale em produção (webhooks do Stripe chegam em paralelo) e
+  afetava também o pacote do próprio comprador. Corrigido com `WalletRepository.addImageCredits`, atômico nos dois adapters
+  (in-memory sem `await` entre ler e gravar; Drizzle: `INSERT … ON CONFLICT (owner_id) DO UPDATE SET image_credits = image_credits
+  + n RETURNING`), e `creditImageCredits` delega a ele. **Achado de `consumeImageCredit` (mesmo padrão): corrigido em seguida
+  — ver ADR-0029**, que também varreu e corrigiu o resto da carteira e a cota mensal de retratos.
+- **Trio pendente nunca se perde:** cada compra do indicado paga TODOS os trios devidos dele — do tamanho comprado e dos outros
+  tamanhos —, em laço, cada um reivindicado atomicamente. Se o crédito falha (o trio é devolvido) ou uma compra concorrente não
+  enxergou o total, a PRÓXIMA compra do mesmo indicado (de qualquer tamanho) paga o que ficou para trás. Compra de outro
+  indicado não paga a pendência dele. Limite: um processo que morra entre reivindicar o trio e creditar o indicador deixaria o
+  trio marcado como pago sem o crédito (janela mínima; não há transação entre o `wallets` e as tabelas de indicação).
+- Compras feitas ANTES do deploy não contam (não há histórico registrado); só valem as posteriores.
+- **Reembolso/estorno de pacote não desfaz o trio** (o sistema não trata eventos de reembolso do Stripe hoje). Risco baixo (o
+  trio custa 3 compras reais), a monitorar.
+- **Alternativas rejeitadas na revisão:** somar pacotes de todos os indicados de um indicador (permitiria dividir a compra e não
+  prende o custo a uma conta); recompensar por valor gasto em R$ (o pedido é por trios de pacotes iguais); recompensar a 1ª compra
+  (farmável com 1 pacote barato); manter D1/D7 com condição de gasto (redundante com a compra/assinatura, e exigiria agendador).
+
+---
+
+## Registro histórico (2026-09-18, versão anterior desta ADR — a seção "D1 e D7" abaixo foi **cancelada** na revisão 2)
 
 ## Contexto
 
@@ -74,12 +153,13 @@ reenvia.
 
 ### 4. Tela de indicação (perfil)
 "Cadastrou" é só um contador informativo (sem valor em créditos); o texto diz
-que o crédito vem quando o indicado assina, com os valores por plano. D1/D7
-aparecem como "em breve" (não como 0 permanente). A mensagem de compartilhamento
-não promete ganho ao indicado.
+que o crédito vem quando o indicado assina, com os valores por plano. (D1/D7
+apareciam como "em breve" — removidos na revisão 2, que também acrescenta o
+progresso por tamanho de pacote.) A mensagem de compartilhamento não promete
+ganho ao indicado.
 
-### 5. D1 e D7 — NÃO implementados
-Dependem de tarefa agendada. Colunas `d1`/`d7` (contadores e flags
+### 5. D1 e D7 — NÃO implementados → **CANCELADOS na revisão 2 (2026-09-19)**
+*(Histórico; não será implementado: indicado que não gasta nunca gera crédito.)* Dependiam de tarefa agendada. Colunas `d1`/`d7` (contadores e flags
 `d1_credited`/`d7_credited`) seguem no schema, sem escritor. O que seria
 necessário:
 1. **Um gatilho de tempo.** Não existe processo agendado na API (nem
@@ -100,7 +180,7 @@ necessário:
 
 - Indicar só rende quando alguém paga: 15/30 créditos ou 1 mês de plano na
   assinatura. Cadastros em massa com o próprio link não rendem nada.
-- **Sem migração de schema.** As tabelas e colunas existentes bastam (a coluna
+- **Sem migração de schema (versão original; a revisão 2 exige migração — ver o topo).** As tabelas e colunas existentes bastam (a coluna
   `install_credited`, nome herdado, passa a significar "vínculo gravado").
   Endurecimento opcional (não feito): índice único em
   `referral_referred(referred_id)` para garantir a atribuição única no banco

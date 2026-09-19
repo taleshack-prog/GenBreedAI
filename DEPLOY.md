@@ -226,7 +226,10 @@ Limitação do iPhone: notificação só com o app **instalado na tela inicial**
   tratados só no servidor: o registro (`POST /auth/register` e `/auth/google` aceitam o campo opcional `ref`) apenas GRAVA o vínculo
   indicador → indicado, **sem crédito** (cadastro é farmável); quem paga é o webhook do Stripe quando a assinatura do indicado fica
   `active` (JUNIOR 15 créditos · SENIOR 30 · PHD 1 mês do plano do indicador). Por isso o webhook precisa estar configurado
-  (`STRIPE_WEBHOOK_SECRET`) para o indicador ser recompensado. **D1/D7 ainda não creditam** (dependem de tarefa agendada). Erro ao recompensar no webhook
+  (`STRIPE_WEBHOOK_SECRET`) para o indicador ser recompensado. **Rev. 2 (2026-09-19):** a **compra de pacotes de créditos** do indicado também paga (a cada 3 pacotes iguais do MESMO indicado: 3×10 → 2 · 3×30 → 5 ·
+  3×60 → 10 créditos, por tamanho, acumulando) e **D1/D7 foram cancelados** — indicado no Free nunca gera crédito. **Migração pendente e obrigatória
+  antes do merge:** tabelas `referral_pack_purchases` e `referral_pack_trios` (seção 7); as colunas `d1`/`d7` continuam no banco (não dropar junto do
+  deploy — quebraria o código antigo na janela). Erro ao recompensar no webhook
   responde 500 de propósito — o Stripe reenvia.
 - **Nunca** aponte `DATABASE_URL` de produção para um script destrutivo (`db:reset`) nem para `db:backfill-sex --apply` sem ler o
   cabeçalho do script (`--confirm-host=<host igual ao de DATABASE_URL>` é obrigatório).

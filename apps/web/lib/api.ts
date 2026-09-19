@@ -8,6 +8,7 @@
 
 import type { Genotype } from "@genbreedai/shared";
 import { nextAvailableLabel } from "./quota-format";
+import type { ReferralPackProgress } from "./referral-packs";
 
 export type PackId = "feline" | "canine" | "saurian";
 
@@ -311,7 +312,15 @@ export async function getImageQuota(): Promise<ImageQuota> {
   return res.json();
 }
 
-export interface Referral { code: string; clicks: number; installs: number; d1: number; d7: number; conversions: number; creditsEarned: number; }
+/**
+ * ADR-0024 (rev. 2): indicação só recompensa quando o indicado GASTA (assinatura ou pacotes de créditos).
+ * D1/D7 foram cancelados — não existem mais nesta resposta. `packs`/`trioSize` opcionais: uma API antiga
+ * (deploy da web antes da API) não os manda, e a tela simplesmente não mostra o bloco de pacotes.
+ */
+export interface Referral {
+  code: string; clicks: number; installs: number; conversions: number; creditsEarned: number;
+  trioSize?: number; packs?: ReferralPackProgress[];
+}
 export async function getReferral(): Promise<Referral> {
   const res = await fetch("/api/v1/referral", { headers: demoHeaders(), cache: "no-store" });
   if (!res.ok) throw await apiErrorFrom(res, "Falha ao carregar indicação.");
