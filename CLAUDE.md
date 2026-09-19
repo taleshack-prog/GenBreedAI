@@ -134,9 +134,11 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
    **Carteira (ADR-0029, 2026-09-19): corrigida.** Todo ajuste de saldo/cota virou `UPDATE` atômico (`addImageCredits`, `takeImageCredit`,
    `addResources`, `spendResources`, `claimDaily`, `claimBiweekly`, `tryConsume`). Achado por leitura de código, não reproduzido: o `save` antigo de
    `charge`/`credit`/`claimDaily` regravava a carteira inteira e **zerava os créditos comprados** — conferir a produção (jogadores que perderam créditos).
-   **Tempo (ADR-0029, adendo):** `WalletService` e `ImageQuotaService` agora usam `Clock`. **Ponto de decisão de produto, NÃO corrigido:** o "dia" do bônus
-   diário e o "mês" da cota de retratos são em **UTC** — viram às 21:00 em São Paulo (a vaga de nascimento diária usa o dia civil de São Paulo). Ainda sem
-   `Clock`: expiração de `granted_tiers` e `PAST_DUE` em `subscriptions` (repositórios de tier; rodada própria).
+   **Tempo (ADR-0029, adendo):** `WalletService` e `ImageQuotaService` agora usam `Clock`. **Fuso único (ADR-0029, decisão 2026-09-19):** o jogo tem UM "dia" —
+   o dia civil de São Paulo — para o bônus diário, o mês da cota de retratos e a vaga de nascimento (`common/sao-paulo-time.ts`; bônus quinzenal é intervalo
+   entre instantes, sem fuso). **Ao subir: ajuste de dados opcional** (SQL no ADR-0029, seção "Transição": rodar na mesma noite do deploy, entre 21h e 23h59
+   de Brasília, senão quem coletou nessa noite perde o bônus do dia seguinte); a cota mensal não tem ajuste confiável. Ainda sem `Clock`: expiração de
+   `granted_tiers` e `PAST_DUE` em `subscriptions` (repositórios de tier; rodada própria).
 6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
    no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
    definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
@@ -211,6 +213,9 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   GASTA: indicado no Free nunca gera crédito (D1/D7 cancelados). O indicado não ganha nada.
 - **Bônus quinzenal:** +1 crédito, janela móvel de 15 dias, a partir do JUNIOR. A **recompensa diária de recursos**
   (catalisadores/biomassa) continua diária, por tier (`wallet.service.ts`).
+- **UM único "dia" (ADR-0029): o dia civil de São Paulo** (`America/Sao_Paulo`, `common/sao-paulo-time.ts`, sem deslocamento fixo — acerta horário de verão
+  se voltar) vale para a vaga de nascimento diária, o bônus DIÁRIO (vira à meia-noite de Brasília) e o **mês** da cota de retratos extras (vira à meia-noite do
+  dia 1 de Brasília). O bônus quinzenal é intervalo entre instantes e não depende de fuso. Regra nova que precise de "dia"/"mês" do jogador usa este módulo.
 - **Pool de espécies** (ADR-0016; espécie fora do pool responde 404, "escondida, sem cadeado"):
   FREE só *Felis catus* (intraespécie) · JUNIOR + felinos selvagens e cruzamentos entre espécies · SENIOR + cães (todas as
   raças do catálogo) · PHD tudo o que existe — hoje igual ao Senior, pois grandes animais ainda não têm fundador nem

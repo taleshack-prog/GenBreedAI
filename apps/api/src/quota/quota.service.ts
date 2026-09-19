@@ -45,6 +45,7 @@ import { crossReservations, birthReservations } from "../db/schema";
 import { createDb, type Database } from "../db/client";
 import { isQuotaUnlimitedDev } from "./quota-unlimited-dev";
 import { Clock } from "../common/clock";
+import { startOfSaoPauloDay, startOfNextSaoPauloDay } from "../common/sao-paulo-time";
 
 export type ReservationWindow = "hour" | "rolling7d" | "day";
 export interface ReservationPolicy { limit: number; window: ReservationWindow; }
@@ -59,17 +60,11 @@ const WINDOW_MS: Record<"hour" | "rolling7d", number> = {
 };
 
 /**
- * Início do dia civil em America/Sao_Paulo, como instante UTC. `en-CA`
- * formata como "AAAA-MM-DD" (truque padrão sem lib de datas) — junta com
- * "T00:00:00-03:00" (offset FIXO do Brasil, sem DST desde 2019) pra virar o
- * instante exato da meia-noite local.
+ * Início do dia civil em America/Sao_Paulo, como instante UTC — agora vive em `common/sao-paulo-time.ts`
+ * (ADR-0029: um único "dia" para o jogo; o bônus diário e o mês da cota de retratos usam a MESMA base). Reexportado
+ * aqui para não quebrar quem importava daqui. Não usa mais "-03:00" fixo: acerta o horário de verão se voltar.
  */
-export function startOfSaoPauloDay(now: Date): Date {
-  const ymd = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(now);
-  return new Date(`${ymd}T00:00:00-03:00`);
-}
+export { startOfSaoPauloDay };
 
 function windowStart(window: ReservationWindow, now: Date): Date {
   return window === "day" ? startOfSaoPauloDay(now) : new Date(now.getTime() - WINDOW_MS[window]);
@@ -198,7 +193,7 @@ export class QuotaService {
     if (usedNow < policy.limit) return null;
 
     if (policy.window === "day") {
-      return new Date(startOfSaoPauloDay(now).getTime() + 24 * 3600 * 1000);
+      return startOfNextSaoPauloDay(now); // não é "início + 24 h": o dia pode ter 23 ou 25 horas se o horário de verão voltar
     }
     const windowMs = WINDOW_MS[policy.window];
 

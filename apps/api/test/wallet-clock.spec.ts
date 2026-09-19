@@ -1,12 +1,11 @@
 /**
- * Regra de negócio dependente de tempo usa `Clock`, nunca a data do sistema (ADR-0029, regra 3 do CLAUDE.md):
- * bônus DIÁRIO (dia civil em UTC), bônus QUINZENAL (janela móvel de 15 dias) e cota MENSAL de retratos extras
- * (mês em UTC) — agora testáveis com relógio simulado (`SystemClock.setForTesting`, nunca fake timers).
- *
- * ATENÇÃO — "dia" e "mês" são em UTC: no fuso de São Paulo (UTC−3) o dia do bônus diário e o mês da cota viram às
- * 21:00, não à meia-noite. Os testes marcados "COMPORTAMENTO ATUAL" documentam isso; é PONTO DE DECISÃO DE PRODUTO
- * (a vaga de nascimento diária de SENIOR/PHD usa o dia civil de São Paulo). Se o produto mudar a regra, esses testes
- * mudam junto — não são um endosso do comportamento.
+ * Regra de negócio dependente de tempo usa `Clock`, nunca a data do sistema (ADR-0029, regra 3 do CLAUDE.md), e o
+ * jogo tem UM único "dia": o dia civil de SÃO PAULO (`America/Sao_Paulo`) — o mesmo da vaga de nascimento diária.
+ *  - bônus DIÁRIO: dia civil de São Paulo (vira à MEIA-NOITE de Brasília, não às 21:00 como quando era UTC);
+ *  - cota MENSAL de retratos extras: mês civil de São Paulo (vira à meia-noite do dia 1 de Brasília);
+ *  - bônus QUINZENAL: janela de 15 dias entre INSTANTES — não depende de fuso (não mudou).
+ * Tudo com relógio simulado (`SystemClock.setForTesting`, nunca fake timers). Horários "BRT" abaixo = Brasília
+ * (UTC−3, sem horário de verão hoje); os testes de horário de verão usam datas de 2018-19, quando ele existia.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ForbiddenException } from "@nestjs/common";
@@ -23,6 +22,10 @@ import { TierService } from "../src/billing/tier.service";
 
 const DAY = 24 * 60 * 60 * 1000;
 const at = (iso: string) => new Date(iso);
+/** Horário de Brasília (UTC−3) → ISO UTC. Ex.: `br("2026-06-10T22:00")` = 2026-06-11T01:00:00.000Z. */
+const br = (local: string) => new Date(`${local}:00-03:00`).toISOString();
+/** Horário local com deslocamento explícito (ex.: `-02:00`, o horário de verão de 2018-19) → ISO UTC. */
+const brAt = (local: string, offset: string) => new Date(`${local}:00${offset}`).toISOString();
 
 function make() {
   const clock = new SystemClock();
@@ -33,47 +36,66 @@ function make() {
 }
 const credits = async (w: WalletService, id: string) => (await w.get(id)).imageCredits ?? 0;
 
-describe("bônus DIÁRIO — o dia vem do Clock (dia civil em UTC)", () => {
-  it("coletei hoje → recusa a 2ª (qualquer horário do mesmo dia); a carteira não muda", async () => {
+describe("bônus DIÁRIO — o dia é o dia civil de SÃO PAULO (vem do Clock)", () => {
+  it("coleta às 20h de Brasília e outra às 22h do MESMO dia → a segunda é RECUSADA (22h BRT já é o dia seguinte em UTC, mas não em São Paulo)", async () => {
     const { wallet, setNow } = make();
-    setNow("2026-06-10T15:00:00.000Z");
+    setNow(br("2026-06-10T20:00"));
     const a = await wallet.claimDaily("alice", "PHD");
     expect(a.claimed).toBe(true);
     expect(a.wallet.catalisadores).toBe(START.catalisadores + 600);
-    for (const t of ["2026-06-10T15:00:01.000Z", "2026-06-10T20:00:00.000Z", "2026-06-10T23:59:59.999Z"]) {
-      setNow(t);
-      const b = await wallet.claimDaily("alice", "PHD");
-      expect(b.claimed, t).toBe(false);
-      expect(b.wallet.catalisadores).toBe(a.wallet.catalisadores);
-    }
+    setNow(br("2026-06-10T22:00")); // = 2026-06-11T01:00Z: outro dia em UTC, o mesmo dia em São Paulo
+    const b = await wallet.claimDaily("alice", "PHD");
+    expect(b.claimed).toBe(false);
+    expect(b.wallet.catalisadores).toBe(a.wallet.catalisadores);
   });
 
-  it("passou a meia-noite (UTC) → aceita de novo, e de novo recusa dentro do novo dia", async () => {
+  it("as 21h de Brasília NÃO viram o dia (era o bug: em UTC virava às 21h e dava dois bônus na mesma noite)", async () => {
     const { wallet, setNow } = make();
-    setNow("2026-06-10T23:59:59.999Z");
+    setNow(br("2026-06-10T20:30"));
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
-    setNow("2026-06-11T00:00:00.000Z");
+    for (const t of ["2026-06-10T21:00", "2026-06-10T21:30", "2026-06-10T23:30"]) {
+      setNow(br(t));
+      expect((await wallet.claimDaily("alice", "FREE")).claimed, t).toBe(false);
+    }
+    expect((await wallet.get("alice")).catalisadores).toBe(START.catalisadores + 80);
+  });
+
+  it("coleta às 23h59 e outra às 00h01 (meia-noite de Brasília) → a segunda é ACEITA; e dentro do novo dia recusa de novo", async () => {
+    const { wallet, setNow } = make();
+    setNow(br("2026-06-10T23:59"));
+    expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
+    setNow(br("2026-06-11T00:01"));
     const next = await wallet.claimDaily("alice", "FREE");
     expect(next.claimed).toBe(true);
     expect(next.wallet.catalisadores).toBe(START.catalisadores + 2 * 80);
-    setNow("2026-06-11T10:00:00.000Z");
+    setNow(br("2026-06-11T10:00"));
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(false);
+  });
+
+  it("a virada é EXATAMENTE à meia-noite de Brasília: 23:59:59.999 recusa, 00:00:00.000 aceita", async () => {
+    const { wallet, setNow } = make();
+    setNow(br("2026-06-10T12:00"));
+    expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
+    setNow("2026-06-11T02:59:59.999Z"); // 23:59:59.999 em Brasília
+    expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(false);
+    setNow("2026-06-11T03:00:00.000Z"); // 00:00:00.000 em Brasília
+    expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
   });
 
   it("duas (ou cinco) coletas SIMULTÂNEAS no mesmo dia → UMA só leva o bônus", async () => {
     const { wallet, setNow } = make();
-    setNow("2026-06-10T12:00:00.000Z");
+    setNow(br("2026-06-10T12:00"));
     const r = await Promise.all(Array.from({ length: 5 }, () => wallet.claimDaily("alice", "SENIOR")));
     expect(r.filter((x) => x.claimed)).toHaveLength(1);
     expect((await wallet.get("alice")).catalisadores).toBe(START.catalisadores + 300);
   });
 
-  it("dias consecutivos por vários dias: uma coleta por dia, sempre", async () => {
+  it("vários dias seguidos: uma coleta por dia de São Paulo, sempre (inclusive coletando de noite, depois das 21h)", async () => {
     const { wallet, setNow } = make();
     let claims = 0;
     for (let d = 0; d < 10; d++) {
-      for (const h of ["01:00", "13:00", "22:00"]) {
-        setNow(`2026-06-${String(10 + d).padStart(2, "0")}T${h}:00.000Z`);
+      for (const h of ["00:30", "13:00", "21:30", "23:50"]) {
+        setNow(br(`2026-06-${String(10 + d).padStart(2, "0")}T${h}`));
         if ((await wallet.claimDaily("alice", "FREE")).claimed) claims++;
       }
     }
@@ -84,12 +106,12 @@ describe("bônus DIÁRIO — o dia vem do Clock (dia civil em UTC)", () => {
   it("virada de MÊS, de ANO e ano bissexto não quebram a conta", async () => {
     const { wallet, setNow } = make();
     const seq: Array<[string, boolean]> = [
-      ["2026-01-31T12:00:00.000Z", true], ["2026-01-31T23:00:00.000Z", false],
-      ["2026-02-01T00:30:00.000Z", true],                                     // fim de janeiro → fevereiro
-      ["2026-12-31T12:00:00.000Z", true], ["2026-12-31T23:59:59.000Z", false],
-      ["2027-01-01T00:00:00.000Z", true],                                     // virada de ano
-      ["2028-02-28T12:00:00.000Z", true], ["2028-02-29T00:00:00.000Z", true], // 29/02 existe (bissexto)
-      ["2028-02-29T18:00:00.000Z", false], ["2028-03-01T00:00:00.000Z", true],
+      [br("2026-01-31T12:00"), true], [br("2026-01-31T23:59"), false],
+      [br("2026-02-01T00:00"), true],                                    // fim de janeiro → fevereiro
+      [br("2026-12-31T12:00"), true], [br("2026-12-31T23:59"), false],
+      [br("2027-01-01T00:00"), true],                                    // virada de ano
+      [br("2028-02-28T12:00"), true], [br("2028-02-29T00:00"), true],    // 29/02 existe (bissexto)
+      [br("2028-02-29T18:00"), false], [br("2028-03-01T00:00"), true],
     ];
     for (const [t, expected] of seq) {
       setNow(t);
@@ -97,22 +119,24 @@ describe("bônus DIÁRIO — o dia vem do Clock (dia civil em UTC)", () => {
     }
   });
 
-  it("COMPORTAMENTO ATUAL (dia em UTC): às 21:00 de São Paulo o 'dia' vira — quem coletou às 20:30 (BRT) coleta de novo às 21:30 (BRT) do MESMO dia civil local", async () => {
+  it("HORÁRIO DE VERÃO (se voltar): o dia segue a meia-noite LOCAL — em 2018-12 (UTC−2) 23:30 e 00:30 são dias diferentes; 00:30 e 10:00 são o mesmo", async () => {
     const { wallet, setNow } = make();
-    setNow("2026-06-10T23:30:00.000Z"); // 20:30 em São Paulo (UTC−3)
+    setNow(brAt("2018-12-15T23:30", "-02:00")); // = 2018-12-16T01:30Z
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
-    setNow("2026-06-11T00:30:00.000Z"); // 21:30 em São Paulo — ainda dia 10 lá, já dia 11 em UTC
+    setNow(brAt("2018-12-16T00:30", "-02:00")); // = 2018-12-16T02:30Z — com "-03:00" fixo ainda seria dia 15 e seria recusado
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
+    setNow(brAt("2018-12-16T10:00", "-02:00"));
+    expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(false);
   });
 
-  it("produção inalterada: sem Clock injetado (`new WalletService(repo)`) usa o relógio real", async () => {
+  it("produção inalterada no que importa: sem Clock injetado (`new WalletService(repo)`) usa o relógio real", async () => {
     const wallet = new WalletService(new InMemoryWalletRepository());
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(true);
     expect((await wallet.claimDaily("alice", "FREE")).claimed).toBe(false);
   });
 });
 
-describe("bônus QUINZENAL — janela móvel de 15 dias do Clock", () => {
+describe("bônus QUINZENAL — janela móvel de 15 dias do Clock (não depende de fuso; NÃO mudou)", () => {
   it("coletei agora → recusa na hora; 14 dias depois → recusa; 15 dias depois → aceita (o limite é inclusivo)", async () => {
     const { wallet, setNow } = make();
     setNow("2026-06-01T12:00:00.000Z");
@@ -177,9 +201,9 @@ describe("bônus QUINZENAL — janela móvel de 15 dias do Clock", () => {
     }
   });
 
-  it("a janela é o intervalo entre INSTANTES (não dia civil nem fuso): 23:59 de um dia + 15 dias exatos aceita, 1 minuto antes recusa", async () => {
+  it("a janela é o intervalo entre INSTANTES (não dia civil nem fuso): 15 dias exatos aceita, 1 minuto antes recusa — mesmo atravessando a meia-noite de Brasília", async () => {
     const { wallet, setNow } = make();
-    const t0 = at("2026-06-01T23:59:00.000Z").getTime();
+    const t0 = at(br("2026-06-01T23:59")).getTime(); // 1 minuto antes da meia-noite de Brasília
     setNow(new Date(t0).toISOString());
     expect((await wallet.claimBiweekly("alice")).claimed).toBe(true);
     setNow(new Date(t0 + 15 * DAY - 60_000).toISOString());
@@ -209,7 +233,7 @@ describe("bônus QUINZENAL — janela móvel de 15 dias do Clock", () => {
   });
 });
 
-describe("cota MENSAL de retratos extras — o mês vem do Clock (UTC)", () => {
+describe("cota MENSAL de retratos extras — o mês é o mês civil de SÃO PAULO (vem do Clock)", () => {
   let savedFlag: string | undefined; let savedDb: string | undefined;
   beforeEach(() => {
     savedFlag = process.env.IMAGE_QUOTA_UNLIMITED; savedDb = process.env.DATABASE_URL;
@@ -222,22 +246,29 @@ describe("cota MENSAL de retratos extras — o mês vem do Clock (UTC)", () => {
   const makeQuota = () => { const clock = new SystemClock(); return { clock, q: new ImageQuotaService(clock) }; };
   const exhaust = async (q: ImageQuotaService) => { for (let i = 0; i < 15; i++) expect(await q.tryConsume("u", "SENIOR")).toBe(true); };
 
-  it("esgotou a cota no mês → recusa até o último instante do mês; no 1º instante do mês seguinte zera", async () => {
+  it("a cota reinicia à MEIA-NOITE do dia 1 de Brasília — não às 21h do último dia do mês", async () => {
     const { clock, q } = makeQuota();
-    clock.setForTesting(at("2026-06-10T12:00:00.000Z"));
+    clock.setForTesting(at(br("2026-06-10T12:00")));
     await exhaust(q);
-    for (const t of ["2026-06-10T12:00:01.000Z", "2026-06-30T23:59:59.999Z"]) {
-      clock.setForTesting(at(t));
+    // 21h30 do último dia (= 00:30Z de 1º de julho): em UTC já era julho; em São Paulo AINDA é junho → continua recusando
+    for (const t of ["2026-06-30T20:59", "2026-06-30T21:30", "2026-06-30T23:59"]) {
+      clock.setForTesting(at(br(t)));
       expect(await q.tryConsume("u", "SENIOR"), t).toBe(false);
     }
-    clock.setForTesting(at("2026-07-01T00:00:00.000Z"));
+    clock.setForTesting(at("2026-07-01T02:59:59.999Z")); // 23:59:59.999 do dia 30 em Brasília
+    expect(await q.tryConsume("u", "SENIOR")).toBe(false);
+    clock.setForTesting(at("2026-07-01T03:00:00.000Z")); // 00:00:00.000 do dia 1 em Brasília
     expect(await q.used("u")).toBe(0);
     expect(await q.tryConsume("u", "SENIOR")).toBe(true);
     expect(await q.used("u")).toBe(1);
   });
 
   it("virada de ANO e de fevereiro (28/29 dias) não quebram a conta", async () => {
-    for (const [last, first] of [["2026-12-31T23:59:59.000Z", "2027-01-01T00:00:00.000Z"], ["2028-02-29T23:59:59.000Z", "2028-03-01T00:00:00.000Z"], ["2027-02-28T23:59:59.000Z", "2027-03-01T00:00:00.000Z"]] as const) {
+    for (const [last, first] of [
+      [br("2026-12-31T23:59"), br("2027-01-01T00:00")],
+      [br("2028-02-29T23:59"), br("2028-03-01T00:00")],
+      [br("2027-02-28T23:59"), br("2027-03-01T00:00")],
+    ] as const) {
       const { clock, q } = makeQuota();
       clock.setForTesting(at(last));
       await exhaust(q);
@@ -247,16 +278,16 @@ describe("cota MENSAL de retratos extras — o mês vem do Clock (UTC)", () => {
     }
   });
 
-  it("COMPORTAMENTO ATUAL (mês em UTC): a cota reinicia às 21:00 de São Paulo do último dia do mês", async () => {
+  it("horário de verão (se voltar): o mês vira à meia-noite LOCAL — em 2018-12-31 23:30 (UTC−2) ainda é dezembro, 2019-01-01 00:30 já é janeiro", async () => {
     const { clock, q } = makeQuota();
-    clock.setForTesting(at("2026-06-30T23:30:00.000Z")); // 20:30 BRT, 30/06
+    clock.setForTesting(at(brAt("2018-12-31T23:30", "-02:00"))); // = 2019-01-01T01:30Z: já janeiro em UTC, ainda dezembro em São Paulo
     await exhaust(q);
     expect(await q.tryConsume("u", "SENIOR")).toBe(false);
-    clock.setForTesting(at("2026-07-01T00:30:00.000Z")); // 21:30 BRT — ainda 30/06 em São Paulo, já julho em UTC
+    clock.setForTesting(at(brAt("2019-01-01T00:30", "-02:00")));
     expect(await q.tryConsume("u", "SENIOR")).toBe(true);
   });
 
-  it("produção inalterada: sem Clock injetado (`new ImageQuotaService()`) usa o relógio real", async () => {
+  it("produção inalterada no que importa: sem Clock injetado (`new ImageQuotaService()`) usa o relógio real", async () => {
     const q = new ImageQuotaService();
     expect(await q.tryConsume("u", "SENIOR")).toBe(true);
     expect(await q.used("u")).toBe(1);

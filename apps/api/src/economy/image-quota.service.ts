@@ -16,6 +16,7 @@ import { createDb } from "../db/client";
 import { tierPolicy } from "../common/tiers";
 import { isDevFlagEnabled } from "../common/dev-flags";
 import { Clock, SystemClock } from "../common/clock";
+import { saoPauloMonth } from "../common/sao-paulo-time";
 
 /** Cota de retratos EXTRAS (prévia/regenerar) — NÃO conta o retrato incluído no cruzamento (ADR-0019). */
 export function monthlyImageLimit(tier: string): number { return tierPolicy(tier as Tier)?.monthlyExtraImages ?? 0; }
@@ -38,8 +39,8 @@ export function modelForTier(tier: string): string {
   }
   return process.env.FAL_MODEL ?? "fal-ai/flux-2-pro";
 }
-/** Mês da cota (`AAAA-MM`, em UTC — vira às 21:00 no horário de São Paulo do último dia do mês; comportamento atual, ver ADR-0029). */
-function ym(now: Date): string { return now.toISOString().slice(0, 7); }
+/** Mês da cota (`AAAA-MM`): o mês CIVIL DE SÃO PAULO — vira à meia-noite do dia 1 de Brasília (ADR-0029, fuso único; antes era UTC e virava às 21:00 do último dia). */
+function ym(now: Date): string { return saoPauloMonth(now); }
 
 @Injectable()
 export class ImageQuotaService {

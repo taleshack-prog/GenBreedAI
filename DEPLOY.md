@@ -130,6 +130,12 @@ Use esta ordem sempre que o `apps/api/src/db/schema.ts` mudar:
 > (não só a gestação). A migração é aditiva (coluna nullable): aplique-a primeiro; o código antigo continua funcionando com ela.
 > Contas existentes ficam com `NULL` e ganham a cortesia de 5 minutos na próxima gestação (backfill = decisão do dono).
 
+> **Deploy do fuso único (ADR-0029, 2026-09-19) — sem migração de schema, mas com ajuste de dados opcional.** O bônus diário e a cota mensal de retratos
+> passam a usar o dia/mês civil de **São Paulo** (antes UTC, que virava às 21h de Brasília). Para ninguém perder o bônus do dia seguinte, faça o deploy e rode o
+> `UPDATE` do ADR-0029 (seção "Transição") **na mesma noite, entre 21:00 e 23:59 de Brasília, depois do deploy**; em outro horário, deixe como está. Evite fazer
+> o deploy na última noite (21h–23h59) de um mês (cota mensal). Conferir antes: `SELECT last_daily, count(*) FROM wallets WHERE last_daily > to_char((now() AT
+> TIME ZONE 'America/Sao_Paulo')::date, 'YYYY-MM-DD') GROUP BY last_daily;`.
+
 Se o passo 2 ou 3 falhar: **não faça o merge**. Restaure pelo backup do passo 1 se o banco ficou inconsistente.
 
 ## 8) Banco novo ou vazio: schema + fundadores

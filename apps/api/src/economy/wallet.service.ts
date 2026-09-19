@@ -9,6 +9,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { WalletRepository, type Wallet } from "./wallet.repository";
 import { Clock, SystemClock } from "../common/clock";
+import { saoPauloDate } from "../common/sao-paulo-time";
 
 export type { Wallet };
 export const FREEZE_COST = { catalisadores: 20 };
@@ -67,7 +68,7 @@ export class WalletService {
    * buckets limpos como semana/mês dividem): compara `now` contra o
    * `lastBiweekly` gravado, igual à janela `rolling7d` já usada em
    * `quota.service.ts`. ATÔMICO: a janela é a condição do `UPDATE` — duas chamadas
-   * simultâneas concedem UMA vez.
+   * simultâneas concedem UMA vez. NÃO depende de fuso (intervalo entre instantes; ADR-0029).
    */
   async claimBiweekly(owner: string): Promise<{ claimed: boolean; wallet: Wallet }> {
     const now = this.clock.now();
@@ -79,11 +80,11 @@ export class WalletService {
 
   /**
    * Recompensa diária por tier (fonte principal — streak/cota). 1x por dia. ATÔMICO: "já coletou hoje" é a condição do `UPDATE`.
-   * O "dia" é o dia civil em UTC (`AAAA-MM-DD` do `Clock`) — ou seja, vira às 21:00 no horário de São Paulo, não à meia-noite
-   * (comportamento atual, registrado no ADR-0029 como ponto de decisão de produto; não mudado aqui).
+   * O "dia" é o dia CIVIL DE SÃO PAULO (`saoPauloDate`, `AAAA-MM-DD` do `Clock`) — o mesmo da vaga de nascimento diária
+   * (ADR-0029, fuso único): vira à meia-noite de Brasília, não às 21:00 como quando era UTC. Guardado em `wallets.last_daily`.
    */
   async claimDaily(owner: string, tier: string): Promise<{ claimed: boolean; gain?: Partial<Wallet>; wallet: Wallet }> {
-    const today = this.clock.now().toISOString().slice(0, 10);
+    const today = saoPauloDate(this.clock.now());
     const byTier: Record<string, { catalisadores: number; biomassa: number }> = {
       FREE: { catalisadores: 80, biomassa: 4000 }, JUNIOR: { catalisadores: 160, biomassa: 8000 },
       SENIOR: { catalisadores: 300, biomassa: 15000 }, PHD: { catalisadores: 600, biomassa: 30000 },
