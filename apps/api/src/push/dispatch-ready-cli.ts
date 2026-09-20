@@ -1,6 +1,7 @@
 /**
  * `pnpm --filter @genbreedai/api push:dispatch` — avisa (Web Push) os jogadores cuja gestação
- * terminou (ADR-0028). Feito pra rodar num CRON EXTERNO do Railway a cada 5 minutos, para
+ * terminou (ADR-0028) e, no MESMO cron (passo 2, ADR-0030, `dispatch-subscriptions.ts`), os que estão
+ * perto de perder — ou já perderam — a assinatura. Feito pra rodar num CRON EXTERNO do Railway a cada 5 minutos, para
  * sempre: sem cota, sem custo, sem imagem, idempotente (uma execução a mais não reenvia nada;
  * duas ao mesmo tempo avisam uma vez só). Lógica em `dispatch-ready.ts`; aqui só o `.env`,
  * a montagem dos repositórios e o código de saída.
@@ -23,6 +24,10 @@ import { DrizzlePushSubscriptionRepository } from "./push-subscription.repositor
 import { WebPushSender } from "./push-sender";
 import { PushService } from "./push.service";
 import { dispatchReady, type DispatchSummary } from "./dispatch-ready";
+import { dispatchSubscriptionNotices, type SubscriptionNoticeSummary } from "./dispatch-subscriptions";
+import { DrizzleSubscriptionsRepository } from "../billing/subscriptions.repository";
+import { DrizzleGrantedTiersRepository } from "../billing/granted-tiers.repository";
+import { TierService } from "../billing/tier.service";
 
 let finished = false;
 process.on("exit", () => {
@@ -52,8 +57,13 @@ async function main(): Promise<void> {
   const push = new PushService(new DrizzlePushSubscriptionRepository(db), new WebPushSender(), clock);
 
   let summary: DispatchSummary;
+  let subSummary: SubscriptionNoticeSummary;
   try {
+    // Passo 1 — gestação concluída (ADR-0028). Passo 2 — avisos de assinatura (ADR-0030): MESMO cron, mesmo pool, mesmo PushService.
     summary = await dispatchReady({ incubator: new DrizzleIncubatorRepository(db), push, clock });
+    const subscriptions = new DrizzleSubscriptionsRepository(db);
+    const tiers = new TierService(subscriptions, new DrizzleGrantedTiersRepository(db), clock);
+    subSummary = await dispatchSubscriptionNotices({ subscriptions, push, tiers, clock });
   } catch (e) {
     fail(`[push:dispatch] ERRO — ${e instanceof Error ? e.message : String(e)}`);
   } finally {
@@ -61,7 +71,7 @@ async function main(): Promise<void> {
     await pool.end().catch(() => {});
   }
 
-  if (summary.falhas > 0) process.exitCode = 1;
+  if (summary.falhas > 0 || subSummary.falhas > 0) process.exitCode = 1;
   finished = true;
   console.log("Terminado.");
 }

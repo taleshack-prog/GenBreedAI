@@ -99,6 +99,13 @@
       "when": 1789853893561,
       "tag": "0013_quiet_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789863197831,
+      "tag": "0014_sturdy_black_bolt",
+      "breakpoints": true
     }
   ]
 }

@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0029) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0030) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -248,7 +248,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 | `referral_links`, `referral_referred` | Indicação e marcos já creditados (anti-duplo-crédito); colunas `d1`/`d7` `@deprecated` (ADR-0024 rev. 2) |
 | `referral_pack_purchases`, `referral_pack_trios` | Compras de pacote de créditos por INDICADO (1 linha por pagamento, `payment_id` PK) e trios já pagos por (`referred_id`, `pack_id`) — ADR-0024 rev. 2; migração pendente |
 | `payment_intents` | Compras de pacote; PK = id do gateway → crédito idempotente sob retry de webhook |
-| `subscriptions` | Assinaturas Stripe (tier, intervalo, status, fim do período) |
+| `subscriptions` | Assinaturas Stripe (tier, intervalo, status, fim do período); `expiry_notice_for`, `payment_failed_notice_for`, `dropped_notice_for` = período (`current_period_end`) para o qual o aviso já foi reivindicado (ADR-0030; migração pendente) |
 | `granted_tiers` | Tiers concedidos fora do Stripe, com expiração |
 | `crosses` | Legada, nunca escrita pelo fluxo atual |
 
@@ -272,7 +272,11 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 - **`push:dispatch`** (ADR-0028): roda no cron externo do Railway a cada 5 min. Reivindica (`UPDATE … WHERE ready_notified_at IS NULL … RETURNING`) as
   gestações vencidas, não nascidas e não avisadas, e manda o push "Gestação concluída"; sem cota, sem custo, idempotente, "no máximo uma vez".
   Sempre imprime `ENCONTRADAS | AVISADAS | SEM ASSINATURA | FALHAS`; sem VAPID → "DESLIGADO", sai 0 sem marcar nada; erro ou falhas → saída 1.
-  Precisa de `DATABASE_URL`, das chaves VAPID e de `web-push`. Assinatura que devolve 404/410 é apagada.
+  Precisa de `DATABASE_URL`, das chaves VAPID e de `web-push`. Assinatura que devolve 404/410 é apagada. **Segundo passo, no MESMO cron (ADR-0030):**
+  avisos de assinatura — "vence em N dias" (≤ 3 dias antes, só quem não renova sozinho: cancelamento agendado ou `PAST_DUE`), "o pagamento falhou" e "voltou para o
+  plano gratuito" (queda recente e jogador mesmo no Free) — cada um UMA vez por período (`subscriptions.expiry_notice_for`/`payment_failed_notice_for`/`dropped_notice_for`,
+  claim atômico). A faixa correspondente vem de `GET /me/subscription-notice` (servidor decide; regra de vigência única `isSubscriptionInForce`, ADR-0029) e mora no
+  layout de `/app/*`. **Migração das 3 colunas ainda NÃO gerada — aplicar antes do merge** (código novo sem elas quebra a resolução de tier de todos os pedidos).
 - **Flags de dev** (`common/dev-flags.ts`, `isDevFlagEnabled` — a função ÚNICA; flag nova de dev usa ela): `QUOTA_UNLIMITED_DEV` (e o
   alias depreciado `CROSS_QUOTA_UNLIMITED`), `IMAGE_QUOTA_UNLIMITED`, `AUTH_DEV_HEADERS` e `BILLING_STUB_ENABLED` são **ignoradas quando
   `NODE_ENV=production`**, mesmo definidas, com aviso no log 1x por processo. Mesmo assim, não as defina em produção (`DEPLOY.md` §3.3).
@@ -303,7 +307,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0030). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0031). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -326,6 +330,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0027** — (produto/imagem, não genética) Miniatura 600×600 JPEG do retrato para a og:image do WhatsApp; melhor-esforço; backfill por script.
 - **0028** — (produto/infra, não genética) Web Push: aviso "Gestação concluída" via cron externo do Railway (`push:dispatch`); assinaturas por dispositivo; desligado sem VAPID; limitação do iPhone.
 - **0029** — (economia/infra, não genética) Saldos e contadores: todo ajuste é `UPDATE` atômico, nunca leitura seguida de escrita; carteira e cota mensal de retratos corrigidas.
+- **0030** — (produto/infra, não genética) Avisos de assinatura: push no cron existente (`push:dispatch`, passo 2) + faixa no app (`GET /me/subscription-notice`); 3 momentos, uma vez por período, marcação atômica; não muda a regra de vigência.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

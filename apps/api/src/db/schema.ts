@@ -371,6 +371,15 @@ export const subscriptions = pgTable("subscriptions", {
   status: text("status").notNull(), // ACTIVE | PAST_DUE | CANCELED | INCOMPLETE
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  /**
+   * ADR-0030 — avisos de assinatura (push "vence em 3 dias" / "pagamento falhou" / "voltou para o gratuito"), UMA vez
+   * por PERÍODO. Cada coluna guarda o `current_period_end` para o qual o aviso já foi REIVINDICADO por `push:dispatch`
+   * (NULL = nunca). O claim é `UPDATE ... WHERE (col IS NULL OR col <> current_period_end) ... RETURNING` (atômico); uma
+   * renovação muda o fim do período e libera o próximo ciclo. Marcado mesmo sem dispositivo de push (a faixa no app cobre).
+   */
+  expiryNoticeFor: timestamp("expiry_notice_for", { withTimezone: true }),
+  paymentFailedNoticeFor: timestamp("payment_failed_notice_for", { withTimezone: true }),
+  droppedNoticeFor: timestamp("dropped_notice_for", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

@@ -9,6 +9,7 @@
 import type { Genotype } from "@genbreedai/shared";
 import { nextAvailableLabel } from "./quota-format";
 import type { ReferralPackProgress } from "./referral-packs";
+import type { SubscriptionNotice } from "./subscription-banner";
 
 export type PackId = "feline" | "canine" | "saurian";
 
@@ -278,6 +279,14 @@ export async function bornEntry(id: string): Promise<{ specimen: ApiSpecimen }> 
 export async function discardEntry(id: string): Promise<void> {
   const res = await fetch(`/api/v1/incubator/${id}`, { method: "DELETE", headers: demoHeaders(), body: "{}" });
   if (!res.ok) throw await apiErrorFrom(res, `Falha ao descartar (${res.status}).`);
+}
+
+/** Faixa de aviso de assinatura (ADR-0030): `notice: null` = nada a mostrar (inclusive quando a assinatura voltou a ficar ativa). A API decide e manda o texto pronto. */
+export async function getSubscriptionNotice(): Promise<SubscriptionNotice | null> {
+  const res = await fetch("/api/v1/me/subscription-notice", { headers: demoHeaders(), cache: "no-store" });
+  if (!res.ok) throw await apiErrorFrom(res, "Falha ao consultar o aviso de assinatura.");
+  const body = await res.json() as { notice: SubscriptionNotice | null };
+  return body.notice ?? null;
 }
 
 /** Web Push (ADR-0028): a API só liga o recurso com as chaves VAPID — sem elas `enabled` é `false` e a web esconde o botão. Rota pública. */

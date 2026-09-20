@@ -10,15 +10,33 @@ import { TierService } from "./tier.service";
 import { tierPolicy } from "../common/tiers";
 import { QuotaService } from "../quota/quota.service";
 import { UserRepository } from "../auth/user.repository";
+import { SubscriptionsRepository } from "./subscriptions.repository";
+import { pickBannerNotice } from "./subscription-notices";
+import { Clock } from "../common/clock";
 
 @Controller("api/v1/me")
 export class MeController {
-  // `UserRepository` vem do `AuthModule` (@Global, exporta a porta).
+  // `UserRepository` vem do `AuthModule` (@Global, exporta a porta); `Clock` do `ClockModule` (importado por `TierModule`).
   constructor(
     private readonly tierService: TierService,
     private readonly quota: QuotaService,
     private readonly users: UserRepository,
+    private readonly subscriptions: SubscriptionsRepository,
+    private readonly clock: Clock,
   ) {}
+
+  /**
+   * ADR-0030 — a faixa "sua assinatura vence / o pagamento falhou / voltou para o gratuito" que a web mostra ao abrir
+   * qualquer tela. O SERVIDOR decide (a regra de vigência é a do ADR-0029; a web não a duplica) e devolve título e corpo
+   * prontos — os mesmos do push. `notice: null` = nada a mostrar (inclusive quando a assinatura voltou a ficar ativa).
+   * Rota separada de `/me/tier` de propósito: é chamada em toda tela do app e não precisa das consultas de cota.
+   */
+  @Get("subscription-notice")
+  @UseGuards(AuthGuard)
+  async subscriptionNotice(@CurrentUser() user: AuthenticatedUser) {
+    const [rows, effectiveTier] = await Promise.all([this.subscriptions.listForUser(user.id), this.tierService.resolve(user.id)]);
+    return { notice: pickBannerNotice(rows, this.clock.now(), effectiveTier) };
+  }
 
   @Get("tier")
   @UseGuards(AuthGuard)

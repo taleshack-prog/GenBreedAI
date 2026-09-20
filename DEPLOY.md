@@ -200,6 +200,16 @@ Android; iPhone e desktop ainda não verificados. Os passos abaixo ficam como re
    ```
    `Web Push DESLIGADO …` = faltam as chaves (sai 0, nada marcado). Saída 1 = erro ou FALHAS > 0 (aviso perdido: a entrada é marcada
    ANTES do envio — "no máximo uma vez").
+6. **Avisos de assinatura (ADR-0030) — o MESMO cron, sem serviço novo.** Depois do resumo da gestação o script imprime mais duas linhas:
+   ```
+   ASSINATURAS — CANDIDATAS: n | AVISOS: n (vence em breve: n, pagamento falhou: n, voltou ao gratuito: n)
+   ASSINATURAS — AVISADOS: n | SEM PUSH: n | PULADOS: n | FALHAS: n
+   ```
+   Avisa por push "vence em N dias" (≤ 3 dias antes do fim, só quem não renova sozinho), "o pagamento falhou" e "voltou para o plano gratuito", cada um
+   UMA vez por período de assinatura. A faixa no app (`GET /me/subscription-notice`) funciona sem o cron e sem VAPID. **Migração obrigatória antes do
+   merge:** 3 colunas nullable em `subscriptions` (`expiry_notice_for`, `payment_failed_notice_for`, `dropped_notice_for`) — gerar com `db:generate`
+   (**ainda não gerada**) e aplicar antes (seção 7): sem elas, código novo quebra a resolução de tier de TODOS os pedidos (o Drizzle enumera as colunas). No
+   primeiro rodar depois da migração recebem aviso as assinaturas hoje em `PAST_DUE`, com cancelamento agendado a ≤ 3 dias do fim ou canceladas há ≤ 2 dias.
 
 Limitação do iPhone: notificação só com o app **instalado na tela inicial** (pelo Safari) e **iOS 16.4+** (ADR-0026/0028).
 
