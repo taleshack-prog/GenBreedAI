@@ -20,7 +20,12 @@ import { InMemoryWalletRepository } from "../src/economy/wallet.repository";
 import { makeReferralStack } from "./helpers/referral";
 
 const STRONG = "9f2c4b7a1e8d3c6b5a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b"; // 64 hex, como `openssl rand -hex 32`
-const ENV_KEYS = ["NODE_ENV", "AUTH_SECRET", "DATABASE_URL", "AUTH_DEV_HEADERS"] as const;
+// FAL_KEY e as R2_* também são isoladas: `main.ts` carrega o `.env` local (dotenv) e o boot em PRODUÇÃO agora
+// valida o R2 (ADR-0031) — sem limpar, um `.env` de dev com FAL_KEY faria o "sobe normal" falhar por outro motivo.
+const ENV_KEYS = [
+  "NODE_ENV", "AUTH_SECRET", "DATABASE_URL", "AUTH_DEV_HEADERS",
+  "FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL",
+] as const;
 
 let saved: Record<string, string | undefined>;
 let warnSpy: MockInstance<typeof console.warn>;
@@ -28,6 +33,7 @@ beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   delete process.env.AUTH_SECRET;
   delete process.env.DATABASE_URL; // app em memória
+  for (const k of ["FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]) delete process.env[k];
   resetAuthSecretWarning();
   warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 });

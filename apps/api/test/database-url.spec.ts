@@ -14,7 +14,11 @@ import { DrizzleSpecimenRepository } from "../src/specimens/drizzle.repository";
 
 const STRONG_SECRET = "9f2c4b7a1e8d3c6b5a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b";
 const FAKE_URL = "postgresql://user:senha-secreta@127.0.0.1:5432/genbreed_test"; // o Pool do pg só conecta na 1ª query — sem rede no boot
-const ENV_KEYS = ["NODE_ENV", "AUTH_SECRET", "DATABASE_URL"] as const;
+// FAL_KEY e as R2_* também são isoladas: o boot em PRODUÇÃO valida o R2 (ADR-0031) e `main.ts` carrega o `.env` local.
+const ENV_KEYS = [
+  "NODE_ENV", "AUTH_SECRET", "DATABASE_URL",
+  "FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL",
+] as const;
 
 let saved: Record<string, string | undefined>;
 let warnSpy: MockInstance<typeof console.warn>;
@@ -22,6 +26,7 @@ beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   delete process.env.AUTH_SECRET;
   delete process.env.DATABASE_URL;
+  for (const k of ["FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]) delete process.env[k];
   resetDatabaseWarning();
   resetAuthSecretWarning();
   warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

@@ -21,7 +21,7 @@ com cache determinístico.
 | Web (Next.js) | Vercel — proxy same-origin `/api/*` → API (`apps/web/next.config.mjs`; `API_URL`, com padrão apontando pro Railway em produção) |
 | API (NestJS + Fastify) | Railway, via `apps/api/Dockerfile` + `railway.json` |
 | Banco (PostgreSQL) | Neon |
-| Imagens | Cloudflare R2 (disco local só em dev, quando `R2_*` não está definido) |
+| Imagens | Cloudflare R2 (disco local só em dev, quando `R2_*` não está definido; em produção o boot exige as cinco `R2_*` quando há `FAL_KEY`, ADR-0031) |
 | Pagamentos | Stripe (Checkout de pacotes, assinaturas e webhook) — **live (informado)**; não verificável pelo código |
 
 - Nada de "fase de construção": não existe mais o bloqueio "sem UI/API até a auditoria". Features novas são mergeáveis
@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0030) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0031) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -140,9 +140,12 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
    de Brasília, senão quem coletou nessa noite perde o bônus do dia seguinte); a cota mensal não tem ajuste confiável. **Tier efetivo com `Clock` (ADR-0029):** o `TierService` lê o
    `Clock` e passa o `now` aos repositórios (`findActiveForUser(userId, now)`) — expiração de `granted_tiers` e `PAST_DUE` testáveis; nenhum outro ponto do servidor
    decide regra pela data do sistema (sobram só auditoria/ids/cache). Na web, duas cópias de exibição da regra `PAST_DUE` usam `Date.now()` (não gateiam nada).
-6. **`R2_*` sem trava de boot:** sem as cinco variáveis (ou com só algumas) o storage cai no disco do container e as imagens somem
-   no próximo deploy, em silêncio. Proposta (não aplicada, decisão do dono): em produção, exigir as cinco quando `FAL_KEY` estiver
-   definida, e recusar configuração PARCIAL de R2 (4 de 5) sempre. Sem `FAL_KEY` (modo procedural) nada é gravado e R2 é dispensável.
+6. **Variáveis que ainda degradam em silêncio (a trava do R2 foi APLICADA, ADR-0031 — `common/r2-config.ts`).** O boot só confere
+   *presença* do R2: `R2_PUBLIC_URL`/`R2_BUCKET` com valor ERRADO (mas não vazio) continuam sem aviso. Sobram, sem trava de boot:
+   `STRIPE_WEBHOOK_SECRET` ausente (webhook 400: pagamento feito, nada creditado — o mais grave), `STRIPE_SECRET_KEY` ausente (cai no
+   stub, sem cobrança real), `STRIPE_SUCCESS_URL`/`STRIPE_CANCEL_URL` ausentes (Checkout volta para `localhost`), VAPID só metade
+   definida (push desligado), `NEXT_PUBLIC_VAPID_PUBLIC_KEY` diferente da VAPID da API (envio falha). Detalhes e proposta no ADR-0031;
+   nenhuma dessas travas foi aplicada (decisão do dono).
 7. **`sharp` não instalado na API** (ADR-0027): sem ele nenhuma miniatura é gerada (o retrato é salvo normalmente, com aviso no log).
    Instalar com `pnpm --filter @genbreedai/api add sharp` e commitar `package.json` + `pnpm-lock.yaml` juntos (Dockerfile usa
    `--frozen-lockfile`). Retratos anteriores à ADR-0027 ficam sem miniatura até rodar `images:backfill-thumbs`.
@@ -289,8 +292,16 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   **`DATABASE_URL` também é obrigatória em produção** (`common/database-url.ts`, mesmo lugar e padrão: `buildApp()` lança, saída 1):
   sem ela tudo cairia nos repositórios em memória e os dados sumiriam a cada reinício, em silêncio. Fora de produção o modo em
   memória continua, com aviso "os dados NÃO persistem" 1x por processo. **Boot novo = função `assert…ForBoot()` chamada em `buildApp()`.**
+  **O R2 também é validado no boot** (`common/r2-config.ts`, ADR-0031): em produção com `FAL_KEY` as cinco `R2_*` (`R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`) são obrigatórias; configuração PARCIAL (1 a 4) falha
+  MESMO sem `FAL_KEY`; sem `FAL_KEY` e sem nenhuma `R2_*` passa (modo procedural) com aviso 1x por processo. Fora de produção nada
+  falha — só avisa quando as imagens cairiam no disco local (não persistem). Mensagens só com NOMES de variável, nunca valores.
   Os demais segredos ausentes falham FECHADO (webhook Stripe 400, login Google 400, sem fal.ai só o modo procedural) — nenhum
-  tem fallback inseguro; os que só degradam em silêncio estão no `DEPLOY.md` §3.1 (ver pendência sobre `R2_*` na seção 6).
+  tem fallback inseguro; os que só degradam em silêncio estão na pendência 6 da seção 6 e no `DEPLOY.md` §3.1.
+  **Guardas de boot valem SÓ para a API HTTP (`buildApp()`), nunca para scripts de linha de comando** — o `push-cron` do Railway tem só
+  `DATABASE_URL` + `VAPID_*` com `NODE_ENV=production`; script novo não pode importar `main.ts`/`app.module.ts`/módulos de guarda
+  (`test/cli-boot-isolation.spec.ts` falha se importar). Guarda nova: chame `assert…ForBoot()` só em `buildApp()` e inclua o módulo na lista `FORBIDDEN` do teste.
+  **Testes que chamam `buildApp()` em produção devem isolar `FAL_KEY` e as `R2_*`** (o `main.ts` carrega o `.env` local por dotenv).
 
 ## 11. Definition of Done (todo PR)
 
@@ -307,7 +318,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0031). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0032). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -331,6 +342,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0028** — (produto/infra, não genética) Web Push: aviso "Gestação concluída" via cron externo do Railway (`push:dispatch`); assinaturas por dispositivo; desligado sem VAPID; limitação do iPhone.
 - **0029** — (economia/infra, não genética) Saldos e contadores: todo ajuste é `UPDATE` atômico, nunca leitura seguida de escrita; carteira e cota mensal de retratos corrigidas.
 - **0030** — (produto/infra, não genética) Avisos de assinatura: push no cron existente (`push:dispatch`, passo 2) + faixa no app (`GET /me/subscription-notice`); 3 momentos, uma vez por período, marcação atômica; não muda a regra de vigência.
+- **0031** — (infra, não genética) Trava de boot do R2 (`common/r2-config.ts`): produção + `FAL_KEY` exige as cinco `R2_*`; parcial falha sempre; sem `FAL_KEY` e sem R2 passa com aviso; fora de produção só avisa.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

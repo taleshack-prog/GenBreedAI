@@ -12,15 +12,19 @@ import {
 import { AppModule } from "./app.module";
 import { assertAuthSecretForBoot } from "./common/auth-secret";
 import { assertDatabaseForBoot } from "./common/database-url";
+import { assertR2ForBoot } from "./common/r2-config";
 
 export async function buildApp(): Promise<NestFastifyApplication> {
   // ANTES de criar qualquer coisa: em produção a API NÃO sobe (lança aqui) sem
   // AUTH_SECRET válida (assinaria JWT com segredo fraco) nem sem DATABASE_URL
-  // (rodaria em memória e perderia tudo a cada reinício, em silêncio) — falhar ao
-  // subir é melhor que subir inseguro/sem persistência. Fora de produção só
-  // avisa (segredo padrão de dev; dados em memória).
+  // (rodaria em memória e perderia tudo a cada reinício, em silêncio) nem com o R2
+  // incompleto (os retratos gerados cairiam no disco do contêiner e sumiriam no
+  // próximo deploy) — falhar ao subir é melhor que subir inseguro/sem persistência.
+  // Fora de produção só avisa (segredo padrão de dev; dados em memória; disco local).
   assertAuthSecretForBoot();
   assertDatabaseForBoot();
+  // R2 (ADR-0031): em produção com FAL_KEY as cinco R2_* são obrigatórias; parcial falha sempre; senão só avisa.
+  assertR2ForBoot();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
