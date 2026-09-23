@@ -81,3 +81,60 @@ export const DOG_BREEDS: Record<string, BreedInfo> = {
 };
 
 export function dogBreedInfo(id: string): BreedInfo | undefined { return DOG_BREEDS[id]; }
+
+/**
+ * Nome da raça em INGLÊS para o prompt de imagem, por SLUG DE ESPÉCIE (`specimen.species`) — não por id de fundador: um espécime
+ * NASCIDO tem id gerado, então `dogBreedInfo(id)` não o acha, mas a espécie permanece (raça pura = species sem "×"). Os seis
+ * Dogues Alemães (dogue-dourado/tigrado/preto/azul/arlequim/manto) compartilham a espécie "dogue-alemao".
+ * Cada nome foi TRANSCRITO literalmente do `descriptor` da raça em `DOG_BREEDS` (acima) — nada foi inventado; o teste
+ * `prompt-canine-breed.spec.ts` confere que o nome aparece no descritor. Só o NOME: cor, padrão e morfologia vêm do fenótipo
+ * calculado. Ausente de propósito: `terrier-anao-branco` (o descritor não traz nome de raça em inglês — "a small white toy terrier").
+ */
+export const DOG_BREED_ENGLISH_NAMES: Readonly<Record<string, string>> = {
+  boerboel: "Boerboel",
+  "braco-alemao": "German Shorthaired Pointer",
+  dobermann: "Dobermann Pinscher",
+  "dogue-alemao": "Great Dane",
+  "pastor-alemao": "German Shepherd Dog",
+  rottweiler: "Rottweiler",
+  "sao-bernardo": "Saint Bernard",
+  "dogo-argentino": "Dogo Argentino",
+  "mastim-ingles": "English Mastiff",
+  collie: "Rough Collie",
+  "border-collie": "Border Collie",
+  "bulldog-frances": "French Bulldog",
+  greyhound: "Greyhound",
+  "presa-canaria": "Presa Canario",
+  "cane-corso": "Cane Corso",
+  "mastim-napolitano": "Neapolitan Mastiff",
+  "bull-mastiff": "Bullmastiff",
+  kangal: "Kangal",
+  alabai: "Central Asian Shepherd (Alabai)",
+  "pastor-caucaso": "Caucasian Shepherd Dog",
+  "mastim-tibetano": "Tibetan Mastiff",
+  cimarron: "Cimarron Uruguayo",
+  "terra-nova": "Newfoundland",
+  "pastor-belga-malinois": "Belgian Malinois",
+  "pastor-belga-groenendael": "Belgian Groenendael",
+  "pastor-serra-estrela": "Estrela Mountain Dog",
+  "pastor-pampeano": "Pampas/Gaucho sheepdog",
+  "old-english-sheepdog": "Old English Sheepdog",
+  "australian-shepherd": "Australian Shepherd",
+  "blue-heeler": "Australian Cattle Dog (Blue Heeler)",
+  "pastor-shetland": "Shetland Sheepdog",
+  "pit-bull": "American Pit Bull Terrier",
+  "terrier-brasileiro": "Brazilian Terrier",
+  "bulldog-ingles": "English Bulldog",
+  "bulldog-americano": "American Bulldog",
+  "buldogue-campeiro": "Buldogue Campeiro",
+  "spitz-alemao": "Pomeranian / German Spitz",
+  "irish-wolfhound": "Irish Wolfhound",
+  whippet: "Whippet",
+  saluki: "Saluki",
+  "afghan-hound": "Afghan Hound",
+};
+
+/** Nome inglês da raça pura pelo slug de espécie, ou `undefined` (espécie desconhecida, híbrido com "×" ou sem nome no descritor). */
+export function dogBreedEnglishName(species: string): string | undefined {
+  return species.includes("×") ? undefined : DOG_BREED_ENGLISH_NAMES[species];
+}

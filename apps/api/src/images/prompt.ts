@@ -20,7 +20,7 @@
  * `physiqueAdj`) — nunca dos descritores fixos de espécie.
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
-import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, DOG_BREEDS } from "@genbreedai/shared";
+import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, DOG_BREEDS } from "@genbreedai/shared";
 import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
@@ -230,7 +230,15 @@ export function buildPrompt(s: StoredSpecimen): string {
     } else if (dogBreed) {
       subject = `a purebred ${dogBreed.name} dog (Canis familiaris): ${dogBreed.descriptor}. Body build: ${physiqueAdj}. Coat: ${coat}`;
     } else if (s.pack === "canine") {
-      subject = `a ${physiqueAdj} mixed-breed dog${morphClause}, with ${coat}`;
+      // RAÇA PURA nascida (species sem "×"; o id é gerado, então `dogBreedInfo(id)` acima não acha): NOMEIA a raça em inglês —
+      // antes saía "mixed-breed dog" e o gerador desenhava um cão grande e maciço (dogue-alemao × dogue-alemao saiu com cara de
+      // mastim). Só o NOME entra (nunca o descriptor da raça, que traz cor/pelagem típicas): cor, padrão e morfologia continuam
+      // 100% do fenótipo calculado e PREVALECEM sobre o padrão da raça (mesma cláusula de prioridade dos híbridos).
+      const breedName = dogBreedEnglishName(s.species);
+      subject = breedName
+        ? `a purebred ${breedName} dog (Canis familiaris), ${physiqueAdj}${morphClause}. ` +
+          `Its coat and features (these take priority over the ${breedName} breed's typical colour and markings): ${coat}`
+        : `a ${physiqueAdj} mixed-breed dog${morphClause}, with ${coat}`;
     } else {
       const override = lionessOverride(s.species, s.sex);
       const commonName = override ? override.name : info.common;

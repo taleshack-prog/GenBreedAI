@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0032) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0033) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -323,7 +323,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0033). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0034). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -349,6 +349,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0030** — (produto/infra, não genética) Avisos de assinatura: push no cron existente (`push:dispatch`, passo 2) + faixa no app (`GET /me/subscription-notice`); 3 momentos, uma vez por período, marcação atômica; não muda a regra de vigência.
 - **0031** — (infra, não genética) Travas de boot da API: R2 (`common/r2-config.ts`: produção + `FAL_KEY` exige as cinco `R2_*`; parcial falha sempre; sem `FAL_KEY` e sem R2 passa com aviso); adendo 1: só o boot HTTP, nunca os scripts (`push-cron`); adendo 2: Stripe (com `STRIPE_SECRET_KEY`, webhook secret + URLs https não-localhost) e VAPID pela metade; fora de produção só avisa.
 - **0032** — (produto/web, não genética) Página pública `/o-que-e` (sem login; fora do matcher do middleware): texto e JSON-LD (FAQPage + SoftwareApplication) saem da fonte única `apps/web/lib/about.ts`; preços/limites de `plans.ts`, espécies do catálogo; fato novo só com fonte, sem "em breve" nem espécie não implementada; teste confere JSON-LD × texto visível. Adendo: `app/sitemap.ts` e `app/robots.ts` (nativos do Next 15; rotas em `lib/public-routes.ts` — sitemap só com rotas públicas de conteúdo, nunca `/app/*` nem `/f/[id]`; robots bloqueia `/app/`); rota pública nova de conteúdo entra em `PUBLIC_ROUTES`.
+- **0033** — (produto/imagem, não genética) O prompt nomeia a raça canina PURA nascida (species sem "×") em inglês (`DOG_BREED_ENGLISH_NAMES`, transcrito dos descritores), com a cor/morfologia calculadas prevalecendo; híbridos e fundadores inalterados; `terrier-anao-branco` sem nome (aguarda o dono); só gerações novas mudam de prompt.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
