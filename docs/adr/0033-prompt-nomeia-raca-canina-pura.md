@@ -62,6 +62,47 @@ gerado, então caía em `a <porte> mixed-breed dog with <cor>` — "cão misto g
   domestic shorthair"), `gato-preto` ("solid jet-black domestic shorthair") e `gato-branco` ("pure white domestic shorthair") — são
   variedades de cor de gato sem raça, não raças; nada inventado. A tabela inglesa dos gatos NÃO foi criada (ficaria sem uso).
 
+## Adendo 2 (2026-09-23) — campo `breed` no espécime (gatos de raça nascidos)
+
+**Decisão do dono:** criar `specimens.breed` (text, anulável) para o gato nascido manter a raça no prompt (afeta sobretudo o Free, cujo pool é
+só gato). **Migração NÃO gerada** — rodar `db:generate` (esperado: `ALTER TABLE "specimens" ADD COLUMN "breed" text`), conferir, aplicar
+ANTES do merge. Com o schema novo e sem a coluna no banco, todo `select()` de `specimens` (cruzar, gestar, Gene Bank, `backfill-sex`…) e os
+testes PGlite (`drizzle.repository.spec.ts` aplica `./drizzle`) falham.
+
+**Preenchimento** (`apps/api/src/specimens/breed.ts`):
+- **Fundador de gato de raça** → o id da raça (`gato-persa`); o gêmeo herda (`baseFounderId`). **Variedades de cor** (`gato-tabby`,
+  `gato-preto`, `gato-branco`) e **felinos selvagens** → nulo. **Fundador de cão** → o slug da espécie (uniformidade; o prompt canino segue por espécie).
+- **Nascido** → a raça dos pais se **iguais e não nulas**; senão nulo (mestiço). Calculado em `IncubatorService.born()` (lê pai e mãe; assim não
+  há segunda coluna em `incubator_entries`) e em `CrossService.execute()`. Gravado uma vez (fora do `set` do upsert).
+- **Espécime antigo:** `breed` nulo. Para FUNDADOR o valor se deriva do id (`specimenBreed`), então herdar de um fundador já semeado funciona sem
+  backfill; filhote antigo com `breed` nulo segue como hoje (gato doméstico) e seus filhos também.
+
+**Prompt felino:** com `breed` de raça (tabela `CAT_BREED_ENGLISH_NAMES`, transcrita dos descritores: Siamese, Maine Coon, Persian, Bengal, Birman,
+Sphynx, Egyptian Mau, Abyssinian, Ragdoll), o texto vira `a purebred <Nome> cat (Felis catus), <porte>… Its coat and features (these take priority
+over the <Nome> breed's typical colour and markings): <cor calculada>` — sem o descriptor (que traz cor típica). Fundador/gêmeo, mestiço, variedade
+de cor e espécime antigo: inalterados.
+
+**Backfill (recomendado, NÃO executado; rodar depois da migração, dry-run com `SELECT` antes):**
+```sql
+-- 1) fundadores de gato de raça (base e gêmeos) — opcional para o prompt (derivado do id), útil para consultas/uniformidade
+UPDATE specimens SET breed = regexp_replace(id, '-(femea|macho)$', '')
+WHERE method = 'FOUNDER' AND species = 'felis-catus' AND breed IS NULL
+  AND regexp_replace(id, '-(femea|macho)$', '') IN ('gato-siames','gato-maine-coon','gato-persa','gato-bengala','gato-birmania',
+                                                     'gato-sphynx','gato-mau-egipcio','gato-abissinio','gato-ragdoll');
+-- 2) fundadores de cão (uniformidade; o prompt não depende disso)
+UPDATE specimens SET breed = species WHERE method = 'FOUNDER' AND pack = 'canine' AND breed IS NULL;
+-- 3) filhotes de gato cujos DOIS pais têm a mesma raça (a regra do código). Repetir até "UPDATE 0" (netos de 2 Persas dependem dos filhos).
+UPDATE specimens c SET breed = s.breed
+FROM specimens s, specimens d
+WHERE c.method <> 'FOUNDER' AND c.breed IS NULL AND c.species = 'felis-catus'
+  AND s.id = c.sire_id AND d.id = c.dam_id AND s.breed IS NOT NULL AND s.breed = d.breed;
+```
+Vale rodar o **3** (senão os filhos de Persas já nascidos perdem a raça na próxima geração e ao regenerar o retrato); o **1** basta para deixar o
+banco coerente (o código já deriva do id); o **2** é estético. Nenhum retrato já gravado muda (a `cacheKey` não inclui o prompt).
+
+**Não coberto por teste de ponta a ponta com o Drizzle/Postgres** (a coluna só existe depois da migração): a persistência é lida/gravada em
+`specimens/drizzle.repository.ts` (`toStored`/`save`) e `db/seed.ts`/`reset.ts`; conferir com o teste PGlite depois do `db:generate`.
+
 ## Alternativas consideradas
 
 - *Usar o `descriptor` da raça:* rejeitada — fixa a cor típica e briga com o fenótipo calculado.

@@ -21,6 +21,7 @@ async function main() {
         fixationIndex: f.fixationIndex, aura: f.aura, cacheKey: f.cacheKey,
         provenanceHash: f.provenanceHash ?? null,
         sex: f.sex, fertility: f.fertility, haldaneStatus: f.haldaneStatus,
+        breed: f.breed ?? null, // ADR-0033 adendo 2 (fundador já semeado antes da coluna fica NULL; `specimenBreed` deriva do id)
       })
       .onConflictDoNothing({ target: specimens.id });
   }

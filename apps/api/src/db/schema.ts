@@ -80,6 +80,12 @@ export const specimens = pgTable("specimens", {
   fertility: doublePrecision("fertility"), // 0–100 | null — idem
   haldaneStatus: text("haldane_status"), // "NONE" | "STERILE" | "REDUCED" | null — idem
   /**
+   * Raça (ADR-0033 adendo 2), anulável. Gato de raça: id da raça ("gato-persa"); cão: slug da espécie; nascido: a raça dos pais se
+   * IGUAL, senão NULL (mestiço). NULL também em variedade de cor, felino selvagem e espécime anterior a esta coluna.
+   * MIGRAÇÃO NÃO GERADA — rodar `db:generate` (esperado: `ALTER TABLE "specimens" ADD COLUMN "breed" text`) e aplicar ANTES do merge.
+   */
+  breed: text("breed"),
+  /**
    * ADR-0019: todo espécime nascido de cruzamento já tem direito a UM
    * retrato de IA sem custo (nem cota, nem crédito) — este campo é esse
    * "vale" ainda não usado. `true` só na criação via cruzamento (nunca em

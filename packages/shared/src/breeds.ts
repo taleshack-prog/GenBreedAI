@@ -134,6 +134,29 @@ export const DOG_BREED_ENGLISH_NAMES: Readonly<Record<string, string>> = {
   "afghan-hound": "Afghan Hound",
 };
 
+/**
+ * Nome INGLÊS das raças de GATO para o prompt, por id de raça (o mesmo id do fundador e de `specimens.breed`, ADR-0033 adendo 2).
+ * Transcrito literalmente do `descriptor` em `BREEDS` ("a Persian cat: …"); o teste confere que "<Nome> cat" aparece lá.
+ * `gato-tabby`, `gato-preto` e `gato-branco` NÃO estão aqui de propósito: são variedades de cor de "domestic shorthair", não raças —
+ * não têm `breed` e seguem saindo como gato doméstico.
+ */
+export const CAT_BREED_ENGLISH_NAMES: Readonly<Record<string, string>> = {
+  "gato-siames": "Siamese",
+  "gato-maine-coon": "Maine Coon",
+  "gato-persa": "Persian",
+  "gato-bengala": "Bengal",
+  "gato-birmania": "Birman",
+  "gato-sphynx": "Sphynx",
+  "gato-mau-egipcio": "Egyptian Mau",
+  "gato-abissinio": "Abyssinian",
+  "gato-ragdoll": "Ragdoll",
+};
+
+/** Nome inglês da raça de gato pelo id de raça (`specimens.breed`), ou `undefined` (nulo, variedade de cor ou desconhecida). */
+export function catBreedEnglishName(breed: string | null | undefined): string | undefined {
+  return breed ? CAT_BREED_ENGLISH_NAMES[breed] : undefined;
+}
+
 /** Nome inglês da raça pura pelo slug de espécie, ou `undefined` (espécie desconhecida, híbrido com "×" ou sem nome no descritor). */
 export function dogBreedEnglishName(species: string): string | undefined {
   return species.includes("×") ? undefined : DOG_BREED_ENGLISH_NAMES[species];

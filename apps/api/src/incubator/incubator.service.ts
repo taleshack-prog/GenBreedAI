@@ -21,6 +21,7 @@ import {
   type IncubatorState, type IncubatorStateCounts,
 } from "./in-memory.repository";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
+import { breedForOffspring } from "../specimens/breed";
 import { ImageService, cacheKeyOf } from "../images/image.service";
 import { stat, publicUrl } from "../images/storage";
 import { QuotaService } from "../quota/quota.service";
@@ -275,7 +276,9 @@ export class IncubatorService {
     //
     // Nenhum custo aqui — skipQuota=true sempre: a vaga já foi paga em
     // GESTAR (ADR-0021 item 3); `generateForSpecimen` não cobra de novo.
-    const fake = this.asFakeSpecimen(entry);
+    // ADR-0033 adendo 2: a raça do filhote (mesma dos dois pais, senão nula) entra ANTES do retrato — o prompt a usa — e é gravada abaixo.
+    const breed = await breedForOffspring(this.specimens, entry.sireId, entry.damId);
+    const fake = { ...this.asFakeSpecimen(entry), breed };
     const result = await this.images.generateForSpecimen(fake, ownerId, tier, true);
     const stored = await this.specimens.save({
       id: "", ownerId, pack: entry.pack, species: entry.species,
@@ -287,6 +290,7 @@ export class IncubatorService {
       // O retrato já foi gerado (e pago, via a vaga de gestação) agora mesmo
       // — nenhum "vale" de retrato incluído (ADR-0019) faz sentido de novo.
       includedPortrait: false,
+      breed,
       // ADR-0023: instante do NASCIMENTO — usado pelo ciclo de vida da
       // incubadora (`incubator-lifecycle.ts`) pra decidir quando a ENTRADA
       // expira (7 dias corridos). Via `Clock` (nunca `new Date()` direto),

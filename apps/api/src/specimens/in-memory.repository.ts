@@ -9,6 +9,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Genotype, Phenotype, BreedingMethod, Sex, FertilityResult } from "@genbreedai/shared";
 import type { Pedigree } from "@genbreedai/engine";
+import { founderBreed } from "./breed";
 
 export type PackId = "feline" | "canine";
 
@@ -44,6 +45,11 @@ export interface StoredSpecimen {
    * `CrossService.execute()` cria o espécime; nunca em fundador.
    */
   includedPortrait?: boolean;
+  /**
+   * Raça (ADR-0033 adendo 2) — OPCIONAL pelo mesmo motivo de `includedPortrait`. `null`/ausente = sem raça (mestiço, variedade de
+   * cor, felino selvagem ou espécime anterior à coluna). Ver `specimens/breed.ts` para as regras de preenchimento e herança.
+   */
+  breed?: string | null;
   /**
    * Data de criação — OPCIONAL pelo mesmo motivo de `includedPortrait`
    * acima (não exigir atualizar todo literal de `StoredSpecimen` já
@@ -178,6 +184,8 @@ export function founderSeeds(): StoredSpecimen[] {
     sex: FOUNDER_SEX[id]!, fertility: null, haldaneStatus: null,
     // Fundador nunca teve "cruzamento" nenhum — sem retrato incluído (ADR-0019).
     includedPortrait: false,
+    // Raça (ADR-0033 adendo 2): gato de raça → id da raça; cão → espécie; variedade de cor/selvagem → null. Gêmeos herdam via `...f`.
+    breed: founderBreed(id, species),
   });
   const R = (x: [string,string]) => x; // helper de legibilidade
   const base: StoredSpecimen[] = [

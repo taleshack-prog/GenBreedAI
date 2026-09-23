@@ -12,6 +12,7 @@ import {
 import { biologicalSpecies, normalizeBiologicalSpecies } from "@genbreedai/shared";
 import type { BreedingMethod, Genotype, CrossResult, Tier } from "@genbreedai/shared";
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
+import { inheritBreed, specimenBreed } from "../specimens/breed";
 import { assertTierAllows, specimenVisibleAtTier } from "../common/tier-access";
 import { classifyCross, type CrossClassification } from "@genbreedai/engine";
 import { WalletService } from "../economy/wallet.service";
@@ -311,6 +312,8 @@ export class CrossService {
       haldaneStatus: result.specimen.fertility.haldaneStatus,
       phenotype: result.specimen.phenotype,
       includedPortrait: true, // ADR-0019: todo cruzamento já inclui 1 retrato de IA, sem cota/crédito.
+      // ADR-0033 adendo 2: herda a raça só se pai e mãe têm a MESMA; senão nulo (mestiço).
+      breed: inheritBreed(specimenBreed(sire), specimenBreed(dam)),
     });
     await this.wallet.rewardForCross(ownerId, result.specimen.aura).catch(() => {}); // fonte: fixação
     // Retrato incluído (ADR-0019) — dispara em segundo plano, NUNCA atrasa

@@ -44,6 +44,7 @@ function toStored(r: Row): StoredSpecimen {
     fertility: r.fertility ?? null,
     haldaneStatus: (r.haldaneStatus as StoredSpecimen["haldaneStatus"]) ?? null,
     includedPortrait: r.includedPortrait ?? false,
+    breed: r.breed ?? null,
     createdAt: r.createdAt,
   };
 }
@@ -93,6 +94,7 @@ export class DrizzleSpecimenRepository extends SpecimenRepository {
       fertility: specimen.fertility ?? null,
       haldaneStatus: specimen.haldaneStatus ?? null,
       includedPortrait: specimen.includedPortrait ?? false,
+      breed: specimen.breed ?? null, // fora do `set` do upsert: a raça é gravada uma vez, na criação
     };
     await this.db
       .insert(specimens)

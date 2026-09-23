@@ -59,6 +59,7 @@ async function main() {
       id: f.id, ownerId: f.ownerId, pack: f.pack, species: f.species, genotype: f.genotype,
       phenotype: null, generation: f.generation, sireId: f.sireId, damId: f.damId, method: f.method,
       fPedigree: f.fPedigree, fixationIndex: f.fixationIndex, aura: f.aura, cacheKey: f.cacheKey, provenanceHash: null,
+      breed: f.breed ?? null,
     });
   }
   await pool.end();

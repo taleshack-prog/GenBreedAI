@@ -20,7 +20,7 @@
  * `physiqueAdj`) — nunca dos descritores fixos de espécie.
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
-import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, baseFounderId, DOG_BREEDS } from "@genbreedai/shared";
+import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, catBreedEnglishName, baseFounderId, DOG_BREEDS } from "@genbreedai/shared";
 import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
@@ -229,8 +229,8 @@ export function buildPrompt(s: StoredSpecimen): string {
   } else {
     const info = speciesInfo(s.species);
     // Gêmeo de fundador ("boerboel-femea", "gato-persa-macho") é tratado como o fundador BASE: sem `baseFounderId` o id não casava
-    // em nenhuma tabela e a raça se perdia. Espécime nascido (id gerado) continua sem casar — a raça de gato NÃO é recuperável
-    // pela espécie ("felis-catus") nem por outro campo (ver ADR-0033, adendo); a de cão sim, pelo `dogBreedEnglishName` abaixo.
+    // em nenhuma tabela e a raça se perdia. Espécime nascido (id gerado) não casa pelo id: a raça de GATO vem de `s.breed`
+    // (ADR-0033 adendo 2 — a espécie "felis-catus" não a carrega) e a de CÃO, da espécie (`dogBreedEnglishName` abaixo).
     const baseId = baseFounderId(s.id);
     const breed = s.species === "felis-catus" ? breedInfo(baseId) : undefined;
     const dogBreed = s.pack === "canine" ? dogBreedInfo(baseId) : undefined;
@@ -248,6 +248,13 @@ export function buildPrompt(s: StoredSpecimen): string {
         ? `a purebred ${breedName} dog (Canis familiaris), ${physiqueAdj}${morphClause}. ` +
           `Its coat and features (these take priority over the ${breedName} breed's typical colour and markings): ${coat}`
         : `a ${physiqueAdj} mixed-breed dog${morphClause}, with ${coat}`;
+    } else if (catBreedEnglishName(s.breed) && s.species === "felis-catus") {
+      // GATO DE RAÇA nascido (`breed` = mesma raça dos dois pais, ADR-0033 adendo 2): nomeia a raça em inglês, sem o descriptor
+      // (que traz cor típica — Siamese "pointed", etc.); cor, padrão e morfologia continuam do fenótipo calculado e PREVALECEM.
+      // Mestiço (`breed` nulo), variedade de cor (tabby/preto/branco) e espécime antigo seguem no ramo genérico abaixo.
+      const catName = catBreedEnglishName(s.breed)!;
+      subject = `a purebred ${catName} cat (Felis catus), ${physiqueAdj}${morphClause}. ` +
+        `Its coat and features (these take priority over the ${catName} breed's typical colour and markings): ${coat}`;
     } else {
       const override = lionessOverride(s.species, s.sex);
       const commonName = override ? override.name : info.common;

@@ -12,11 +12,12 @@ import { buildPrompt } from "../src/images/prompt";
 const founder = (id: string): StoredSpecimen => founderSeeds().find((f) => f.id === id)!;
 
 /** Espécime NASCIDO: mesmo genótipo do fundador, mas id gerado e método ≠ FOUNDER (como sai de um cruzamento). */
-function born(baseId: string, over: { species?: string; loci?: Record<string, [string, string]> } = {}): StoredSpecimen {
+function born(baseId: string, over: { species?: string; loci?: Record<string, [string, string]>; breed?: string | null } = {}): StoredSpecimen {
   const f = founder(baseId);
   const genotype = structuredClone(f.genotype);
   for (const [k, v] of Object.entries(over.loci ?? {})) genotype.loci[k] = v;
-  return { ...f, id: "spc_nascido_0001", ownerId: "jogador", method: "F1", generation: 1, genotype, species: over.species ?? f.species };
+  // `breed` é explícito (nulo por padrão): o nascido NÃO herda o campo do fundador pelo spread — ele o recebe dos pais no cruzamento.
+  return { ...f, id: "spc_nascido_0001", ownerId: "jogador", method: "F1", generation: 1, genotype, species: over.species ?? f.species, breed: over.breed ?? null };
 }
 
 describe("raça pura canina nascida — o prompt NOMEIA a raça", () => {
@@ -118,15 +119,18 @@ describe("híbridos e demais caminhos continuam como estavam", () => {
     expect(p).toContain("Coat: a pure solid white coat");
   });
 
-  it("gato de raça NASCIDO (id gerado, species 'felis-catus') ainda perde a raça: nenhum campo do espécime guarda o slug da raça", () => {
-    // Documenta o limite atual (ADR-0033, adendo). Para o gato nascido ler "Persian" é preciso guardar a raça no espécime.
-    const p = buildPrompt(born("gato-persa"));
+  it("gato nascido SEM breed (mestiço ou espécime anterior à coluna) segue saindo como gato doméstico, como hoje", () => {
+    const p = buildPrompt(born("gato-persa")); // breed nulo
     expect(p).not.toContain("a Persian cat:");
     expect(p).not.toContain("purebred");
     expect(p).toContain("domestic house cat");
   });
 
-  it.todo("gato de raça nascido contém 'Persian' — BLOQUEADO até existir um campo `breed` no espécime (schema + migração; ver ADR-0033, adendo)");
+  it("gato de raça NASCIDO com breed 'gato-persa' contém 'Persian' e 'purebred' (era o it.todo — agora com o campo breed)", () => {
+    const p = buildPrompt(born("gato-persa", { breed: "gato-persa" }));
+    expect(p).toContain("a purebred Persian cat (Felis catus)");
+    expect(p).not.toContain("domestic house cat");
+  });
 
   it("raça sem nome inglês no descritor (terrier-anao-branco) cai no texto genérico de antes — sem inventar nome", () => {
     const p = buildPrompt(born("terrier-anao-branco"));
