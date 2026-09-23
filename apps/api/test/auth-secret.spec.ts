@@ -25,6 +25,8 @@ const STRONG = "9f2c4b7a1e8d3c6b5a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b
 const ENV_KEYS = [
   "NODE_ENV", "AUTH_SECRET", "DATABASE_URL", "AUTH_DEV_HEADERS",
   "FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL",
+  // Stripe e VAPID também são validados no boot em produção (ADR-0031, adendo 2) e o `.env` local pode defini-los.
+  "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_SUCCESS_URL", "STRIPE_CANCEL_URL", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -33,7 +35,7 @@ beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   delete process.env.AUTH_SECRET;
   delete process.env.DATABASE_URL; // app em memória
-  for (const k of ["FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]) delete process.env[k];
+  for (const k of ENV_KEYS) if (k !== "NODE_ENV" && k !== "AUTH_DEV_HEADERS") delete process.env[k];
   resetAuthSecretWarning();
   warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 });

@@ -84,9 +84,56 @@ locais, inalteradas por este ADR.
 | `R2_PUBLIC_URL`/`R2_BUCKET` com valor errado (não vazio) | URLs de retrato quebradas; a checagem só vê presença. | Média |
 | `GOOGLE_CLIENT_ID` ausente | Login Google responde 400; e-mail/senha segue. | Baixa (documentado, opcional) |
 
-Proposta (não aplicada, decisão do dono): em produção, exigir `STRIPE_WEBHOOK_SECRET` sempre que `STRIPE_SECRET_KEY` estiver
-definida, e recusar `STRIPE_SECRET_KEY` ausente quando as URLs de Checkout de produção estiverem definidas (configuração
-incoerente); recusar VAPID pela metade. Cada uma seguiria o mesmo padrão `assert…ForBoot()`.
+Proposta desta varredura: **aplicada no adendo 2 abaixo** (webhook secret, URLs de retorno e VAPID pela metade). Por decisão do
+dono, `STRIPE_SECRET_KEY` ausente em produção **passa com aviso** (em vez de falhar quando há outras variáveis do Stripe).
+
+## Adendo 2 — Stripe e VAPID no boot (2026-09-19)
+
+Aplica a proposta da varredura. Novos módulos, chamados só em `buildApp()` depois de `assertR2ForBoot()`:
+
+**Stripe — `common/stripe-config.ts` (`assertStripeForBoot`)**
+1. **Produção com `STRIPE_SECRET_KEY` definida** (billing real ligado): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL` e
+   `STRIPE_CANCEL_URL` são obrigatórias; faltando qualquer uma o boot **lança** (`[billing] Stripe inválido em produção: …`, saída 1).
+   Todos os problemas aparecem juntos numa só mensagem.
+2. As duas URLs, em produção, precisam ser **https**, **não** apontar para localhost (`localhost`, `*.localhost`, `127.x`, `0.0.0.0`,
+   `::1`) e não ter espaço/quebra de linha. Não se confere o domínio (nem se faz rede): só se barra o que com certeza é erro.
+3. **Produção sem `STRIPE_SECRET_KEY`:** passa, com aviso `[billing] … billing DESLIGADO` 1x por processo. Se o segredo do webhook
+   ou as URLs estiverem definidos, o aviso diz (só nomes) que serão IGNORADOS — provavelmente a chave sumiu. Não falha: billing
+   desligado é escolha válida.
+4. **Fora de produção nada falha.** Só avisa (1x por processo) quando há `STRIPE_SECRET_KEY` sem `STRIPE_WEBHOOK_SECRET` (pagamento
+   não seria creditado). As URLs **não** são conferidas: o padrão `localhost:3000` é o correto em dev.
+
+"Definida": a chave, como em `resolvePaymentProvider` (não vazia — o boot vale exatamente quando o provider Stripe é criado; uma
+chave só com espaço conta como ativa); as demais, não vazias após `trim()` (segredo só com espaço equivale a ausente).
+
+**VAPID — `common/vapid-config.ts` (`assertVapidForBoot`)**
+5. **Só UMA das duas chaves** (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`) definida: em produção o boot **lança** (`[push] VAPID inválido
+   em produção: … definida, FALTA …`); fora de produção só avisa. As duas ou nenhuma passam em silêncio (push desligado é opcional).
+
+**Comum:** mensagens só com NOMES de variável, nunca valores (segredo do webhook, chave do Stripe, URLs, chave privada).
+
+**Scripts de linha de comando:** nada muda para o `push-cron` (só `DATABASE_URL` + `VAPID_*`). Os dois módulos novos e
+`billing/payment.provider.ts` entraram na lista `FORBIDDEN` de `test/cli-boot-isolation.spec.ts`: se um script passar a alcançá-los
+(direta ou transitivamente), o teste falha. O `push:dispatch` continua com a própria checagem de VAPID pela metade.
+
+**Testes:** `test/stripe-config.spec.ts` (combinações em produção, cada uma das três faltando individualmente, URLs http/localhost/
+inválidas, sem chave, fora de produção, ausência de valores nas mensagens, `buildApp()` real) e `test/vapid-config.spec.ts`.
+`auth-secret.spec.ts`, `database-url.spec.ts` e `r2-config.spec.ts` passaram a isolar `STRIPE_*` e `VAPID_*`.
+
+**Consequências / riscos**
+- Um deploy de produção com Stripe ligado e qualquer uma das três variáveis ausente/ruim, ou com VAPID pela metade, **deixa de subir**
+  — deliberado. **Ação antes do merge:** conferir no Railway (serviço da API) `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL` e
+  `STRIPE_CANCEL_URL` (https, domínio real) e as duas chaves VAPID (ou nenhuma). O `push-cron` não é afetado.
+- Continua sem detecção: segredo do webhook de OUTRO endpoint/modo (test × live), URL https do domínio errado, e
+  `NEXT_PUBLIC_VAPID_PUBLIC_KEY` da web diferente da pública da API. Conferir na operação (evento de teste do Stripe; checklist do DEPLOY.md).
+- Uma chave do Stripe em modo de teste (`sk_test_…`) em produção também passa — a checagem não olha o prefixo (fora do escopo pedido).
+
+**Alternativas consideradas**
+- *Falhar também sem a chave quando houver outras variáveis do Stripe:* rejeitada por decisão do dono — só avisa.
+- *Exigir o prefixo `whsec_`/`sk_live_`:* rejeitada por ora — risco de derrubar um deploy que funciona (formatos mudam; modo de teste).
+- *Validar o domínio das URLs contra `genbreed.com.br`:* rejeitada — domínio custom/staging legítimos; só se barra localhost e http.
+- *Reaproveitar `vapidPartiallyConfigured()` dentro de `common/vapid.ts`:* rejeitada — colocaria a guarda no grafo do cron; a guarda
+  ficou em módulo próprio (`vapid-config.ts`) e `vapid.ts` segue puro.
 
 ## Alternativas consideradas
 

@@ -16,7 +16,11 @@ import { resetDatabaseWarning } from "../src/common/database-url";
 
 const STRONG_SECRET = "9f2c4b7a1e8d3c6b5a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b";
 const FAKE_DB = "postgresql://user:senha-secreta@127.0.0.1:5432/genbreed_test"; // o Pool do pg só conecta na 1ª query — sem rede no boot
-const ENV_KEYS = ["NODE_ENV", "AUTH_SECRET", "DATABASE_URL", "FAL_KEY", ...R2_VARS] as const;
+const ENV_KEYS = [
+  "NODE_ENV", "AUTH_SECRET", "DATABASE_URL", "FAL_KEY", ...R2_VARS,
+  // Stripe e VAPID também são validados no boot em produção (ADR-0031, adendo 2); o `.env` local pode defini-los.
+  "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_SUCCESS_URL", "STRIPE_CANCEL_URL", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
+] as const;
 /** Valores INCONFUNDÍVEIS: se algum aparecer numa mensagem, o teste acusa vazamento. */
 const SECRET_VALUE = (k: string) => `VALOR-SECRETO-DE-${k}-9x7q`;
 
@@ -24,7 +28,7 @@ let saved: Record<string, string | undefined>;
 let warnSpy: MockInstance<typeof console.warn>;
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
-  for (const k of ["AUTH_SECRET", "DATABASE_URL", "FAL_KEY", ...R2_VARS]) delete process.env[k];
+  for (const k of ENV_KEYS) if (k !== "NODE_ENV") delete process.env[k];
   resetR2Warnings(); resetAuthSecretWarning(); resetDatabaseWarning();
   warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 });

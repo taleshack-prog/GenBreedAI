@@ -18,6 +18,7 @@ const FAKE_URL = "postgresql://user:senha-secreta@127.0.0.1:5432/genbreed_test";
 const ENV_KEYS = [
   "NODE_ENV", "AUTH_SECRET", "DATABASE_URL",
   "FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL",
+  "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_SUCCESS_URL", "STRIPE_CANCEL_URL", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY",
 ] as const;
 
 let saved: Record<string, string | undefined>;
@@ -26,7 +27,7 @@ beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   delete process.env.AUTH_SECRET;
   delete process.env.DATABASE_URL;
-  for (const k of ["FAL_KEY", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_URL"]) delete process.env[k];
+  for (const k of ENV_KEYS) if (k !== "NODE_ENV") delete process.env[k];
   resetDatabaseWarning();
   resetAuthSecretWarning();
   warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

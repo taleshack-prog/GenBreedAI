@@ -25,6 +25,9 @@ const FORBIDDEN = [
   "common/auth-secret.ts",
   "common/database-url.ts",
   "common/r2-config.ts",
+  "common/stripe-config.ts", // ADR-0031 adendo 2: o push-cron não tem variável do Stripe
+  "common/vapid-config.ts", // guarda de boot de VAPID pela metade (o cron tem a própria checagem em common/vapid.ts)
+  "billing/payment.provider.ts", // resolvePaymentProvider/Stripe: o cron não deve carregar o billing HTTP
   "auth/auth.service.ts", // chama resolveAuthSecret() (exige AUTH_SECRET em produção) ao assinar/verificar JWT
 ];
 

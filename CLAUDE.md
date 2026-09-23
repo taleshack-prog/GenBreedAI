@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0031) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0032) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -140,12 +140,13 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
    de Brasília, senão quem coletou nessa noite perde o bônus do dia seguinte); a cota mensal não tem ajuste confiável. **Tier efetivo com `Clock` (ADR-0029):** o `TierService` lê o
    `Clock` e passa o `now` aos repositórios (`findActiveForUser(userId, now)`) — expiração de `granted_tiers` e `PAST_DUE` testáveis; nenhum outro ponto do servidor
    decide regra pela data do sistema (sobram só auditoria/ids/cache). Na web, duas cópias de exibição da regra `PAST_DUE` usam `Date.now()` (não gateiam nada).
-6. **Variáveis que ainda degradam em silêncio (a trava do R2 foi APLICADA, ADR-0031 — `common/r2-config.ts`).** O boot só confere
-   *presença* do R2: `R2_PUBLIC_URL`/`R2_BUCKET` com valor ERRADO (mas não vazio) continuam sem aviso. Sobram, sem trava de boot:
-   `STRIPE_WEBHOOK_SECRET` ausente (webhook 400: pagamento feito, nada creditado — o mais grave), `STRIPE_SECRET_KEY` ausente (cai no
-   stub, sem cobrança real), `STRIPE_SUCCESS_URL`/`STRIPE_CANCEL_URL` ausentes (Checkout volta para `localhost`), VAPID só metade
-   definida (push desligado), `NEXT_PUBLIC_VAPID_PUBLIC_KEY` diferente da VAPID da API (envio falha). Detalhes e proposta no ADR-0031;
-   nenhuma dessas travas foi aplicada (decisão do dono).
+6. **Travas de boot da API (ADR-0031 e adendo 2) — APLICADAS:** R2 (`common/r2-config.ts`), Stripe (`common/stripe-config.ts`: com
+   `STRIPE_SECRET_KEY` em produção, `STRIPE_WEBHOOK_SECRET` e as URLs https não-localhost são obrigatórias) e VAPID pela metade
+   (`common/vapid-config.ts`). **Ainda degradam em silêncio (o boot só confere presença/forma, não correção):** `R2_PUBLIC_URL`/`R2_BUCKET`
+   com valor ERRADO (não vazio); `STRIPE_WEBHOOK_SECRET` presente mas de OUTRO endpoint/modo (assinatura nunca confere → 400); URL de retorno
+   https para o domínio errado; `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (web) diferente da VAPID da API (envio falha); `STRIPE_SECRET_KEY` ausente
+   passa com aviso (billing desligado, por escolha). **Ação antes do merge:** conferir no Railway (serviço da API) que as variáveis
+   cumprem as regras — senão o próximo deploy falha no boot (o `push-cron` não é afetado).
 7. **`sharp` não instalado na API** (ADR-0027): sem ele nenhuma miniatura é gerada (o retrato é salvo normalmente, com aviso no log).
    Instalar com `pnpm --filter @genbreedai/api add sharp` e commitar `package.json` + `pnpm-lock.yaml` juntos (Dockerfile usa
    `--frozen-lockfile`). Retratos anteriores à ADR-0027 ficam sem miniatura até rodar `images:backfill-thumbs`.
@@ -197,8 +198,8 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 - **Gestação por aura:** 1★ 12h · 2★ 18h · 3★ 24h · 4★ 36h · 5★ 48h (`gestation-time.ts`; regra de produto, vive na API,
   nunca no motor). **Exceção (ADR-0025): a PRIMEIRA gestação de cada conta dura 5 minutos, qualquer aura** (cortesia de
   boas-vindas, 1x por conta); a marca é `users.first_gestation_at` + `first_gestation_entry_id` (claim atômico, nunca muda — não se deduz das
-  entradas, que somem; a entrada acelerada se identifica pelo id, não por instante). Só o prazo muda: a 1ª gestação consome vaga/crédito normalmente. **A coluna exige migração AINDA NÃO gerada/aplicada:
-  aplicar antes do merge (DEPLOY.md §7) — código novo sem a coluna quebra login e cadastro.**
+  entradas, que somem; a entrada acelerada se identifica pelo id, não por instante). Só o prazo muda: a 1ª gestação consome vaga/crédito normalmente. **Em produção desde 18/09 (informado: migração 0011
+  aplicada e commit publicado — não verificável pelo repo).**
 - **Incubadora** (ADR-0020/0021/0023): guarda as descrições não gestadas sem prazo, com **teto de 200 não gestadas por
   jogador** — ao cruzar, as mais antigas não gestadas são descartadas até caber (`POST /cross` devolve `discardedForCap`);
   nunca descarta entrada em gestação nem nascida. Entrada **nascida some 7 dias corridos após o nascimento**; o espécime
@@ -240,7 +241,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 | Tabela | Papel |
 |---|---|
-| `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp, `first_gestation_at`, `first_gestation_entry_id` (nullable; ADR-0025, migração pendente) |
+| `users` | id, email, nome, `password_hash`, `google_id`, `tier`, streak, xp, `first_gestation_at`, `first_gestation_entry_id` (nullable; ADR-0025, migração 0011 aplicada — informado) |
 | `specimens` | Espécimes e fundadores. Genótipo/fenótipo em JSONB; `sex`, `fertility`, `haldane_status` (anuláveis, ADR-0015; legado fica NULL), `included_portrait` ("vale" de retrato da ADR-0019, hoje `false` nos nascimentos), `status` (ALIVE/FROZEN), `cache_key`, `created_at` (= instante do nascimento, base do ciclo de vida, ADR-0023) |
 | `incubator_entries` | Descrições geradas por cruzamento: `cross_id`, genótipo/fenótipo, `prob`, aura, `sex`, `gestation_started_at`, `gestation_ends_at`, `born_specimen_id`, `ready_notified_at` (aviso "Gestação concluída" já reivindicado, ADR-0028; migração pendente); `frozen` é órfão (sem escritor). Índices `(owner_id, created_at)` e `gestation_ends_at` |
 | `push_subscriptions` | Assinaturas de Web Push por dispositivo (ADR-0028; migração pendente): `user_id`, `endpoint` (único), `p256dh`, `auth`, `user_agent`, `created_at`, `last_used_at`, `failed_at` |
@@ -296,12 +297,16 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`) são obrigatórias; configuração PARCIAL (1 a 4) falha
   MESMO sem `FAL_KEY`; sem `FAL_KEY` e sem nenhuma `R2_*` passa (modo procedural) com aviso 1x por processo. Fora de produção nada
   falha — só avisa quando as imagens cairiam no disco local (não persistem). Mensagens só com NOMES de variável, nunca valores.
-  Os demais segredos ausentes falham FECHADO (webhook Stripe 400, login Google 400, sem fal.ai só o modo procedural) — nenhum
-  tem fallback inseguro; os que só degradam em silêncio estão na pendência 6 da seção 6 e no `DEPLOY.md` §3.1.
+  **Stripe também é validado no boot** (`common/stripe-config.ts`, ADR-0031 adendo 2): em produção com `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `STRIPE_SUCCESS_URL` e `STRIPE_CANCEL_URL` são obrigatórias, e as duas URLs precisam ser https e não apontar para localhost; sem a chave passa
+  (billing desligado) com aviso 1x por processo; fora de produção só avisa (chave sem webhook secret). **VAPID pela metade** (`common/vapid-config.ts`)
+  falha o boot em produção; as duas ou nenhuma passam. Mensagens só com NOMES de variável. Lista de guardas: `main.ts` → `buildApp()`.
+  Os demais segredos ausentes falham FECHADO (login Google 400, sem fal.ai só o modo procedural) — nenhum tem fallback inseguro; o que ainda
+  degrada em silêncio está na pendência 6 da seção 6 e no `DEPLOY.md` §3.1.
   **Guardas de boot valem SÓ para a API HTTP (`buildApp()`), nunca para scripts de linha de comando** — o `push-cron` do Railway tem só
   `DATABASE_URL` + `VAPID_*` com `NODE_ENV=production`; script novo não pode importar `main.ts`/`app.module.ts`/módulos de guarda
-  (`test/cli-boot-isolation.spec.ts` falha se importar). Guarda nova: chame `assert…ForBoot()` só em `buildApp()` e inclua o módulo na lista `FORBIDDEN` do teste.
-  **Testes que chamam `buildApp()` em produção devem isolar `FAL_KEY` e as `R2_*`** (o `main.ts` carrega o `.env` local por dotenv).
+  (`test/cli-boot-isolation.spec.ts` falha se importar; o `push-cron` não tem variável do Stripe/R2/`AUTH_SECRET`). Guarda nova: chame `assert…ForBoot()` só em `buildApp()` e inclua o módulo na lista `FORBIDDEN` do teste.
+  **Testes que chamam `buildApp()` em produção devem isolar `FAL_KEY`, as `R2_*`, `STRIPE_*` e `VAPID_*`** (o `main.ts` carrega o `.env` local por dotenv).
 
 ## 11. Definition of Done (todo PR)
 
@@ -318,7 +323,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0032). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0033). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -342,7 +347,8 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0028** — (produto/infra, não genética) Web Push: aviso "Gestação concluída" via cron externo do Railway (`push:dispatch`); assinaturas por dispositivo; desligado sem VAPID; limitação do iPhone.
 - **0029** — (economia/infra, não genética) Saldos e contadores: todo ajuste é `UPDATE` atômico, nunca leitura seguida de escrita; carteira e cota mensal de retratos corrigidas.
 - **0030** — (produto/infra, não genética) Avisos de assinatura: push no cron existente (`push:dispatch`, passo 2) + faixa no app (`GET /me/subscription-notice`); 3 momentos, uma vez por período, marcação atômica; não muda a regra de vigência.
-- **0031** — (infra, não genética) Trava de boot do R2 (`common/r2-config.ts`): produção + `FAL_KEY` exige as cinco `R2_*`; parcial falha sempre; sem `FAL_KEY` e sem R2 passa com aviso; fora de produção só avisa.
+- **0031** — (infra, não genética) Travas de boot da API: R2 (`common/r2-config.ts`: produção + `FAL_KEY` exige as cinco `R2_*`; parcial falha sempre; sem `FAL_KEY` e sem R2 passa com aviso); adendo 1: só o boot HTTP, nunca os scripts (`push-cron`); adendo 2: Stripe (com `STRIPE_SECRET_KEY`, webhook secret + URLs https não-localhost) e VAPID pela metade; fora de produção só avisa.
+- **0032** — (produto/web, não genética) Página pública `/o-que-e` (sem login; fora do matcher do middleware): texto e JSON-LD (FAQPage + SoftwareApplication) saem da fonte única `apps/web/lib/about.ts`; preços/limites de `plans.ts`, espécies do catálogo; fato novo só com fonte, sem "em breve" nem espécie não implementada; teste confere JSON-LD × texto visível. Adendo: `app/sitemap.ts` e `app/robots.ts` (nativos do Next 15; rotas em `lib/public-routes.ts` — sitemap só com rotas públicas de conteúdo, nunca `/app/*` nem `/f/[id]`; robots bloqueia `/app/`); rota pública nova de conteúdo entra em `PUBLIC_ROUTES`.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.
@@ -361,7 +367,7 @@ felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos 
 - Stripe em modo live e deploy automático da `main` (informados; sem registro no repo).
 - Procedimento de backup no Neon antes de migrar (informado; não documentado no repo).
 - Se a migração 0010 (gestação, ADR-0021) já foi aplicada no Neon de produção.
-- ADR-0025: migração de `users.first_gestation_at`/`first_gestation_entry_id` (2 colunas) ainda não gerada (`db:generate`) nem aplicada; e se contas antigas devem ganhar a
+- ADR-0025: em produção desde 18/09 (informado; migração 0011 aplicada). Ainda em aberto: se contas antigas devem ganhar a
   cortesia (hoje ganham, coluna `NULL`) ou receber backfill.
 - PWA (ADR-0026): instalabilidade no Android/iPhone não verificada em aparelho real; Web Push (ADR-0028) confirmado em Android (informado), **não** em iPhone nem desktop; `public/icon.svg` órfão (arte antiga — apagar ou
   atualizar); sem tela de abertura do iOS (`apple-touch-startup-image`).
