@@ -11,7 +11,7 @@ import { NextRequest } from "next/server";
 import { SPECIES_INFO, BREEDS, DOG_BREEDS } from "@genbreedai/shared";
 import { PLANS, fmtBRL } from "../plans";
 import {
-  ABOUT_DESCRIPTION, ABOUT_LEAD, ABOUT_OG_IMAGE, ABOUT_PATH, ABOUT_URL, aboutFaq, aboutSections, aboutVisibleText,
+  ABOUT_BLOG_LINKS, ABOUT_PUBLISHER, ABOUT_DESCRIPTION, ABOUT_LEAD, ABOUT_OG_IMAGE, ABOUT_PATH, ABOUT_URL, aboutFaq, aboutSections, aboutVisibleText,
   buildAboutJsonLd, planLine, serializeJsonLd,
 } from "../about";
 import { config as middlewareConfig, middleware } from "../../middleware";
@@ -21,6 +21,7 @@ const text = aboutVisibleText();
 const graph = buildAboutJsonLd();
 interface AppNode {
   name: string; description: string; applicationCategory: string; operatingSystem: string; inLanguage: string;
+  publisher: { "@type": string; name: string; url: string };
   featureList: string[]; offers: { "@type": string; name: string; price: string; priceCurrency: string }[];
 }
 interface FaqNode { mainEntity: { "@type": string; name: string; acceptedAnswer: { "@type": string; text: string } }[] }
@@ -69,6 +70,13 @@ describe("JSON-LD — válido e completo", () => {
     expect(app.operatingSystem).toBe("Web");
     expect(text).toContain("no navegador"); // sistema: web
     expect(app.inLanguage).toBe("pt-BR");
+  });
+
+  it("publisher: Organization 'Hack Tech Farm' com a URL do site, e o nome aparece no texto visível (linha 'Publicado por')", () => {
+    expect(app.publisher).toEqual({ "@type": "Organization", name: "Hack Tech Farm", url: "https://hacktechfarm.com.br/" });
+    expect(ABOUT_PUBLISHER).toEqual({ name: app.publisher.name, url: app.publisher.url });
+    expect(text).toContain(`Publicado por ${app.publisher.name}`);
+    expect(readFileSync(web("app/o-que-e/page.tsx"), "utf8")).toContain("href={ABOUT_PUBLISHER.url}");
   });
 
   it("featureList: cada item é um subtítulo do bloco 'O que calcula de verdade' e aparece no texto", () => {
@@ -193,9 +201,41 @@ describe("página, metadata e rota pública", () => {
     }
   });
 
-  it("a landing e o rodapé apontam para a página", () => {
+  it("blog da Hack Tech Farm: as entradas (se houver) têm título e URL https do domínio real; o bloco só aparece quando há entradas", () => {
+    expect(ABOUT_BLOG_LINKS.length).toBeLessThanOrEqual(3);
+    for (const l of ABOUT_BLOG_LINKS) {
+      expect(l.title.trim().length).toBeGreaterThan(3);
+      expect(l.url.startsWith("https://hacktechfarm.com.br/"), l.url).toBe(true);
+      expect(text).toContain(l.title);
+    }
+    expect(page).toContain("ABOUT_BLOG_LINKS.length > 0");
+  });
+
+  it("os 3 artigos reais do blog estão na página, com URL exata e título que descreve o conteúdo (não a URL)", () => {
+    expect(ABOUT_BLOG_LINKS.map((l) => l.url)).toEqual([
+      "https://hacktechfarm.com.br/blog/genetica-da-cor-da-pelagem-em-gatos-guia-completo",
+      "https://hacktechfarm.com.br/blog/por-que-gatos-tricolores-sao-quase-sempre-femeas",
+      "https://hacktechfarm.com.br/blog/tigre-branco-genetica-da-cor-e-o-problema-da-endogamia",
+    ]);
+    for (const l of ABOUT_BLOG_LINKS) {
+      expect(l.title).not.toMatch(/https?:|hacktechfarm|\//i);
+      expect(text).toContain(l.title);
+    }
+    expect(text).toContain("Para entender a genética por trás do jogo");
+  });
+
+  it("links do blog: nova aba com rel=noopener e SEM nofollow (o objetivo é passar sinal entre os domínios)", () => {
+    expect(page).toContain('href={l.url} target="_blank" rel="noopener"');
+    const anchors = page.match(/<a [^>]*href=\{l\.url\}[^>]*>/g) ?? [];
+    expect(anchors.length).toBe(1);
+    expect(anchors[0]).not.toMatch(/nofollow/);
+  });
+
+  it("a landing aponta para a página em 3 lugares: link no topo do hero, fim da seção 'O que é' e rodapé", () => {
     const landing = readFileSync(web("app/page.tsx"), "utf8");
-    expect(landing).toContain('href="/o-que-e"');
+    expect(landing.match(/href="\/o-que-e"/g)!.length).toBe(3);
+    expect(landing).toContain("Ver a explicação completa");
+    expect(landing).toMatch(/absolute right-5 top-5[^>]*>\s*O que é\s*</);
     expect(page).toContain('href="/"'); // volta para a landing
   });
 });

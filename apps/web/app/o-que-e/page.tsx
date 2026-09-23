@@ -12,7 +12,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  ABOUT_DESCRIPTION, ABOUT_OG_IMAGE, ABOUT_TITLE, ABOUT_URL, aboutFaq, aboutSections, buildAboutJsonLd, serializeJsonLd,
+  ABOUT_BLOG_LABEL, ABOUT_BLOG_LINKS, ABOUT_DESCRIPTION, ABOUT_OG_IMAGE, ABOUT_PUBLISHER, ABOUT_TITLE, ABOUT_URL, aboutFaq, aboutSections, buildAboutJsonLd, serializeJsonLd,
 } from "../../lib/about";
 
 export const metadata: Metadata = {
@@ -99,7 +99,24 @@ export default function AboutPage() {
         </section>
       </div>
 
+      {ABOUT_BLOG_LINKS.length > 0 && (
+        <section className="mt-10" aria-labelledby="blog-h">
+          <h2 id="blog-h" className="mb-2 font-display text-xs font-bold uppercase tracking-widest text-cyan">{ABOUT_BLOG_LABEL}</h2>
+          <ul className="space-y-1.5 text-[0.85rem] leading-snug">
+            {ABOUT_BLOG_LINKS.map((l) => (
+              <li key={l.url}>
+                {/* Link externo (outro domínio): nova aba, noopener; SEM nofollow de propósito — passa sinal entre os dois domínios. */}
+                <a href={l.url} target="_blank" rel="noopener" className="text-cyan underline-offset-2 hover:underline">{l.title}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <footer className="mt-14 border-t border-white/10 pt-6">
+        <p className="mb-4 text-center font-mono text-[0.68rem] text-ink-muted">
+          Publicado por <a href={ABOUT_PUBLISHER.url} className="text-cyan hover:underline">{ABOUT_PUBLISHER.name}</a>
+        </p>
         <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 font-mono text-[0.7rem] uppercase tracking-wide text-ink-muted">
           <Link href="/" className="hover:text-cyan">Início</Link>
           <Link href="/termos" className="hover:text-cyan">Termos de uso</Link>

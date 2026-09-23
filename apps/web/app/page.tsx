@@ -32,6 +32,12 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-bg-900 via-bg-900/70 to-bg-900/20" />
         <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-bg-900/90 to-transparent" />
 
+        {/* Não há menu na home: este é o único link de navegação no topo (a página /o-que-e não deve ficar órfã). */}
+        <Link href="/o-que-e"
+          className="absolute right-5 top-5 z-10 rounded-lg border border-white/15 bg-bg-900/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-ink transition hover:border-cyan/40 hover:text-cyan">
+          O que é
+        </Link>
+
         <div className="relative z-10 mx-auto w-full max-w-2xl">
           <div className="mb-4 flex items-center gap-2">
             <span className="font-display text-lg font-black uppercase tracking-wide text-ink">GenBreed<span className="text-cyan">AI</span></span>
@@ -77,6 +83,11 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+          <p className="mt-6 text-center">
+            <Link href="/o-que-e" className="font-mono text-[0.75rem] uppercase tracking-wide text-cyan transition hover:underline">
+              Ver a explicação completa →
+            </Link>
+          </p>
         </div>
       </section>
 

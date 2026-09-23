@@ -25,6 +25,23 @@ export const ABOUT_LEAD = "O GenBreedAI é um simulador de genética animal jog�
 export const ABOUT_DESCRIPTION =
   `${ABOUT_LEAD} Cruze gatos, felinos selvagens e cães e veja o que a genética permite nascer.`;
 
+/** Quem publica o GenBreedAI (JSON-LD `publisher` e linha visível no fim da página). */
+export const ABOUT_PUBLISHER = { name: "Hack Tech Farm", url: "https://hacktechfarm.com.br/" } as const;
+
+export interface AboutLink { title: string; url: string }
+/**
+ * Artigos de genética do blog da Hack Tech Farm (linha no fim da página). VAZIO de propósito: nenhuma URL real existe no
+ * repositório e não se inventa URL. Preencher com 2 ou 3 entradas `{ title, url }` (https://hacktechfarm.com.br/...); enquanto
+ * estiver vazio a página não mostra o bloco. O teste valida título e domínio de cada entrada.
+ */
+export const ABOUT_BLOG_LINKS: readonly AboutLink[] = [
+  // Pilar. Títulos descrevem o conteúdo (derivados do slug de cada artigo), não repetem a URL.
+  { title: "Genética da cor da pelagem em gatos: guia completo", url: "https://hacktechfarm.com.br/blog/genetica-da-cor-da-pelagem-em-gatos-guia-completo" },
+  { title: "Por que gatos tricolores são quase sempre fêmeas", url: "https://hacktechfarm.com.br/blog/por-que-gatos-tricolores-sao-quase-sempre-femeas" },
+  { title: "Tigre-branco: genética da cor e o problema da endogamia", url: "https://hacktechfarm.com.br/blog/tigre-branco-genetica-da-cor-e-o-problema-da-endogamia" },
+];
+export const ABOUT_BLOG_LABEL = "Para entender a genética por trás do jogo";
+
 export interface AboutItem { title?: string; text: string }
 export interface AboutSection {
   id: string;
@@ -213,6 +230,7 @@ export function buildAboutJsonLd(): JsonLdGraph {
         applicationCategory: "GameApplication", // visível: "jogável" (ABOUT_LEAD)
         operatingSystem: "Web", // visível: "no navegador" (ABOUT_LEAD)
         inLanguage: "pt-BR",
+        publisher: { "@type": "Organization", name: ABOUT_PUBLISHER.name, url: ABOUT_PUBLISHER.url }, // visível: "Publicado por Hack Tech Farm"
         featureList: features,
         offers,
       },
@@ -244,6 +262,8 @@ export function aboutVisibleText(): string {
     for (const i of s.items ?? []) parts.push(...(i.title ? [i.title] : []), i.text);
   }
   for (const f of aboutFaq()) parts.push(f.question, f.answer);
+  if (ABOUT_BLOG_LINKS.length > 0) parts.push(ABOUT_BLOG_LABEL, ...ABOUT_BLOG_LINKS.map((l) => l.title));
+  parts.push(`Publicado por ${ABOUT_PUBLISHER.name}`);
   // Preços "R$ x,xx" aparecem nas linhas de plano (fmtBRL): o JSON-LD os declara em número e o teste os reconstrói.
   return parts.join("\n");
 }

@@ -59,6 +59,19 @@ Pacotes avulsos de crédito (não estão em `plans.ts`); nome do modelo de IA (a
   (só fica fora do sitemap) para não quebrar prévias de compartilhamento; se quiserem tirá-lo dos buscadores, o caminho é
   `noindex` na própria página, decisão à parte.
 
+## Adendo 2 (2026-09-23) — links de entrada, blog e publisher
+
+- **Links para a página:** a home (`app/page.tsx`) não tem menu — só os botões do hero (Criar conta / Entrar) e o rodapé. Não se
+  inventou menu: entrou um link "O que é" fixo no topo do hero, "Ver a explicação completa →" ao fim da seção "O que é" e o
+  link do rodapé (3 no total; o teste conta).
+- **Blog da Hack Tech Farm:** bloco no fim de `/o-que-e` ("Para entender a genética por trás do jogo"), dirigido por
+  `ABOUT_BLOG_LINKS` em `lib/about.ts`. As 3 URLs foram fornecidas pelo dono (não constam no repositório); os títulos descrevem o
+  conteúdo e foram derivados dos slugs — **os artigos não foram lidos**. Links externos: `target="_blank"` e `rel="noopener"`, **sem
+  `nofollow`** de propósito (passar sinal entre os domínios). Lista vazia = bloco oculto; o teste valida URL, título e o `rel`.
+- **JSON-LD:** `SoftwareApplication` ganhou `publisher` (Organization "Hack Tech Farm", `https://hacktechfarm.com.br/`), com a
+  linha visível "Publicado por Hack Tech Farm" (link) no rodapé da página. `inLanguage: "pt-BR"` já existia (no
+  `SoftwareApplication` e no `FAQPage`). A URL do publisher vem do pedido do dono (não consta no repositório).
+
 ## Consequências
 
 - Manutenção: fato novo entra **só** em `lib/about.ts`, com fonte, e o teste falha se JSON-LD e texto divergirem. Mudar preço
