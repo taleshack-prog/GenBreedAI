@@ -124,11 +124,11 @@ describe("Pipeline de imagem (TDD §5)", () => {
     const p = buildPrompt(triHybrid);
     expect(p).toContain("mixed-breed domestic dog");
     expect(p).toContain("Boerboel");
-    expect(p).toContain("Braço Alemão");
+    expect(p).toContain("German Shorthaired Pointer"); // nome inglês da tabela (ADR-0033), não mais "Braço Alemão"
     expect(p).toContain("Dobermann");
     // Ordem de aparição em `species` preservada — "A, B and C", não só 2 dos 3.
     const iBoerboel = p.indexOf("Boerboel");
-    const iBraco = p.indexOf("Braço Alemão");
+    const iBraco = p.indexOf("German Shorthaired Pointer");
     const iDobermann = p.indexOf("Dobermann");
     expect(iBoerboel).toBeLessThan(iBraco);
     expect(iBraco).toBeLessThan(iDobermann);

@@ -68,17 +68,65 @@ describe("a cor calculada PREVALECE sobre o padrão da raça", () => {
 });
 
 describe("híbridos e demais caminhos continuam como estavam", () => {
-  it("híbrido canino NÃO leva nome de raça pura: sem 'purebred' nem 'Great Dane', mantém 'mixed-breed' e 'a cross between'", () => {
+  it("híbrido canino continua 'mixed-breed' (sem 'purebred'), nomeia os parentais em inglês e nunca mostra o slug cru", () => {
     const p = buildPrompt(born("dogue-preto", { species: "dogue-alemao×boerboel" }));
     expect(p).not.toContain("purebred");
-    expect(p).not.toContain("Great Dane");
-    expect(p).toContain("mixed-breed domestic dog (a cross between");
+    expect(p).toContain("mixed-breed domestic dog (a cross between Great Dane and Boerboel)");
+    expect(p).not.toContain("dogue-alemao");
+    expect(p).not.toMatch(/\bdogue-[a-z]+\b/);
+  });
+
+  it("híbrido com dogue: a cor calculada PREVALECE (cláusula de prioridade antes da cor; merle azul continua merle azul)", () => {
+    const p = buildPrompt(born("dogue-azul", { species: "boerboel×dogue-alemao", loci: { M: ["M", "m"] } }));
+    expect(p).toContain("a cross between Boerboel and Great Dane");
+    const clause = p.indexOf("these take priority over either parent breed's typical look");
+    expect(clause).toBeGreaterThan(-1);
+    expect(p.indexOf("steel blue-grey (diluted black)")).toBeGreaterThan(clause);
+    expect(p).toContain("merle dappled pattern");
+  });
+
+  it("híbrido: raça sem nome inglês cai no nome em português da tabela de raças, nunca no slug (terrier-anao-branco)", () => {
+    const p = buildPrompt(born("dogue-preto", { species: "terrier-anao-branco×whippet" }));
+    expect(p).toContain("a cross between Terrier Anão Branco and Whippet");
+    expect(p).not.toContain("terrier-anao-branco");
   });
 
   it("fundador (id de raça) segue pelo caminho antigo, com o descritor da raça", () => {
     const p = buildPrompt(founder("boerboel"));
     expect(p).toContain("a purebred Boerboel dog (Canis familiaris): an adult Boerboel mastiff");
   });
+
+  it("GÊMEO de fundador é tratado como o fundador base (baseFounderId): cão e gato mantêm a raça", () => {
+    const dogTwin = { ...founder("boerboel"), id: "boerboel-femea" };
+    expect(buildPrompt(dogTwin)).toBe(buildPrompt(founder("boerboel")));
+    expect(buildPrompt(dogTwin)).toContain("a purebred Boerboel dog (Canis familiaris): an adult Boerboel mastiff");
+
+    const catBase = founder("gato-persa");
+    const catTwin = { ...catBase, id: "gato-persa-macho" };
+    expect(buildPrompt(catTwin)).toBe(buildPrompt(catBase));
+    expect(buildPrompt(catTwin)).toContain("a Persian cat:"); // descritor da raça (não só a frase do pelo longo, que também cita "Persian")
+    expect(buildPrompt(catTwin)).toContain("a purebred Persa cat (Felis catus)");
+    expect(buildPrompt(catTwin)).not.toContain("domestic house cat");
+  });
+
+  it("gêmeo de fundador: a cor calculada continua vindo do fenótipo (Persa de genótipo branco → 'pure solid white coat')", () => {
+    const f = founder("gato-persa");
+    const genotype = structuredClone(f.genotype);
+    genotype.loci.W = ["W", "w"];
+    const p = buildPrompt({ ...f, id: "gato-persa-macho", genotype });
+    expect(p).toContain("a Persian cat:");
+    expect(p).toContain("Coat: a pure solid white coat");
+  });
+
+  it("gato de raça NASCIDO (id gerado, species 'felis-catus') ainda perde a raça: nenhum campo do espécime guarda o slug da raça", () => {
+    // Documenta o limite atual (ADR-0033, adendo). Para o gato nascido ler "Persian" é preciso guardar a raça no espécime.
+    const p = buildPrompt(born("gato-persa"));
+    expect(p).not.toContain("a Persian cat:");
+    expect(p).not.toContain("purebred");
+    expect(p).toContain("domestic house cat");
+  });
+
+  it.todo("gato de raça nascido contém 'Persian' — BLOQUEADO até existir um campo `breed` no espécime (schema + migração; ver ADR-0033, adendo)");
 
   it("raça sem nome inglês no descritor (terrier-anao-branco) cai no texto genérico de antes — sem inventar nome", () => {
     const p = buildPrompt(born("terrier-anao-branco"));

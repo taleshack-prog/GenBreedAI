@@ -43,6 +43,25 @@ gerado, então caía em `a <porte> mixed-breed dog with <cor>` — "cão misto g
 - Híbrido canino com `dogue-alemao` mostra o slug cru no texto ("a cross between dogue-alemao and …"): `DOG_BREEDS`/`SPECIES_INFO` não
   têm a chave `dogue-alemao`.
 
+## Adendo (2026-09-23) — gêmeos, híbridos de cão e o limite dos gatos
+
+- **Gêmeos de fundador corrigidos:** `buildPrompt` passa o id por `baseFounderId` antes de `breedInfo`/`dogBreedInfo`; `boerboel-femea` e
+  `gato-persa-macho` saem com o mesmo prompt do fundador base (teste compara os dois textos).
+- **Híbridos caninos:** os parentais usam o nome INGLÊS da tabela ("a cross between Great Dane and Boerboel"), depois o nome em português
+  de `DOG_BREEDS`, depois o nome comum; o slug cru só aparece se nada existir. Como agora há nome de raça, o texto ganhou a cláusula de
+  prioridade que só os híbridos felinos tinham ("Its coat and features (these take priority over either parent breed's typical look)"),
+  no lugar do antigo "wearing <cor>". O teste de `image.spec.ts` passou a esperar "German Shorthaired Pointer" em vez de "Braço Alemão".
+- **Gatos nascidos — NÃO corrigível sem novo dado.** Toda raça de gato tem `species = "felis-catus"` (a raça é só o id do fundador) e o
+  espécime não guarda a raça em nenhum campo: `StoredSpecimen`/`specimens` têm `species`, `sireId`, `damId`, genótipo, mas nada como `breed`.
+  Diferente do cão (a espécie carrega a raça: `boerboel`, `dogue-alemao`…), o gato nascido de dois Persas é indistinguível, pela linha,
+  de um nascido de dois gatos sem raça. Deduzir pelos pais exigiria consultar o pedigree dentro de `buildPrompt` (puro, sem repositório)
+  e não define o caso "Persa × Siamês". **O que falta:** um campo `breed` no espécime, preenchido no cruzamento (raça dos dois pais se
+  igual; nulo se mistura) — mudança de schema + migração + preenchimento em `CrossService`/`IncubatorService`; decisão do dono.
+- **Nomes em inglês dos gatos (para quando houver o campo), existentes nos descritores:** Siamese, Maine Coon, Persian, Bengal, Birman,
+  Sphynx, Egyptian Mau, Abyssinian, Ragdoll ("a <Nome> cat"). **Sem nome de raça no descritor:** `gato-tabby` ("classic brown mackerel tabby
+  domestic shorthair"), `gato-preto` ("solid jet-black domestic shorthair") e `gato-branco` ("pure white domestic shorthair") — são
+  variedades de cor de gato sem raça, não raças; nada inventado. A tabela inglesa dos gatos NÃO foi criada (ficaria sem uso).
+
 ## Alternativas consideradas
 
 - *Usar o `descriptor` da raça:* rejeitada — fixa a cor típica e briga com o fenótipo calculado.

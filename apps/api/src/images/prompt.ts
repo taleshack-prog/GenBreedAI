@@ -20,7 +20,7 @@
  * `physiqueAdj`) — nunca dos descritores fixos de espécie.
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
-import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, DOG_BREEDS } from "@genbreedai/shared";
+import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, baseFounderId, DOG_BREEDS } from "@genbreedai/shared";
 import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
@@ -205,10 +205,15 @@ export function buildPrompt(s: StoredSpecimen): string {
       return info ? `${info.common} (${info.scientific})` : slug;
     });
     if (s.pack === "canine") {
-      const dogParents = s.species.split("×").map((slug) => DOG_BREEDS[slug]?.name ?? SPECIES_INFO[slug]?.common ?? slug).filter(Boolean);
+      // Parentais pelo nome INGLÊS da tabela (ADR-0033: "Great Dane", nunca o slug cru "dogue-alemao"); raça sem nome inglês cai no
+      // nome em português de DOG_BREEDS e, por último, no nome comum da espécie — o slug cru só se nada existir.
+      const dogParents = s.species.split("×")
+        .map((slug) => dogBreedEnglishName(slug) ?? DOG_BREEDS[slug]?.name ?? SPECIES_INFO[slug]?.common ?? slug)
+        .filter(Boolean);
       subject =
         `a photorealistic ${physiqueAdj} mixed-breed domestic dog (a cross between ${joinWithAnd(dogParents)})${morphClause}, ` +
-        `four-legged canine body, dog anatomy, wearing ${coat}`;
+        `four-legged canine body, dog anatomy. ` +
+        `Its coat and features (these take priority over either parent breed's typical look): ${coat}`;
     } else {
       // Híbrido felino: NOMEIA as espécies-mãe (item 1 — sem isso o modelo
       // não tem âncora textual pro parental "menos óbvio" e deriva pra uma
@@ -223,8 +228,12 @@ export function buildPrompt(s: StoredSpecimen): string {
     }
   } else {
     const info = speciesInfo(s.species);
-    const breed = s.species === "felis-catus" ? breedInfo(s.id) : undefined;
-    const dogBreed = s.pack === "canine" ? dogBreedInfo(s.id) : undefined;
+    // Gêmeo de fundador ("boerboel-femea", "gato-persa-macho") é tratado como o fundador BASE: sem `baseFounderId` o id não casava
+    // em nenhuma tabela e a raça se perdia. Espécime nascido (id gerado) continua sem casar — a raça de gato NÃO é recuperável
+    // pela espécie ("felis-catus") nem por outro campo (ver ADR-0033, adendo); a de cão sim, pelo `dogBreedEnglishName` abaixo.
+    const baseId = baseFounderId(s.id);
+    const breed = s.species === "felis-catus" ? breedInfo(baseId) : undefined;
+    const dogBreed = s.pack === "canine" ? dogBreedInfo(baseId) : undefined;
     if (breed) {
       subject = `a purebred ${breed.name} cat (Felis catus): ${breed.descriptor}. Body build: ${physiqueAdj}. Coat: ${coat}`;
     } else if (dogBreed) {
