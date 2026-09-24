@@ -23,7 +23,7 @@ import {
 import { SpecimenRepository, type StoredSpecimen } from "../specimens/in-memory.repository";
 import { breedForOffspring } from "../specimens/breed";
 import { ImageService, cacheKeyOf } from "../images/image.service";
-import { stat, publicUrl } from "../images/storage";
+import { stat, publicUrl, thumbUrlIfExists } from "../images/storage";
 import { QuotaService } from "../quota/quota.service";
 import { WalletService } from "../economy/wallet.service";
 import { tierPolicy } from "../common/tiers";
@@ -38,6 +38,8 @@ export interface IncubatorEntryView {
   prob: number; fPedigree: number; fixationIndex: number; aura: number; generation: number;
   sex: string; fertility: number | null; haldaneStatus: string | null;
   imageUrl: string | null;
+  /** Miniatura do retrato (ADR-0027/0037) para a LISTA da web; `null` sem miniatura (a web cai em `imageUrl`). Campo aditivo. */
+  thumbUrl: string | null;
   /**
    * ADR-0021 item 6 — "PRONTO" (prazo de gestação já vencido, mas ainda não
    * nasceu) virou estado de verdade nesta rodada (item 2: a contagem por
@@ -113,6 +115,7 @@ export class IncubatorService {
   private toView(
     e: StoredIncubatorEntry, imageUrl: string | null, now: Date, bornAt: Date | null = null,
     firstGestationEntryId: string | null = null,
+    thumb: string | null = null,
   ): IncubatorEntryView {
     const state = incubatorStateOf(e, now);
     // Por ID da entrada (gravado no claim), nunca por instante: dois pedidos no
@@ -124,7 +127,7 @@ export class IncubatorService {
       pack: e.pack, species: e.species, genotype: e.genotype, phenotype: e.phenotype,
       prob: e.prob, fPedigree: e.fPedigree, fixationIndex: e.fixationIndex, aura: e.aura, generation: e.generation,
       sex: e.sex, fertility: e.fertility, haldaneStatus: e.haldaneStatus,
-      imageUrl, state, gestationEndsAt: e.gestationEndsAt ? e.gestationEndsAt.toISOString() : null,
+      imageUrl, thumbUrl: thumb, state, gestationEndsAt: e.gestationEndsAt ? e.gestationEndsAt.toISOString() : null,
       gestationHours: gestationHoursForAura(e.aura), firstGestation,
       bornSpecimenId: e.bornSpecimenId, createdAt: e.createdAt.toISOString(),
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
@@ -160,6 +163,7 @@ export class IncubatorService {
     const entries: IncubatorEntryView[] = [];
     for (const e of page.entries) {
       let imageUrl: string | null = null;
+      let thumb: string | null = null;
       let bornAt: Date | null = null;
       if (e.bornSpecimenId) {
         const specimen = await this.specimens.get(e.bornSpecimenId);
@@ -167,10 +171,13 @@ export class IncubatorService {
           bornAt = specimen.createdAt ?? null;
           const cacheKey = specimen.cacheKey ?? cacheKeyOf(specimen);
           const st = await stat(cacheKey);
-          if (st) imageUrl = publicUrl(cacheKey, st.version);
+          if (st) {
+            imageUrl = publicUrl(cacheKey, st.version);
+            thumb = await thumbUrlIfExists(cacheKey); // miniatura só com o original presente (ADR-0037)
+          }
         }
       }
-      entries.push(this.toView(e, imageUrl, now, bornAt, firstGestationEntryId));
+      entries.push(this.toView(e, imageUrl, now, bornAt, firstGestationEntryId, thumb));
     }
     return { entries, nextCursor: page.nextCursor, counts };
   }

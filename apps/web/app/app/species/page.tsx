@@ -25,7 +25,8 @@ export default function SpeciesPage() {
         ))}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {founders.map((s) => <CapsuleCard key={s.id} specimen={s} />)}
+        {/* Lista: miniaturas (~28 KB) com carregamento preguiçoso, não o PNG original (>1 MB) — ADR-0037. */}
+        {founders.map((s) => <CapsuleCard key={s.id} specimen={s} preferThumb />)}
       </div>
     </Screen>
   );

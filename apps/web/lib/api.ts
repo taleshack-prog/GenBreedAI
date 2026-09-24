@@ -28,6 +28,8 @@ export interface ApiSpecimen {
   aura: number;
   cacheKey: string | null;
   imageUrl?: string | null;
+  /** Miniatura do retrato (ADR-0037). A lista de espécimes hoje não a envia — o card a obtém de `getImage`; campo opcional para quando enviar. */
+  thumbUrl?: string | null;
   status?: "ALIVE" | "FROZEN";
   sex: "M" | "F" | null;
   fertility: number | null;
@@ -148,7 +150,11 @@ export async function postCross(input: {
   return res.json();
 }
 
-export interface ImageResult { cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string; }
+export interface ImageResult {
+  cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string;
+  /** Miniatura 600×600 JPEG do mesmo retrato (ADR-0037) — `null`/ausente: use `imageUrl`. Só as LISTAS a preferem. */
+  thumbUrl?: string | null;
+}
 /**
  * Checagem silenciosa de cache (usada em polling — CapsuleCard). Não-2xx
  * SEMPRE lança ApiError (mesma regra de toda função aqui); quem só quer "sem
@@ -215,6 +221,8 @@ export interface IncubatorEntry extends IncubatorDescription {
   fPedigree: number; fixationIndex: number; generation: number;
   fertility: number | null; haldaneStatus: "NONE" | "STERILE" | "REDUCED" | null;
   imageUrl: string | null;
+  /** Miniatura do retrato (ADR-0037) — a lista da incubadora a prefere; `null`/ausente: cai em `imageUrl`. */
+  thumbUrl?: string | null;
   state: IncubatorState;
   /** ISO — `null` fora de gestação. */
   gestationEndsAt: string | null;

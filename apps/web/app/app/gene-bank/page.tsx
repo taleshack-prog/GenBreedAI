@@ -82,7 +82,7 @@ export default function GeneBankPage() {
                 <span className="absolute -left-1 -top-1 z-20 grid h-6 w-6 place-items-center rounded-full font-display text-xs font-bold text-bg-900" style={{ background: idx === 0 ? "#00F0FF" : "#BF00FF" }}>{idx === 0 ? "A" : "B"}</span>
               )}
               <div className={frozen ? "pointer-events-auto opacity-80" : ""}>
-                <CapsuleCard specimen={s} selected={idx === 1} onClick={() => toggle(s)} />
+                <CapsuleCard specimen={s} selected={idx === 1} onClick={() => toggle(s)} preferThumb />
               </div>
               {frozen && (
                 <div className="pointer-events-none absolute inset-0 z-10 grid place-items-start justify-center rounded-2xl bg-cyan/5 pt-4">

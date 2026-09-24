@@ -98,6 +98,15 @@ export async function statThumb(cacheKey: string): Promise<{ version: number } |
   return statObject(thumbObjKey(cacheKey), `${cacheKey}${THUMB_SUFFIX}`);
 }
 
+/**
+ * URL da miniatura (com `?v=`) SE ela existir, senão `null` — o que as LISTAS da web usam no lugar do PNG original (ADR-0037). Nunca lança:
+ * `statThumb` já devolve `null` em qualquer falha, e `null` significa "use o original".
+ */
+export async function thumbUrlIfExists(cacheKey: string): Promise<string | null> {
+  const st = await statThumb(cacheKey);
+  return st ? thumbUrl(cacheKey, st.version) : null;
+}
+
 /** Wrapper booleano de `stat()` — mantido pelos chamadores que só precisam saber se existe. */
 export async function exists(cacheKey: string): Promise<boolean> {
   return (await stat(cacheKey)) !== null;

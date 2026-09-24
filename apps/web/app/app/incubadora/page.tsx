@@ -6,6 +6,7 @@ import { listIncubator, gestateEntry, bornEntry, discardEntry, getMyTier, type I
 import { Screen, ComingSoon } from "../../../components/Screen";
 import { NotifyButton } from "../../../components/NotifyButton";
 import { displayName } from "../../../lib/display";
+import { pickListImage, swapToFallback } from "../../../lib/list-image";
 import { sexChar } from "../../../components/SexBadge";
 import { phenoSummary } from "../../../lib/phenotype-summary";
 import { birthQuotaLabel, nextAvailableLabel } from "../../../lib/quota-format";
@@ -191,7 +192,13 @@ export default function IncubatorPage() {
                   {estado === "NASCIDO" && (
                     <>
                       <div className="relative mx-auto mb-2 grid aspect-square w-full max-w-[180px] place-items-center overflow-hidden rounded bg-bg-900">
-                        {e.imageUrl ? <img src={e.imageUrl} alt={displayName(e)} className="h-full w-full object-cover" /> : <span className="font-mono text-[0.6rem] uppercase text-ink-muted">modo procedural</span>}
+                        {(() => {
+                          // Lista da incubadora: miniatura (fallback: original) e carregamento preguiçoso — ADR-0037.
+                          const img = pickListImage(e.imageUrl, e.thumbUrl, true);
+                          return img
+                            ? <img key={img.src} src={img.src} alt={displayName(e)} loading="lazy" decoding="async" onError={(ev) => { swapToFallback(ev.currentTarget, img.fallback); }} className="h-full w-full object-cover" />
+                            : <span className="font-mono text-[0.6rem] uppercase text-ink-muted">modo procedural</span>;
+                        })()}
                       </div>
                       <Link href={`/app/reveal/${e.bornSpecimenId}`}
                         className="mt-2 block w-full rounded-lg border border-ok/40 py-2 text-center font-display text-[0.65rem] uppercase text-ok transition hover:bg-ok/10">

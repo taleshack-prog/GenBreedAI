@@ -7,6 +7,7 @@ import { displayName, displaySci } from "../lib/display";
 import { SexBadge } from "./SexBadge";
 import { getUser } from "../lib/auth";
 import { buildPublicSpecimenUrl, buildShareMessage, buildWhatsAppUrl } from "../lib/share";
+import { pickListImage, swapToFallback } from "../lib/list-image";
 
 /** BarraRaridade (Design System §6): 5 estrelas preenchidas conforme raridade. */
 function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
@@ -32,10 +33,15 @@ function BarraRaridade({ valor, cor }: { valor: number; cor: string }) {
  *   ativa (ciano) · selecionada (púrpura) · alerta F>0.15 (amarelo) · crítica F>0.20 (vermelho).
  */
 export function CapsuleCard({
-  specimen, selected = false, onClick, slot, showGenome = true,
-}: { specimen: ApiSpecimen | null; selected?: boolean; onClick?: () => void; slot?: "A" | "B"; showGenome?: boolean }) {
+  specimen, selected = false, onClick, slot, showGenome = true, preferThumb = false,
+}: {
+  specimen: ApiSpecimen | null; selected?: boolean; onClick?: () => void; slot?: "A" | "B"; showGenome?: boolean;
+  /** Card de LISTA (galeria de espécies, Gene Bank): usa a miniatura (~28 KB) em vez do PNG original (>1 MB), com carregamento preguiçoso (ADR-0037). */
+  preferThumb?: boolean;
+}) {
 
   const [fetchedUrl, setFetchedUrl] = useState<string | null>(null);
+  const [fetchedThumb, setFetchedThumb] = useState<string | null>(null);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError] = useState<{ message: string; status?: number } | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -67,7 +73,7 @@ export function CapsuleCard({
     setGenError(null);
     try {
       const r = await generateImage(specimen.id, force);
-      if (r.imageUrl) setFetchedUrl(r.imageUrl + "?t=" + Date.now());
+      if (r.imageUrl) { setFetchedUrl(r.imageUrl + "?t=" + Date.now()); setFetchedThumb(null); } // a miniatura de antes ficou velha: usa o original novo
       // Sem imageUrl (modo procedural, sem FAL_KEY) NÃO é erro — mantém o
       // card procedural em silêncio, sem "gerado" nem mensagem nenhuma.
     } catch (err) {
@@ -84,11 +90,17 @@ export function CapsuleCard({
     let alive = true;
     setGenError(null); // troca de espécime (ex.: outro progenitor) — erro antigo não vale mais.
     if (specimen && !specimen.imageUrl) {
-      getImage(specimen.id).then((r) => { if (alive && r?.imageUrl) setFetchedUrl(r.imageUrl); }).catch(() => {});
+      getImage(specimen.id).then((r) => {
+        if (!alive || !r?.imageUrl) return;
+        setFetchedUrl(r.imageUrl);
+        setFetchedThumb(r.thumbUrl ?? null); // `null`/ausente → cai no original (retrato anterior à miniatura)
+      }).catch(() => {});
     }
     return () => { alive = false; };
   }, [specimen?.id, specimen?.imageUrl]);
   const aiUrl = specimen?.imageUrl ?? fetchedUrl;
+  // Lista → miniatura (fallback: original); tela individual (`preferThumb=false`) → sempre o original.
+  const listImg = pickListImage(aiUrl, fetchedThumb ?? specimen?.thumbUrl, preferThumb);
   // Regenerar (force) só o dono pode; fundador nunca (retrato compartilhado
   // por genótipo — regenerar trocaria a foto de todo mundo com o mesmo
   // genótipo, API rejeita com 403). Botão ↻ some nos outros casos; gerar
@@ -171,9 +183,13 @@ export function CapsuleCard({
               style={{ left: `${x}%`, bottom: "8%", background: cor, animationDelay: `${i * 0.8}s` }} />
           ))}
           {/* PNG IA (se gerado) → foto; senão retrato PROCEDURAL (tier grátis, TDD §5.2) */}
-          {specimen && aiUrl ? (
+          {specimen && aiUrl && listImg ? (
             <>
-              <img src={aiUrl} alt={specimen.species} className="absolute inset-0 h-full w-full object-contain p-1" />
+              {/* `key` remonta o <img> quando a URL muda (regeneração), zerando a marca de fallback. Lista: lazy + decode assíncrono. */}
+              <img key={listImg.src} src={listImg.src} alt={specimen.species}
+                {...(preferThumb ? { loading: "lazy" as const, decoding: "async" as const } : {})}
+                onError={(ev) => { swapToFallback(ev.currentTarget, listImg.fallback); }}
+                className="absolute inset-0 h-full w-full object-contain p-1" />
               {canRegen && (
                 <span role="button" tabIndex={0} title="Regenerar retrato" onClick={(e) => genImage(e, true)}
                   className="absolute bottom-1 right-1 z-20 grid h-6 w-6 cursor-pointer place-items-center rounded-full border bg-bg-900/80 text-[0.7rem] transition hover:scale-110"

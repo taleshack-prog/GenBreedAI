@@ -11,12 +11,19 @@ import { specimenVisibleAtTier } from "../common/tier-access";
 import { buildPrompt } from "./prompt";
 import { resolveProvider } from "./provider";
 import { moderate } from "./moderation";
-import { stat, store, publicUrl, remove } from "./storage";
+import { stat, store, publicUrl, remove, thumbUrlIfExists } from "./storage";
 import { ImageJobRepository, type ImageJob } from "./image-job.repository";
 import { ImageQuotaService, modelForTier } from "../economy/image-quota.service";
 import { WalletService } from "../economy/wallet.service";
 
-export interface ImageResult { cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string; }
+export interface ImageResult {
+  cacheKey: string; status: string; imageUrl: string | null; model: string; cached: boolean; prompt: string;
+  /**
+   * Miniatura 600×600 JPEG (ADR-0027) do MESMO retrato, para as LISTAS da web (ADR-0037). Campo ADITIVO e opcional: `null` quando a miniatura não
+   * existe (retrato anterior à ADR-0027 ou geração falhou) e ausente nos caminhos sem imagem — o cliente cai no `imageUrl`.
+   */
+  thumbUrl?: string | null;
+}
 
 /**
  * Chave GRAVADA (`s.cacheKey`) tem prioridade sempre — só recalcula (ADR-0017,
@@ -60,7 +67,7 @@ export class ImageService {
     // Cache-busting: `?v=<versão do objeto>` (ver storage.ts) — sem isso,
     // navegador/CDN continuam servindo uma imagem regenerada anterior no
     // MESMO endereço (mesma cacheKey).
-    if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), model: "cache", cached: true, prompt: buildPrompt(s) };
+    if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), thumbUrl: await thumbUrlIfExists(cacheKey), model: "cache", cached: true, prompt: buildPrompt(s) };
     const job = this.jobs.get(cacheKey);
     return { cacheKey, status: job?.status ?? "NONE", imageUrl: job?.imageUrl ?? null, model: job?.model ?? "procedural", cached: false, prompt: buildPrompt(s) };
   }
@@ -100,7 +107,7 @@ export class ImageService {
     const prompt = buildPrompt(s);
     const st = await stat(cacheKey);
     // Rever imagem já gerada é GRÁTIS (não consome cota) — e nunca apaga.
-    if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), model: "cache", cached: true, prompt };
+    if (st) return { cacheKey, status: "APPROVED", imageUrl: publicUrl(cacheKey, st.version), thumbUrl: await thumbUrlIfExists(cacheKey), model: "cache", cached: true, prompt };
     return this.chargeAndGenerate(s, cacheKey, prompt, payerId, tier, skipQuota);
   }
 
@@ -184,6 +191,6 @@ export class ImageService {
     if (mod.status === "REJECTED") status = "REJECTED";
     else if (img.buffer) imageUrl = await store(cacheKey, img.buffer);
     this.jobs.save({ cacheKey, specimenId: s.id, tier, model: img.model, resolution: "square_hd", status, moderationStatus: mod.status, imageUrl });
-    return { cacheKey, status, imageUrl, model: img.model, cached: false, prompt };
+    return { cacheKey, status, imageUrl, thumbUrl: imageUrl ? await thumbUrlIfExists(cacheKey) : null, model: img.model, cached: false, prompt };
   }
 }
