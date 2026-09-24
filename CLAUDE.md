@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0034) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0035) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -323,7 +323,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0035). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0036). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -351,6 +351,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0032** — (produto/web, não genética) Página pública `/o-que-e` (sem login; fora do matcher do middleware): texto e JSON-LD (FAQPage + SoftwareApplication) saem da fonte única `apps/web/lib/about.ts`; preços/limites de `plans.ts`, espécies do catálogo; fato novo só com fonte, sem "em breve" nem espécie não implementada; teste confere JSON-LD × texto visível. Adendo: `app/sitemap.ts` e `app/robots.ts` (nativos do Next 15; rotas em `lib/public-routes.ts` — sitemap só com rotas públicas de conteúdo, nunca `/app/*` nem `/f/[id]`; robots bloqueia `/app/`); rota pública nova de conteúdo entra em `PUBLIC_ROUTES`.
 - **0033** — (produto/imagem, não genética) O prompt nomeia a raça canina PURA nascida (species sem "×") em inglês (`DOG_BREED_ENGLISH_NAMES`, transcrito dos descritores), com a cor/morfologia calculadas prevalecendo; híbridos e fundadores inalterados; `terrier-anao-branco` sem nome (aguarda o dono); só gerações novas mudam de prompt. Adendo: gêmeos de fundador tratados como o base (`baseFounderId`); híbridos caninos com nome inglês + cláusula de prioridade; **adendo 2: campo `specimens.breed`** (`specimens/breed.ts`) — gato de raça nascido mantém a raça no prompt (`CAT_BREED_ENGLISH_NAMES`; tabby/preto/branco não são raça); mestiço = nulo; espécimes antigos nulos (fundador deriva do id); backfill SQL no ADR, não executado; **migração pendente**.
 - **0034** — (produto/imagem, não genética) `fel()` aceita B e D (padrão B/B, D/D — nenhum fundador muda); prompt felino nomeia chocolate/azul/lilás/canela/fawn ("a solid … coat"), respeita B/D no melanismo e diz a cor dos pontos (seal mantém a frase antiga); `cacheKey` inalterada. Fundadores novos: decisão à parte.
+- **0035** — (motor/imagem, genética-adjacente) Locus O (laranja) chega ao jogador: `hashGenotype` inclui `xLoci` (só quando existem — chaves de fundador inalteradas), a `cacheKey` do nascido passa a ver o X, o prompt lê `coatPigment` (laranja, creme, tartaruga, azul-creme, calico; laranja mascara preto/chocolate; S só na família laranja), o gêmeo de fundador trata o X (`twinGenotype`), `fel()` aceita `xLoci`; nenhum fundador laranja criado.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

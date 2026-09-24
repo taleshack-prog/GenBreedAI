@@ -53,17 +53,64 @@ const POINT_WORDING: Record<ReturnType<typeof felinePointColour>, string> = {
   fawn: "fawn",
 };
 
-/** Pelagem FELINA a partir do fenótipo. */
-function coatFeline(loci: Record<string, string>): string {
+/** Resultado do motor para o loco O (ligado ao X, ADR-0013) — vem de `Phenotype`; ausente em genótipo sem `xLoci`. */
+interface PigmentInfo { coatPigment?: "EUMELANIN" | "PHEOMELANIN" | "MOSAIC"; pigmentDiluted?: boolean }
+
+/** Nome curto da cor de eumelanina (parte escura da tartaruga): "black" no preto denso; senão a cor de B×D. */
+function eumelaninName(loci: Record<string, string>): string {
+  const tint = felineTint(loci);
+  if (!tint) return "black";
+  return tint === "blue-grey (diluted black)" ? "blue-grey" : tint === "lilac (diluted chocolate)" ? "lilac" : tint;
+}
+
+/**
+ * Pelagem da FAMÍLIA LARANJA (ADR-0035): `PHEOMELANIN` (O/O, macho O) e `MOSAIC` (fêmea O/o). O laranja MASCARA a via da eumelanina —
+ * A (preto/melanismo) e B (chocolate/canela) não aparecem; D dilui o laranja em creme; P continua definindo o padrão ("O não mascara P").
+ * O S (manchas brancas) entra AQUI e só aqui (calico / laranja e branco): renderizá-lo para todo gato mudaria o prompt do Birmanês/Ragdoll.
+ */
+function coatOrange(loci: Record<string, string>, kind: "PHEOMELANIN" | "MOSAIC", diluted: boolean): string {
+  const white = loci.S === "bicolor";
+  if (kind === "MOSAIC") {
+    const eu = eumelaninName(loci);
+    const pheo = diluted ? "soft cream" : "ginger";
+    const patches = white ? " with large white patches" : "";
+    if (white) return `a ${diluted ? "dilute " : ""}calico coat, irregular patches of ${eu} and ${pheo}${patches}`;
+    if (!diluted) return `a tortoiseshell coat, irregular patches of ${eu} and ${pheo}`;
+    return eu === "blue-grey"
+      ? `a blue-cream coat, irregular patches of ${eu} and ${pheo}`
+      : `a dilute tortoiseshell coat, irregular patches of ${eu} and ${pheo}`;
+  }
+  const shade = diluted ? "cream" : "ginger";
+  let coat = diluted ? "a soft cream coat" : "a rich ginger-orange coat";
+  if (loci.P === "listras") coat += `, with bold vertical darker ${shade} stripes`;
+  else if (loci.P === "pintas") coat += `, with round solid darker ${shade} spots`;
+  else if (loci.P === "rosetas") coat += `, with darker ${shade} rosettes`;
+  else coat += ", with faint ghost tabby markings"; // uniforme: o laranja sempre deixa o tabby "fantasma" (ghostPattern)
+  if (white) coat += ", with white patches on the chest, belly and paws";
+  return coat;
+}
+
+/** Como o ponto entra no texto para gato de pontos + laranja (red/cream point, tortie point). */
+function orangePointWording(kind: "PHEOMELANIN" | "MOSAIC", diluted: boolean): string {
+  if (kind === "MOSAIC") return "tortoiseshell";
+  return diluted ? "cream" : "ginger-orange";
+}
+
+/** Pelagem FELINA a partir do fenótipo. `pigment` = `coatPigment`/`pigmentDiluted` do motor (ADR-0035). */
+function coatFeline(loci: Record<string, string>, pigment: PigmentInfo = {}): string {
   if (loci.Hr === "pelado (sphynx)") return "completely hairless, soft wrinkled bare skin with no fur, coat pattern only faintly visible as skin pigment";
   if (loci.W === "branco") return "a pure solid white coat";
   if (loci.C === "albino") return "a true albino appearance: pure white coat with faint ghost markings and pink-red eyes";
   const pointed = loci.C === "pontos";
+  const orange = pigment.coatPigment === "PHEOMELANIN" || pigment.coatPigment === "MOSAIC" ? pigment.coatPigment : null;
+  const diluted = pigment.pigmentDiluted ?? loci.D === "diluído";
   // Corpo de gato de PONTOS não recebe a cor de B/D (ela vai nos pontos, abaixo): o corpo segue o tom de fundo, como sempre.
   const tint = pointed ? null : felineTint(loci);
   const base = `a ${baseTone(loci)}`;
   let coat: string;
-  if (loci.A?.startsWith("melan")) {
+  if (orange && !pointed) {
+    coat = coatOrange(loci, orange, diluted);
+  } else if (loci.A?.startsWith("melan")) {
     coat = tint ? `a melanistic solid ${tint} coat with faint ghost markings` : "a melanistic solid black coat with faint ghost markings";
   } else if (tint) {
     // Cor de eumelanina diferente do preto denso (ADR-0034): "a solid <cor> coat" no liso; nos padrões, marcas "darker" (não "black").
@@ -75,7 +122,10 @@ function coatFeline(loci: Record<string, string>): string {
   else if (loci.P === "listras") coat = `${base} coat with bold vertical black stripes`;
   else if (loci.P === "pintas") coat = `${base} coat with round solid black spots`;
   else coat = `${base} plain uniform coat`;
-  if (pointed) coat += `, with ${POINT_WORDING[felinePointColour(loci)]} pointed extremities (face, ears, paws)`;
+  if (pointed) {
+    const word = orange ? orangePointWording(orange, diluted) : POINT_WORDING[felinePointColour(loci)];
+    coat += `, with ${word} pointed extremities (face, ears, paws)`;
+  }
   // Descritor de juba SÓ quando o fenótipo diz juba (ADR-0017) — Ma agora é
   // sex-limited no motor (fêmea nunca expressa, mesmo Ma/Ma), então "sem
   // juba" já cobre o caso feminino sem precisar de um branch "the male";
@@ -132,8 +182,8 @@ function dogMorphology(loci: Record<string, string>): string[] {
 }
 
 /** Dispatcher: pelagem ciente da família. */
-function coatFromPhenotype(loci: Record<string, string>, pack: "feline" | "canine"): string {
-  return pack === "canine" ? coatCanine(loci) : coatFeline(loci);
+function coatFromPhenotype(phen: { loci: Record<string, string> } & PigmentInfo, pack: "feline" | "canine"): string {
+  return pack === "canine" ? coatCanine(phen.loci) : coatFeline(phen.loci, phen);
 }
 
 
@@ -215,14 +265,16 @@ function lionessOverride(species: string, sex: Sex | null | undefined): { name: 
 /** Traços legíveis (usado no card/roundtrip). */
 export function traitVector(s: StoredSpecimen): string[] {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
-  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack, s.sex ?? undefined);
-  return [coatFromPhenotype(phen.loci, s.pack)];
+  // `xLoci` entra (ADR-0035): sem ele o motor não calcula `coatPigment` e o laranja nunca apareceria. `qtl: {}` continua — o
+  // fenótipo só COPIA o QTL para a saída, nenhum traço visível depende dele (ADR-0033).
+  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {}, xLoci: s.genotype.xLoci }, pack, s.sex ?? undefined);
+  return [coatFromPhenotype(phen, s.pack)];
 }
 
 export function buildPrompt(s: StoredSpecimen): string {
   const pack = s.pack === "canine" ? CANINE_PACK : FELINE_PACK;
-  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {} }, pack, s.sex ?? undefined);
-  const coat = coatFromPhenotype(phen.loci, s.pack);
+  const phen = expressPhenotype({ loci: s.genotype.loci, qtl: {}, xLoci: s.genotype.xLoci }, pack, s.sex ?? undefined);
+  const coat = coatFromPhenotype(phen, s.pack);
   const isHybrid = s.species.includes("×");
   const q = s.genotype.qtl ?? {};
   const physiqueAdj = `${sizeDesc(q.porte ?? 0.5)}, ${buildDesc(q.vigor ?? 0.5)}`;

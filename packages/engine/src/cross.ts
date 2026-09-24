@@ -219,7 +219,14 @@ export function hashGenotype(genotype: Genotype): string {
     .sort()
     .map((k) => `${k}=${genotype.qtl[k]!.toFixed(6)}`)
     .join(",");
-  return `loci{${loci}}|qtl{${qtl}}`;
+  // Loci LIGADOS AO X (ADR-0013) entram na chave: dois gatos iguais exceto no O (laranja) NÃO podem dividir o mesmo retrato.
+  // Só quando há xLoci: genótipo sem xLoci (todo fundador) gera EXATAMENTE a string de antes. Alelos distintos e ordenados por locus:
+  // macho [o] e fêmea [o,o] (mesma aparência) viram "o"; [O,o] e [o,O] viram "O/o".
+  const xKeys = Object.keys(genotype.xLoci ?? {}).sort();
+  const x = xKeys.length > 0
+    ? `|x{${xKeys.map((k) => `${k}:${[...new Set(genotype.xLoci![k]!)].sort().join("/")}`).join(",")}}`
+    : "";
+  return `loci{${loci}}|qtl{${qtl}}${x}`;
 }
 
 /**
@@ -305,7 +312,8 @@ function finalizeSpecimen(
   const fixation = fixationIndex({ genotype: zygote, targetLoci, fPedigree, generationsUnderSelection });
   const aura = mapFixationToAura(fixation.index);
   // ADR-0017: fórmula ÚNICA de cacheKey — ver computeCacheKey() acima.
-  const cacheKey = computeCacheKey(zygote, ctx.pack, sex);
+  // Sobre `zygoteWithX` (ADR-0035): a chave do nascido tem que enxergar o X, senão laranja e não-laranja dividiriam o retrato.
+  const cacheKey = computeCacheKey(zygoteWithX, ctx.pack, sex);
   return {
     specimen: { genotype: zygoteWithX, phenotype, fPedigree: Number(fPedigree.toFixed(6)), fertility, fixationIndex: fixation.index, aura, generation, method, sex },
     cacheKey,

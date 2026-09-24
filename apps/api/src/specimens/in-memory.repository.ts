@@ -7,8 +7,8 @@
  */
 
 import { Injectable } from "@nestjs/common";
-import type { Genotype, Phenotype, BreedingMethod, Sex, FertilityResult } from "@genbreedai/shared";
-import type { Pedigree } from "@genbreedai/engine";
+import type { Genotype, Phenotype, BreedingMethod, Sex, FertilityResult, XLocusAlleles } from "@genbreedai/shared";
+import { FELINE_PACK, CANINE_PACK, type Pedigree } from "@genbreedai/engine";
 import { founderBreed } from "./breed";
 
 export type PackId = "feline" | "canine";
@@ -147,6 +147,30 @@ export const FOUNDER_SEX: Record<string, "M" | "F"> = Object.fromEntries(
   }),
 );
 
+/**
+ * Genótipo do GÊMEO de fundador (sexo oposto) — cópia PROFUNDA dos autossomos e tratamento do X (ADR-0035): macho é hemizigoto (1 alelo),
+ * fêmea tem 2. Regra (o gêmeo mantém o fenótipo sempre que biologicamente possível):
+ *   fêmea homozigota `O/O` → macho `[O]` · `o/o` → `[o]`;
+ *   fêmea heterozigota `O/o` (tartaruga) → macho `[o]` — macho nunca é mosaico, e o alelo mais RECESSIVO do ranking (o mesmo default de
+ *     `gamete.ts`) dá ao gêmeo a cor de base da linhagem, de modo que o casal tartaruga × gêmeo segrega laranja, preto e tartaruga;
+ *   macho `[O]` → fêmea `[O,O]` · `[o]` → `[o,o]`.
+ * Genótipo SEM xLoci (todo fundador atual) → cópia idêntica, como antes.
+ */
+export function twinGenotype(g: Genotype, twinSex: Sex, pack: PackId): Genotype {
+  const clone = structuredClone(g);
+  if (!g.xLoci) return clone;
+  const defs = (pack === "canine" ? CANINE_PACK : FELINE_PACK).xLoci;
+  const xLoci: Record<string, XLocusAlleles> = {};
+  for (const [locus, alleles] of Object.entries(g.xLoci)) {
+    const first = alleles[0]!;
+    const homozygous = alleles.length === 1 || alleles[0] === alleles[1];
+    const rank = defs[locus]?.dominanceRank;
+    const recessive = rank?.[rank.length - 1] ?? first;
+    xLoci[locus] = twinSex === "F" ? [first, homozygous ? first : alleles[1]!] : homozygous ? [first] : [recessive];
+  }
+  return { ...clone, xLoci };
+}
+
 /** Fundadores — CATÁLOGO FELINO (Free intraespécie) + caninos (Senior). TDD §6 + felinos-genetica.md */
 export function founderSeeds(): StoredSpecimen[] {
   // Genótipo felino: A(melanismo) P(padrão) B(cor) C(albino) D(diluição) W(branco) S(manchas).
@@ -159,8 +183,11 @@ export function founderSeeds(): StoredSpecimen[] {
     // B (chocolate/canela) e D (diluição) — parâmetros NO FIM, com o padrão de sempre (B/B, D/D): nenhuma das chamadas atuais muda e
     // nenhum fundador atual muda de genótipo (ADR-0034). Só destrava a possibilidade de um fundador futuro carregar `b`, `b^l` ou `d`.
     B: [string, string] = ["B","B"], D: [string, string] = ["D","D"],
+    // Loco O (laranja, ligado ao X — ADR-0013/0035): fêmea `{ O: ["O","o"] }`, macho `{ O: ["O"] }`. AUSENTE por padrão (nenhum
+    // fundador atual tem xLoci → todos assumem "o"); a chave `xLoci` só existe quando informada, para o genótipo (e a cacheKey) não mudarem.
+    xLoci?: Genotype["xLoci"],
   ): Genotype => ({ loci: { A, P, B, C, D, W, S, Ma, Bd, He, Ec, Fl, Hr },
-    qtl: { porte: 0.5, vigor: 0.5, beleza: 0.5, rosetas: 0.5, ...q } });
+    qtl: { porte: 0.5, vigor: 0.5, beleza: 0.5, rosetas: 0.5, ...q }, ...(xLoci ? { xLoci } : {}) });
   // Genótipo canino com morfologia + porte (ADR-0011).
   const dog = (o: {
     B?: [string,string]; K?: [string,string]; A?: [string,string]; E?: [string,string]; S?: [string,string]; R?: [string,string];
@@ -306,7 +333,7 @@ export function founderSeeds(): StoredSpecimen[] {
     return {
       ...f,
       id: twinId,
-      genotype: structuredClone(f.genotype),
+      genotype: twinGenotype(f.genotype, f.sex === "M" ? "F" : "M", f.pack),
       sex: f.sex === "M" ? "F" : "M",
       fertility: null,
       haldaneStatus: null,
