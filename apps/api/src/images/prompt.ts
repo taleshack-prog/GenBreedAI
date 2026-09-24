@@ -20,7 +20,7 @@
  * `physiqueAdj`) — nunca dos descritores fixos de espécie.
  */
 import { expressPhenotype, CANINE_PACK, FELINE_PACK } from "@genbreedai/engine";
-import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, catBreedEnglishName, baseFounderId, DOG_BREEDS } from "@genbreedai/shared";
+import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName, catBreedEnglishName, baseFounderId, mosaicMaleTwinColourName, DOG_BREEDS } from "@genbreedai/shared";
 import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
@@ -323,7 +323,9 @@ export function buildPrompt(s: StoredSpecimen): string {
     const breed = s.species === "felis-catus" ? breedInfo(baseId) : undefined;
     const dogBreed = s.pack === "canine" ? dogBreedInfo(baseId) : undefined;
     if (breed) {
-      subject = `a purebred ${breed.name} cat (Felis catus): ${breed.descriptor}. Body build: ${physiqueAdj}. Coat: ${coat}`;
+      // Gêmeo macho de fundador tartaruga/calico (preto): o nome do prompt é a cor que ele TEM ("Persa Preto"), nunca "Persa Tartaruga" (ADR-0038).
+      const founderName = mosaicMaleTwinColourName(s.id) ?? breed.name;
+      subject = `a purebred ${founderName} cat (Felis catus): ${breed.descriptor}. Body build: ${physiqueAdj}. Coat: ${coat}`;
     } else if (dogBreed) {
       subject = `a purebred ${dogBreed.name} dog (Canis familiaris): ${dogBreed.descriptor}. Body build: ${physiqueAdj}. Coat: ${coat}`;
     } else if (s.pack === "canine") {

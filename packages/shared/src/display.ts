@@ -13,7 +13,7 @@
  * (`baseFounderId`), senão "gato-persa-femea"/"onca-negra-macho" etc. não
  * batem em nenhuma tabela e caem no nome genérico da espécie.
  */
-import { breedInfo, dogBreedInfo } from "./breeds";
+import { breedInfo, dogBreedInfo, BREEDS, DOG_BREEDS } from "./breeds";
 import { speciesInfo, normalizeBiologicalSpecies } from "./species";
 
 /**
@@ -50,9 +50,40 @@ export function baseFounderId(id: string): string {
   return id.replace(/-(femea|macho)$/, "");
 }
 
+/**
+ * Palavra de cor "mosaico" no NOME de um fundador de gato (ADR-0036/0038): tartaruga e calico são SEMPRE fêmeas (só fêmea é mosaico), e o gêmeo macho herda
+ * o X não-laranja (regra do ADR-0035) — sai da cor de base da linhagem, PRETO (os fundadores mosaico têm melanismo `A/a`; um teste confere). O nome
+ * do gêmeo então troca a palavra pela cor que ele de fato tem, em vez de chamar de "Tartaruga ♂" um gato preto (macho tartaruga não existe na natureza).
+ */
+const MOSAIC_WORD = /\b(Tartaruga|Calico)\b/;
+
+/**
+ * Nome (sem desambiguação) do GÊMEO MACHO de um fundador mosaico — "Persa Tartaruga" → "Persa Preto" — ou `null` se `id` não é esse caso (não é gêmeo macho,
+ * ou o fundador base não é mosaico). Regra geral pelo nome do base, sem lista escrita à mão: qualquer fundador mosaico futuro herda o tratamento.
+ * Também é o nome que o PROMPT de imagem usa (o gerador não pode ler "Tartaruga" num gato preto).
+ */
+export function mosaicMaleTwinColourName(id: string): string | null {
+  if (!id.endsWith("-macho")) return null;
+  const name = breedInfo(baseFounderId(id))?.name;
+  if (!name || !MOSAIC_WORD.test(name)) return null;
+  return name.replace(MOSAIC_WORD, "Preto");
+}
+
+/** O nome já é de OUTRO fundador (raça de gato, de cão ou felino selvagem)? */
+function founderNameTaken(name: string): boolean {
+  return Object.values(BREEDS).some((b) => b.name === name)
+    || Object.values(DOG_BREEDS).some((b) => b.name === name)
+    || Object.values(WILD_FELINE_FOUNDER_NAMES).includes(name);
+}
+
 export function resolveDisplayName(id: string, species: string): string {
   const base = baseFounderId(id);
-  return breedInfo(base)?.name ?? dogBreedInfo(base)?.name ?? wildFelineFounderName(base) ?? speciesInfo(species).common;
+  const name = breedInfo(base)?.name ?? dogBreedInfo(base)?.name ?? wildFelineFounderName(base) ?? speciesInfo(species).common;
+  // Gêmeo macho de fundador mosaico: recebe o nome da cor que TEM (preto). Se esse nome já é de outro fundador ("Gato Preto", "Maine Coon Preto"),
+  // acrescenta a linhagem para nenhum nome ficar duplicado entre fundadores diferentes.
+  const colour = mosaicMaleTwinColourName(id);
+  if (colour) return founderNameTaken(colour) ? `${colour} (linhagem ${MOSAIC_WORD.exec(name)![1]})` : colour;
+  return name;
 }
 
 export function resolveScientificName(id: string, species: string): string {
