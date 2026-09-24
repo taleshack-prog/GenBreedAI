@@ -169,20 +169,42 @@ describe("segregação: base × gêmeo NUNCA gera um só resultado (nenhum par d
 
   // ── O casal do artigo: herança ligada ao sexo, em número grande de filhotes ──
   const N = 2000;
+  /**
+   * Mutação espontânea (µ = 1e-4 por locus por gameta, `gamete.ts`) num locus que MUDA o texto de cor de um filhote de pais w/w s/s C/C:
+   *  - O (X): laranja ↔ não-laranja (já excluído no golden tortoiseshell);
+   *  - W: w→W dá branco dominante ("a pure solid white coat") — foi o que apareceu nos 2.000 filhotes (esperado: ~0,4 por 2.000);
+   *  - S: s→S dá manchas brancas — a tartaruga vira "a calico coat";
+   *  - C: c^b/c^s/c^a/c no lugar de C (albino/pontos quando a mutação cai nos dois gametas, ou pontos/sépia no corpo).
+   * Ficam de fora SÓ esses filhotes; a asserção continua exigindo 100% dos demais (nada foi relaxado) e um teste confere que são raros.
+   */
+  const COLOUR_MASKING_LOCI = ["W", "C", "S"];
+  const hasColourMutation = (g: Genotype): boolean =>
+    (g.xLoci?.O ?? []).some(isMutant) || COLOUR_MASKING_LOCI.some((k) => (g.loci[k] ?? []).some(isMutant));
   const sample = (sireId: string, damId: string, tag: string) => {
-    const out: { sex: "M" | "F"; pigment: string | undefined; text: string }[] = [];
+    const kits: { sex: "M" | "F"; pigment: string | undefined; text: string }[] = [];
+    let excluded = 0;
     for (let i = 0; i < N; i++) {
       const r = cross(parent(sireId), parent(damId), "F1", `${tag}-${i}`, ctxFor(sireId, damId));
-      if ((r.specimen.genotype.xLoci?.O ?? []).some(isMutant)) continue; // mutação no O (µ=1e-4) fica de fora, como no golden tortoiseshell
-      out.push({ sex: r.specimen.sex, pigment: r.specimen.phenotype.coatPigment, text: kitText(r) });
+      if (hasColourMutation(r.specimen.genotype)) { excluded++; continue; }
+      kits.push({ sex: r.specimen.sex, pigment: r.specimen.phenotype.coatPigment, text: kitText(r) });
     }
-    return out;
+    return { kits, excluded };
   };
+
+  it("nenhum pai dos cruzamentos abaixo carrega W, S nem alelo de C fora de C/C — o branco/calico dos filhotes só pode vir de MUTAÇÃO, nunca de genótipo de fundador", () => {
+    for (const id of ["gato-laranja", "gato-laranja-femea", "gato-tartaruga", "gato-tartaruga-macho", "gato-preto-femea", "gato-calico-macho"]) {
+      const loci = founder(id).genotype.loci;
+      expect(loci.W, `${id} W`).toEqual(["w", "w"]);
+      expect(loci.C, `${id} C`).toEqual(["C", "C"]);
+      if (id !== "gato-calico-macho") expect(loci.S, `${id} S`).toEqual(["s", "s"]);
+    }
+  });
   const TORT = /tortoiseshell|blue-cream/;
   const ORANGE = /ginger-orange|soft cream/;
 
   it(`TARTARUGA F × LARANJA M (os dois bases), ${N} filhotes: filhas 50% laranja / 50% tartaruga (nunca preta); filhos 50% laranja / 50% não-laranja (nunca tartaruga)`, () => {
-    const kits = sample("gato-laranja", "gato-tartaruga", "casal1");
+    const { kits, excluded } = sample("gato-laranja", "gato-tartaruga", "casal1");
+    expect(excluded / N, "mutações de cor devem ser raras (µ=1e-4)").toBeLessThan(0.01);
     const daughters = kits.filter((k) => k.sex === "F"), sons = kits.filter((k) => k.sex === "M");
     expect(daughters.length).toBeGreaterThan(800);
     expect(sons.length).toBeGreaterThan(800);
@@ -202,7 +224,8 @@ describe("segregação: base × gêmeo NUNCA gera um só resultado (nenhum par d
   });
 
   it(`HERANÇA CRUZADA, ${N} filhotes: pai NÃO-laranja (gêmeo macho da tartaruga, preto) × mãe LARANJA (gêmea O/O) → 100% das filhas tartaruga e 100% dos filhos laranja`, () => {
-    const kits = sample("gato-tartaruga-macho", "gato-laranja-femea", "cruzada");
+    const { kits, excluded } = sample("gato-tartaruga-macho", "gato-laranja-femea", "cruzada");
+    expect(excluded / N, "mutações de cor devem ser raras (µ=1e-4)").toBeLessThan(0.01);
     const daughters = kits.filter((k) => k.sex === "F"), sons = kits.filter((k) => k.sex === "M");
     expect(daughters.length).toBeGreaterThan(800);
     expect(sons.length).toBeGreaterThan(800);
@@ -211,7 +234,8 @@ describe("segregação: base × gêmeo NUNCA gera um só resultado (nenhum par d
   });
 
   it("o mesmo padrão com o gato preto que já existia: pai laranja × mãe preta → filhas 100% tartaruga, filhos 100% não-laranja (pretos ou tabby)", () => {
-    const kits = sample("gato-laranja", femaleOf("gato-preto"), "preto");
+    const { kits, excluded } = sample("gato-laranja", femaleOf("gato-preto"), "preto");
+    expect(excluded / N, "mutações de cor devem ser raras (µ=1e-4)").toBeLessThan(0.01);
     const daughters = kits.filter((k) => k.sex === "F"), sons = kits.filter((k) => k.sex === "M");
     expect(daughters.length).toBeGreaterThan(800);
     for (const d of daughters) { expect(d.pigment, d.text).toBe("MOSAIC"); expect(d.text).toMatch(TORT); }
@@ -220,7 +244,7 @@ describe("segregação: base × gêmeo NUNCA gera um só resultado (nenhum par d
 
   it("macho nunca é tartaruga/calico em nenhum cruzamento com calico (2 × N filhotes)", () => {
     for (const [sire, dam, tag] of [["gato-laranja", "gato-calico", "cal1"], ["gato-tartaruga-macho", "gato-calico", "cal2"]] as const) {
-      for (const k of sample(sire, dam, tag).filter((x) => x.sex === "M")) {
+      for (const k of sample(sire, dam, tag).kits.filter((x) => x.sex === "M")) {
         expect(k.pigment, k.text).not.toBe("MOSAIC");
         expect(k.text).not.toMatch(/tortoiseshell|calico|blue-cream/);
       }

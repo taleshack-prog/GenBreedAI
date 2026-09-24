@@ -45,6 +45,9 @@ Gato Laranja × Gato Tartaruga nascer sem raça; `catBreedIds()` (as "12 raças 
 - **Free** passa de 12 para 28 gatos na galeria (56 espécimes com os gêmeos).
 - **Limites do prompt (inalterados):** S só na família laranja (o gêmeo do calico sai preto liso); a tartaruga diz sempre "black"; sorrel/azul saem "solid"; corpo do
   colorpoint/snow no tom de fundo; sem face achatada do Persa, prata/smoke/mink; o prompt de fundador diz "a purebred Gato Laranja cat" (mesma estranheza do "Gato Rajado").
+- **Mutação nos testes de volume:** com µ = 1e-4 por locus por gameta (`gamete.ts` troca o alelo por QUALQUER alternativo do locus), 2.000 filhotes de pais `w/w s/s C/C`
+  trazem, em média, ~0,4 brancos (w→W, dominante), ~0,4 calicos (s→S) e mutações em O/C. Esses filhotes saem do denominador dos testes do casal tartaruga × laranja
+  (`hasColourMutation`: O, W, C, S); a asserção segue exigindo 100% dos demais e um teste limita os excluídos a < 1%. Nenhum pai carrega W ou S (teste).
 - Testes: `apps/api/test/color-founders.spec.ts` (novo; casal tartaruga × laranja com 2.000 filhotes por cruzamento); `founder-carriers.spec.ts`, `feline-colour-prompt.spec.ts`,
   `feline-orange-prompt.spec.ts` restritos aos fundadores originais; `breed-field.spec.ts` e `about.test.ts` atualizados.
 
