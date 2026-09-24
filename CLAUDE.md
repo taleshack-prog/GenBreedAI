@@ -55,7 +55,7 @@ com cache determinístico.
 
 | Arquivo | Papel |
 |---|---|
-| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0038) |
+| `docs/adr/` | Decisões de arquitetura/regra. **Fonte mais recente** (ADR-0001 a 0039) |
 | `docs/gene-bank/felinos-genetica.md`, `docs/gene-bank/caninos-genetica.md` | Loci, dominâncias e portadores ocultos de cada pack — fonte dos data packs |
 | `docs/Gene-Bank.md` | Gene-Bank original (Fase 0); as extensões por pack acima prevalecem |
 | `docs/TDD-GenBreedAI.md` | Spec de engenharia (05/09/2026). Motor (§4) e golden tests (§4.5) seguem canônicos; **§6 tiers desatualizada** |
@@ -323,7 +323,7 @@ Scripts da API (`pnpm --filter @genbreedai/api <script>`): `db:generate`, `db:mi
 
 ## 12. ADR (Architecture Decision Record)
 
-Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0039). Formato mínimo: Contexto
+Template em `docs/adr/0000-template.md`; arquivos `docs/adr/00NN-titulo.md` (próximo: 0040). Formato mínimo: Contexto
 (problema e restrições) · Decisão · Consequências (trade-offs, riscos) · Alternativas consideradas (e por que foram
 rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-o com um novo.
 
@@ -355,6 +355,7 @@ rejeitadas). Decisão nova ganha ADR novo — não reescreva ADR aceito; supere-
 - **0036** — (produto/genética de dados) 16 fundadores de COR de gato (doméstico laranja/tartaruga/calico; Persa, Maine Coon, Abissínio, Ragdoll, Bengala) — só a cor muda; gêmeo trata o X (tartaruga F → macho `[o]`, dá a herança cruzada); `CAT_FOUNDER_COLOUR_VARIANTS` (variante → raça, alimenta `breed`); 74 → 90 bases / 180 espécimes; 20 retratos novos; Persa Preto não existe (o gêmeo da Persa Tartaruga é o persa preto). **Aplicar: `db:seed` + `images:seed`.**
 - **0037** — (web/infra de imagem, não genética) Listas de espécimes (galeria de espécies, Gene Bank, incubadora) usam a miniatura da ADR-0027 com `loading="lazy"` e fallback para o original; a tela individual e as cartas do Laboratório mantêm o original. API: `thumbUrl` ADITIVO em `ImageResult` (`/specimens/:id/image`) e em `IncubatorEntryView`; `pickListImage`/`swapToFallback` em `lib/list-image.ts`. Cascata de N `getImage` por card fica como pendência.
 - **0038** — (produto/nome, não genética) O gêmeo macho de fundador tartaruga/calico sai PRETO (ADR-0035) e ganha nome próprio pela regra geral `mosaicMaleTwinColourName` (`shared/display.ts`): "Persa Tartaruga" → "Persa Preto"; se o nome já é de outro fundador, acrescenta "(linhagem Tartaruga|Calico)" (Gato Preto, Maine Coon Preto). O prompt de imagem usa a cor, nunca "Tartaruga". Nenhum nome duplicado entre fundadores (teste).
+- **0039** — (infra/operação, não genética) Health check central para o painel da Hack Tech Farm: `GET /api/v1/health/summary` na API, `Authorization: Bearer $MONITOR_TOKEN` (`timingSafeEqual`; ausente → 503, errado → 401, sem corpo; fora do `AuthGuard`), 200 sempre, 8 checks em paralelo (timeout 2s, cache 30s, nenhum segredo no corpo). Só leitura, sem tabela nova. `cron_push` é INFERIDO (o `push:dispatch` não registra execução — heartbeat exigiria migração); custo da fal.ai via Usage API com `FAL_ADMIN_KEY` (fallback: estimativa); tetos `FAL_MONTHLY_CAP_USD`/`R2_STORAGE_CAP_GB`. Código em `apps/api/src/health/`.
 
 Antes deles: 0001–0004 (correções da Fase 0), 0005/0006 (arquitetura hexagonal, Drizzle/PGlite), 0010–0012 (extensão
 felina, loci morfológicos caninos, genética quantitativa). Portadores ocultos de fundadores: `docs/gene-bank/`.

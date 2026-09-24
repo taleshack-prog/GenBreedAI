@@ -9,6 +9,7 @@ import { AuthModule } from "./auth/auth.module";
 import { IncubatorModule } from "./incubator/incubator.module";
 import { PublicSpecimenModule } from "./specimens/public-specimen.module";
 import { PushModule } from "./push/push.module";
+import { HealthModule } from "./health/health.module";
 
-@Module({ imports: [AuthModule, CrossModule, ImageModule, GenomeModule, GeneBankModule, ReferralModule, BillingModule, IncubatorModule, PublicSpecimenModule, PushModule] })
+@Module({ imports: [AuthModule, CrossModule, ImageModule, GenomeModule, GeneBankModule, ReferralModule, BillingModule, IncubatorModule, PublicSpecimenModule, PushModule, HealthModule] })
 export class AppModule {}

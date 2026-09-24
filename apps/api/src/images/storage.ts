@@ -243,6 +243,29 @@ export async function listStoredNames(): Promise<{ names: string[]; pages: numbe
   }
 }
 
+/** O storage está usando o R2 (as cinco `R2_*` definidas)? Health check (ADR-0039). */
+export function r2Configured(): boolean { return useR2; }
+
+/** Health check (ADR-0039): lista UM objeto do bucket — lança se o R2 não responde. Só leitura, sem custo relevante. */
+export async function r2Ping(): Promise<void> {
+  await client().send(new ListObjectsV2Command({ Bucket: R2.bucket!, MaxKeys: 1 }));
+}
+
+/**
+ * Health check (ADR-0039): soma dos tamanhos dos objetos do prefixo `generated/` (paginado, até `maxPages` de 1.000). `complete=false` se parou no
+ * limite de páginas. O R2 não tem API de "ocupação": é a soma da listagem. Quem chama guarda o resultado (não chame a cada requisição).
+ */
+export async function r2UsedBytes(maxPages = 20): Promise<{ bytes: number; objects: number; complete: boolean }> {
+  let bytes = 0, objects = 0, token: string | undefined, pages = 0;
+  do {
+    const res = await client().send(new ListObjectsV2Command({ Bucket: R2.bucket!, Prefix: "generated/", ContinuationToken: token }));
+    for (const o of res.Contents ?? []) { bytes += o.Size ?? 0; objects++; }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+    pages++;
+  } while (token && pages < maxPages);
+  return { bytes, objects, complete: !token };
+}
+
 /** Bytes do retrato original (só leitura) — `null` se não existe. Nunca gera imagem. */
 export async function readOriginal(cacheKey: string): Promise<Buffer | null> {
   if (useR2) {
