@@ -24,22 +24,58 @@ import { speciesInfo, SPECIES_INFO, breedInfo, dogBreedInfo, dogBreedEnglishName
 import type { Sex } from "@genbreedai/shared";
 import type { StoredSpecimen } from "../specimens/in-memory.repository";
 
+/**
+ * Cor da eumelanina FELINA a partir de B (TYRP1) e D (MLPH) — ADR-0034. `null` = preto denso (B_ D_), o padrão de todos os fundadores:
+ * nesse caso o texto continua EXATAMENTE o de antes (tom de fundo `Bd`). Diluição azula o preto; chocolate/canela clareiam com D.
+ */
+function felineTint(loci: Record<string, string>): string | null {
+  const diluted = loci.D === "diluído";
+  if (loci.B === "chocolate") return diluted ? "lilac (diluted chocolate)" : "chocolate brown";
+  if (loci.B === "canela") return diluted ? "fawn" : "cinnamon";
+  return diluted ? "blue-grey (diluted black)" : null;
+}
+
+/** Nome da cor dos PONTOS (`c^s/c^s`) pela mesma regra B×D: seal (B_ D_), chocolate, blue, lilac (+ cinnamon/fawn com `b^l`). Só para pontos. */
+export function felinePointColour(loci: Record<string, string>): "seal" | "chocolate" | "blue" | "lilac" | "cinnamon" | "fawn" {
+  const diluted = loci.D === "diluído";
+  if (loci.B === "chocolate") return diluted ? "lilac" : "chocolate";
+  if (loci.B === "canela") return diluted ? "fawn" : "cinnamon";
+  return diluted ? "blue" : "seal";
+}
+
+/** Como o ponto entra no texto. `seal` mantém a frase ANTIGA ("darker"), para os fundadores atuais não mudarem de prompt. */
+const POINT_WORDING: Record<ReturnType<typeof felinePointColour>, string> = {
+  seal: "darker",
+  chocolate: "chocolate-brown",
+  blue: "blue-grey",
+  lilac: "pale lilac-grey",
+  cinnamon: "cinnamon",
+  fawn: "fawn",
+};
+
 /** Pelagem FELINA a partir do fenótipo. */
 function coatFeline(loci: Record<string, string>): string {
   if (loci.Hr === "pelado (sphynx)") return "completely hairless, soft wrinkled bare skin with no fur, coat pattern only faintly visible as skin pigment";
   if (loci.W === "branco") return "a pure solid white coat";
   if (loci.C === "albino") return "a true albino appearance: pure white coat with faint ghost markings and pink-red eyes";
-  let base = `a ${baseTone(loci)}`;
-  if (loci.B === "chocolate") base = "a chocolate-brown";
-  else if (loci.B === "canela") base = "a cinnamon";
-  if (loci.D === "diluído") base = base + " diluted blue-grey";
+  const pointed = loci.C === "pontos";
+  // Corpo de gato de PONTOS não recebe a cor de B/D (ela vai nos pontos, abaixo): o corpo segue o tom de fundo, como sempre.
+  const tint = pointed ? null : felineTint(loci);
+  const base = `a ${baseTone(loci)}`;
   let coat: string;
-  if (loci.A?.startsWith("melan")) coat = "a melanistic solid black coat with faint ghost markings";
-  else if (loci.P === "rosetas") coat = `${base} coat covered in bold black rosettes with inner spots`;
+  if (loci.A?.startsWith("melan")) {
+    coat = tint ? `a melanistic solid ${tint} coat with faint ghost markings` : "a melanistic solid black coat with faint ghost markings";
+  } else if (tint) {
+    // Cor de eumelanina diferente do preto denso (ADR-0034): "a solid <cor> coat" no liso; nos padrões, marcas "darker" (não "black").
+    if (loci.P === "rosetas") coat = `a ${tint} coat covered in bold darker rosettes with inner spots`;
+    else if (loci.P === "listras") coat = `a ${tint} coat with bold vertical darker stripes`;
+    else if (loci.P === "pintas") coat = `a ${tint} coat with round solid darker spots`;
+    else coat = `a solid ${tint} coat`;
+  } else if (loci.P === "rosetas") coat = `${base} coat covered in bold black rosettes with inner spots`;
   else if (loci.P === "listras") coat = `${base} coat with bold vertical black stripes`;
   else if (loci.P === "pintas") coat = `${base} coat with round solid black spots`;
   else coat = `${base} plain uniform coat`;
-  if (loci.C === "pontos") coat += ", with darker pointed extremities (face, ears, paws)";
+  if (pointed) coat += `, with ${POINT_WORDING[felinePointColour(loci)]} pointed extremities (face, ears, paws)`;
   // Descritor de juba SÓ quando o fenótipo diz juba (ADR-0017) — Ma agora é
   // sex-limited no motor (fêmea nunca expressa, mesmo Ma/Ma), então "sem
   // juba" já cobre o caso feminino sem precisar de um branch "the male";

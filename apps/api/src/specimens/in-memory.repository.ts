@@ -156,7 +156,10 @@ export function founderSeeds(): StoredSpecimen[] {
     Ma: [string, string] = ["ma","ma"],
     Bd: [string, string] = ["Bd^d","Bd^d"], He: [string, string] = ["He^r","He^r"], Ec: [string, string] = ["Ec^n","Ec^n"],
     Fl: [string, string] = ["Fl^s","Fl^s"], Hr: [string, string] = ["Hr","Hr"], S: [string, string] = ["s","s"],
-  ): Genotype => ({ loci: { A, P, B: ["B","B"], C, D: ["D","D"], W, S, Ma, Bd, He, Ec, Fl, Hr },
+    // B (chocolate/canela) e D (diluição) — parâmetros NO FIM, com o padrão de sempre (B/B, D/D): nenhuma das chamadas atuais muda e
+    // nenhum fundador atual muda de genótipo (ADR-0034). Só destrava a possibilidade de um fundador futuro carregar `b`, `b^l` ou `d`.
+    B: [string, string] = ["B","B"], D: [string, string] = ["D","D"],
+  ): Genotype => ({ loci: { A, P, B, C, D, W, S, Ma, Bd, He, Ec, Fl, Hr },
     qtl: { porte: 0.5, vigor: 0.5, beleza: 0.5, rosetas: 0.5, ...q } });
   // Genótipo canino com morfologia + porte (ADR-0011).
   const dog = (o: {
