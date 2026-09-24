@@ -4,7 +4,7 @@
  * (raça nomeada, cor/padrão calculados prevalecendo; mestiço, variedade de cor e espécime antigo como antes).
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { BREEDS, CAT_BREED_ENGLISH_NAMES, catBreedEnglishName } from "@genbreedai/shared";
+import { BREEDS, CAT_BREED_ENGLISH_NAMES, CAT_FOUNDER_COLOUR_VARIANTS, catBreedEnglishName } from "@genbreedai/shared";
 import { InMemorySpecimenRepository, FOUNDER_SEX, founderSeeds, type StoredSpecimen } from "../src/specimens/in-memory.repository";
 import { founderBreed, inheritBreed, specimenBreed, breedForOffspring } from "../src/specimens/breed";
 import { CrossService } from "../src/cross/cross.service";
@@ -51,13 +51,30 @@ describe("preenchimento nos fundadores", () => {
     for (const f of founderSeeds()) {
       if (f.species === "felis-catus") {
         const base = f.id.replace(/-(femea|macho)$/, "");
-        expect(f.breed, f.id).toBe(CAT_BREED_ENGLISH_NAMES[base] ? base : null);
+        // raça (id de raça) → ela mesma; fundador de COR de uma raça (ADR-0036) → a raça; variedade sem raça → nulo
+        expect(f.breed, f.id).toBe(CAT_BREED_ENGLISH_NAMES[base] ? base : (CAT_FOUNDER_COLOUR_VARIANTS[base] ?? null));
       } else if (f.pack === "canine") {
         expect(f.breed, f.id).toBe(f.species);
       } else {
         expect(f.breed, f.id).toBeNull();
       }
     }
+  });
+
+  it("fundadores de COR (ADR-0036): Persa Branco → 'gato-persa' (e o gêmeo idem); Gato Laranja/Tartaruga/Calico → nulo", () => {
+    expect(founderBreed("gato-persa-branco", "felis-catus")).toBe("gato-persa");
+    expect(founderBreed("gato-persa-tartaruga-macho", "felis-catus")).toBe("gato-persa");
+    expect(founderBreed("gato-maine-coon-laranja", "felis-catus")).toBe("gato-maine-coon");
+    expect(founderBreed("gato-abissinio-sorrel", "felis-catus")).toBe("gato-abissinio");
+    for (const id of ["gato-laranja", "gato-tartaruga", "gato-calico"]) expect(founderBreed(id, "felis-catus"), id).toBeNull();
+    // toda variedade aponta para uma raça que EXISTE na tabela de nomes ingleses
+    for (const [id, breed] of Object.entries(CAT_FOUNDER_COLOUR_VARIANTS)) if (breed) expect(CAT_BREED_ENGLISH_NAMES[breed], id).toBeDefined();
+  });
+
+  it("filhote de Persa Branco × Persa Laranja nasce 'gato-persa' (as duas variedades são Persa); Gato Laranja × Gato Tartaruga nasce sem raça", async () => {
+    const repo = new InMemorySpecimenRepository();
+    expect(await breedForOffspring(repo, "gato-persa-branco", femaleOf("gato-persa-laranja"))).toBe("gato-persa");
+    expect(await breedForOffspring(repo, maleOf("gato-laranja"), "gato-tartaruga")).toBeNull();
   });
 
   it("founderBreed: twins tratados como o base; espécie/ids desconhecidos → nulo", () => {

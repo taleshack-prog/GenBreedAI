@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { NextRequest } from "next/server";
-import { SPECIES_INFO, BREEDS, DOG_BREEDS } from "@genbreedai/shared";
+import { SPECIES_INFO, catBreedIds, DOG_BREEDS } from "@genbreedai/shared";
 import { PLANS, fmtBRL } from "../plans";
 import {
   ABOUT_BLOG_LINKS, ABOUT_PUBLISHER, ABOUT_DESCRIPTION, ABOUT_LEAD, ABOUT_OG_IMAGE, ABOUT_PATH, ABOUT_URL, aboutFaq, aboutSections, aboutVisibleText,
@@ -115,7 +115,8 @@ describe("fatos — números vindos do código, nada digitado", () => {
 
   it("espécies: todos os felinos selvagens do catálogo, a contagem de raças de gato e de cão, e o pool do PhD", () => {
     for (const s of Object.values(SPECIES_INFO).filter((x) => x.poolGroup === "WILD_FELINE")) expect(text, s.common).toContain(s.common);
-    expect(text).toContain(`${Object.keys(BREEDS).length} raças`);
+    expect(text).toContain(`${catBreedIds().length} raças`);
+    expect(catBreedIds().length).toBe(12); // as variedades de cor (ADR-0036) não viram "raças" na página
     expect(text).toContain(`${Object.keys(DOG_BREEDS).length} raças`);
     expect(text).toContain(PLANS.find((p) => p.id === "PHD")!.pool);
     expect(text).toContain("Felis catus");

@@ -31,7 +31,8 @@ const BEFORE: Record<string, Genotype> = {
 };
 
 describe("Portadores ocultos — item 2: fenótipo VISÍVEL de fundador idêntico antes/depois", () => {
-  const founders = founderSeeds().filter((f) => f.species === "felis-catus" && !f.id.endsWith("-femea") && !f.id.endsWith("-macho"));
+  // SÓ os 12 fundadores ORIGINAIS de gato (chaves de BEFORE): os 16 fundadores de cor (ADR-0036) têm testes próprios e não fazem parte deste snapshot.
+  const founders = founderSeeds().filter((f) => f.species === "felis-catus" && !f.id.endsWith("-femea") && !f.id.endsWith("-macho") && f.id in BEFORE);
 
   it("os 12 fundadores-base de felis-catus existem (nenhum sumiu/mudou de id)", () => {
     expect(founders.map((f) => f.id).sort()).toEqual(Object.keys(BEFORE).sort());

@@ -9,13 +9,14 @@
  * Espécime antigo (coluna criada depois) tem `breed` nulo: para FUNDADOR o valor se deriva do id, então herdar de um fundador antigo
  * funciona sem backfill; filhote antigo fica nulo (comportamento de antes).
  */
-import { baseFounderId, dogBreedInfo, CAT_BREED_ENGLISH_NAMES } from "@genbreedai/shared";
+import { baseFounderId, dogBreedInfo, CAT_BREED_ENGLISH_NAMES, CAT_FOUNDER_COLOUR_VARIANTS } from "@genbreedai/shared";
 import type { SpecimenRepository, StoredSpecimen } from "./in-memory.repository";
 
 /** Raça de um FUNDADOR pelo id e espécie (twins tratados como o base). */
 export function founderBreed(id: string, species: string): string | null {
   const base = baseFounderId(id);
-  if (species === "felis-catus") return CAT_BREED_ENGLISH_NAMES[base] ? base : null;
+  // Fundador de cor de uma raça (ADR-0036: "gato-persa-branco") → a raça ("gato-persa"); variedade sem raça (laranja/tartaruga/calico) → nulo.
+  if (species === "felis-catus") return CAT_BREED_ENGLISH_NAMES[base] ? base : (CAT_FOUNDER_COLOUR_VARIANTS[base] ?? null);
   if (dogBreedInfo(base)) return species;
   return null;
 }

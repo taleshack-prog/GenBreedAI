@@ -4,7 +4,7 @@
  * Não há fundador laranja ainda: os casos abaixo montam o genótipo à mão.
  */
 import { describe, it, expect } from "vitest";
-import type { Genotype, Sex } from "@genbreedai/shared";
+import { baseFounderId, CAT_FOUNDER_COLOUR_VARIANTS, type Genotype, type Sex } from "@genbreedai/shared";
 import { cross, expressPhenotype, FELINE_PACK, hashGenotype, type ParentInput, type CrossContext, type Pedigree } from "@genbreedai/engine";
 import { founderSeeds, twinGenotype, type StoredSpecimen } from "../src/specimens/in-memory.repository";
 import { buildPrompt, traitVector } from "../src/images/prompt";
@@ -177,8 +177,11 @@ describe("gêmeo de fundador: o X é tratado, não copiado", () => {
 });
 
 describe("fundadores atuais — nada mudou", () => {
+  // SÓ os originais: os fundadores de cor (ADR-0036) laranja/tartaruga/calico TÊM xLoci de propósito.
+  const originals = () => founderSeeds().filter((x) => x.pack === "feline" && !(baseFounderId(x.id) in CAT_FOUNDER_COLOUR_VARIANTS));
+
   it("nenhum tem xLoci (todos assumem 'o'), nem no gêmeo; a chave de hash não ganha o sufixo do X", () => {
-    for (const f of founderSeeds().filter((x) => x.pack === "feline")) {
+    for (const f of originals()) {
       expect(f.genotype.xLoci, f.id).toBeUndefined();
       expect("xLoci" in f.genotype, f.id).toBe(false);
       expect(hashGenotype(f.genotype), f.id).not.toContain("|x{");
@@ -186,7 +189,7 @@ describe("fundadores atuais — nada mudou", () => {
   });
 
   it("o prompt de todo fundador felino não muda com a leitura do X (mesmo texto com e sem passar xLoci ao motor)", () => {
-    for (const f of founderSeeds().filter((x) => x.pack === "feline")) {
+    for (const f of originals()) {
       const withX = expressPhenotype({ loci: f.genotype.loci, qtl: {}, xLoci: f.genotype.xLoci }, FELINE_PACK, f.sex ?? undefined);
       const without = expressPhenotype({ loci: f.genotype.loci, qtl: {} }, FELINE_PACK, f.sex ?? undefined);
       expect(withX.loci, f.id).toEqual(without.loci);

@@ -8,7 +8,7 @@
  *  - motor: docs/gene-bank/*.md, packages/engine e ADRs 0002, 0013–0018, 0012/0014 (ver comentários por item).
  * Regra de manutenção: fato novo entra aqui SÓ com fonte; espécie/recurso não implementado NUNCA entra.
  */
-import { BREEDS, DOG_BREEDS, SPECIES_INFO } from "@genbreedai/shared";
+import { catBreedIds, DOG_BREEDS, SPECIES_INFO } from "@genbreedai/shared";
 import { PLANS, fmtBRL, type PlanInfo } from "./plans";
 // ADR-0021/0025: prazos vêm da tabela da web (espelho de apps/api/src/incubator/gestation-time.ts, com teste de igualdade).
 import { FIRST_GESTATION_MINUTES, GESTATION_MIN_HOURS, GESTATION_MAX_HOURS } from "./gestation";
@@ -59,7 +59,8 @@ const wildFelineNames = (): string[] =>
 
 const listPt = (xs: string[]): string => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} e ${xs[xs.length - 1]}`);
 
-const catBreeds = (): number => Object.keys(BREEDS).length;
+// Raças de gato = fundadores de raça; as VARIEDADES DE COR (ADR-0036: Persa Branco, Gato Laranja…) não são raças novas.
+const catBreeds = (): number => catBreedIds().length;
 const dogBreeds = (): number => Object.keys(DOG_BREEDS).length;
 
 const plan = (id: PlanInfo["id"]): PlanInfo => PLANS.find((p) => p.id === id)!;

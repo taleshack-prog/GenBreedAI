@@ -163,6 +163,40 @@ caninos-genetica.md`, que também não os documentava):
 - **braco-alemao**: `E/e` (creme/vermelho oculto atrás de extensão normal).
 - **Onda 2** (não documentada em `caninos-genetica.md`): `K^br/k^y` (brindle oculto) em presa-canaria, cimarron, pit-bull e bulldog-ingles; `Cl^l/Cl^s` (pelo longo oculto) em pastor-pampeano.
 
+## Fundadores de COR (ADR-0036) — 16 novos de `felis-catus`
+
+Cada raça de gato tinha UM fundador homozigoto em tudo (Persa × Persa dava sempre o mesmo filhote), mas em várias raças a cor é livre e o que define a
+raça é a morfologia. Com B, D (ADR-0034) e O (ADR-0035) destravados, entram 16 fundadores de **cor**: só os loci de cor mudam; `Ma`, `He`, `Ec`, `Fl`, `Hr`
+(inclusive os portadores de forma) e o QTL são os do fundador da raça — Persa e Maine Coon mantêm `Fl^l/Fl^s`. Cada base tem um gêmeo de sexo oposto; o X do
+gêmeo segue a regra do ADR-0035 (fêmea `O/O` → macho `[O]`; **fêmea `O/o` → macho `[o]`**; macho `[O]` → fêmea `[O,O]`). Portadores `B/b`, `D/d` entram do lado
+recessivo (regra do ADR-0010). O sexo do base é fixo: tartaruga/calico **sempre fêmea**, laranja macho.
+
+| Fundador (base) | Sexo | Loci de cor (A · P · B · C · D · W · S) | X | Pelagem no prompt |
+|---|---|---|---|---|
+| `gato-laranja` | M | a/a · P^m/P^m · B/B · C/C · **D/d** · w/w · s/s | `[O]` | ginger-orange com listras |
+| `gato-tartaruga` | F | **A/a** · P^m/P^t · B/B · C/C · D/d · w/w · s/s | `[O,o]` | tortoiseshell (gêmeo `[o]`: preto) |
+| `gato-calico` | F | igual à tartaruga com **S/s** | `[O,o]` | calico (gêmeo `[o]`: preto liso — o S ainda não aparece fora da família laranja) |
+| `gato-persa-branco` | M | a/a · P^t/P^t · B/B · C/C · D/D · **W/w** · s/s | — | branco |
+| `gato-persa-colorpoint` | M | a/a · P^t/P^t · **B/b** · **c^s/c^s** · **D/d** · w/w · s/s | — | pontos (seal; segrega chocolate/blue/lilac) |
+| `gato-persa-chocolate` | F | a/a · P^t/P^t · **b/b** · C/C · **D/d** · w/w · s/s | — | chocolate (segrega lilás) |
+| `gato-persa-laranja` | M | a/a · P^t/P^t · B/B · C/C · D/d · w/w · s/s | `[O]` | ginger-orange (tabby fantasma) |
+| `gato-persa-tartaruga` | F | A/a · P^t/P^t · B/B · C/C · D/d · w/w · s/s | `[O,o]` | tortoiseshell (o gêmeo `[o]` já é o persa preto) |
+| `gato-maine-coon-preto` | F | **A/a** · P^m/P^m · B/B · C/C · D/D · w/w · s/s | — | preto |
+| `gato-maine-coon-branco` | M | a/a · P^m/P^m · B/B · C/C · D/D · **W/w** · s/s | — | branco |
+| `gato-maine-coon-laranja` | M | a/a · P^m/P^m · B/B · C/C · D/d · w/w · s/s | `[O]` | ginger-orange com listras |
+| `gato-maine-coon-tartaruga` | F | A/a · P^m/P^m · B/B · C/C · D/d · w/w · s/s | `[O,o]` | tortoiseshell |
+| `gato-abissinio-sorrel` | F | a/a · P^t/P^t · **b^l/b^l** · C/C · D/d · w/w · s/s | — | cinnamon |
+| `gato-abissinio-azul` | M | a/a · P^t/P^t · B/b^l · C/C · **d/d** · w/w · s/s | — | blue-grey (sorrel × azul: 4 fenótipos, inclusive fawn) |
+| `gato-ragdoll-blue` | M | a/a · P^t/P^t · B/b · **c^s/c^s** · **d/d** · w/w · S/s | — | pontos blue (segrega lilac) |
+| `gato-bengala-snow` | F | a/a · P^s/P^t · B/B · **c^s/c^s** · D/D · w/w · s/s · **Bd^s/Bd^s** | — | snow lynx point |
+
+**Casal do artigo (herança ligada ao sexo):** `gato-tartaruga` (F) × `gato-laranja` (M) → filhas 50% laranja / 50% tartaruga, filhos 50% laranja / 50% não-laranja;
+**herança cruzada** com os gêmeos: `gato-tartaruga-macho` `[o]` (preto) × `gato-laranja-femea` `O/O` → 100% das filhas tartaruga e 100% dos filhos laranja
+(`apps/api/test/color-founders.spec.ts`, 2.000 filhotes por cruzamento). O gato doméstico laranja/tartaruga/calico e as demais variedades de cor de uma raça
+herdam o campo `breed` da raça (`CAT_FOUNDER_COLOUR_VARIANTS`); laranja/tartaruga/calico do doméstico não têm raça (`breed` nulo), como tabby/preto/branco.
+**Limites do prompt:** S (bicolor) só aparece na família laranja; a tartaruga diz sempre "black"; sorrel/azul saem "solid" (sem o ticking do Abissínio); o corpo do
+colorpoint/snow segue o tom de fundo `Bd`.
+
 ## Compatibilidade com o TDD existente
 - O loco **A** mantém o significado do arco Pumajaguar (melanismo dominante); os
   golden tests do TDD §4.5 (que usam só A) permanecem válidos e verdes.

@@ -19,7 +19,45 @@ export const BREEDS: Record<string, BreedInfo> = {
   "gato-mau-egipcio": { name: "Mau Egípcio", descriptor: "an Egyptian Mau cat: an elegant spotted shorthair, silver coat scattered with random natural black spots, gooseberry-green eyes and a slightly worried expression" },
   "gato-abissinio": { name: "Abissínio", descriptor: "an Abyssinian cat: a slender athletic ticked-agouti cat with a warm ruddy-brown coat, large alert ears, lithe body" },
   "gato-ragdoll": { name: "Ragdoll", descriptor: "a Ragdoll cat: large and heavy, a plush semi-long silky coat, pointed coloration with a lighter body, big oval blue eyes, a relaxed floppy posture" },
+  // ── fundadores de COR (ADR-0036) — descritores SEM cor: a cor vem do fenótipo calculado, nunca do descritor ──
+  "gato-laranja": { name: "Gato Laranja", descriptor: "a domestic shorthair cat with a short smooth coat" },
+  "gato-tartaruga": { name: "Gato Tartaruga", descriptor: "a domestic shorthair cat with a short smooth coat" },
+  "gato-calico": { name: "Gato Calico", descriptor: "a domestic shorthair cat with a short smooth coat" },
+  "gato-persa-branco": { name: "Persa Branco", descriptor: "a Persian cat: cobby stocky body, extremely long dense flowing fur, a flat brachycephalic round face with a snub nose, tiny ears set low, large round expressive eyes" },
+  "gato-persa-colorpoint": { name: "Persa Colorpoint (Himalaio)", descriptor: "a Persian cat: cobby stocky body, extremely long dense flowing fur, a flat brachycephalic round face with a snub nose, tiny ears set low, large round expressive eyes" },
+  "gato-persa-chocolate": { name: "Persa Chocolate", descriptor: "a Persian cat: cobby stocky body, extremely long dense flowing fur, a flat brachycephalic round face with a snub nose, tiny ears set low, large round expressive eyes" },
+  "gato-persa-laranja": { name: "Persa Laranja", descriptor: "a Persian cat: cobby stocky body, extremely long dense flowing fur, a flat brachycephalic round face with a snub nose, tiny ears set low, large round expressive eyes" },
+  "gato-persa-tartaruga": { name: "Persa Tartaruga", descriptor: "a Persian cat: cobby stocky body, extremely long dense flowing fur, a flat brachycephalic round face with a snub nose, tiny ears set low, large round expressive eyes" },
+  "gato-maine-coon-preto": { name: "Maine Coon Preto", descriptor: "a Maine Coon cat: very large and long-bodied, a long shaggy water-resistant coat, prominent lynx-tipped tufted ears, a thick ruff around the neck, a very long bushy tail" },
+  "gato-maine-coon-branco": { name: "Maine Coon Branco", descriptor: "a Maine Coon cat: very large and long-bodied, a long shaggy water-resistant coat, prominent lynx-tipped tufted ears, a thick ruff around the neck, a very long bushy tail" },
+  "gato-maine-coon-laranja": { name: "Maine Coon Laranja", descriptor: "a Maine Coon cat: very large and long-bodied, a long shaggy water-resistant coat, prominent lynx-tipped tufted ears, a thick ruff around the neck, a very long bushy tail" },
+  "gato-maine-coon-tartaruga": { name: "Maine Coon Tartaruga", descriptor: "a Maine Coon cat: very large and long-bodied, a long shaggy water-resistant coat, prominent lynx-tipped tufted ears, a thick ruff around the neck, a very long bushy tail" },
+  "gato-abissinio-sorrel": { name: "Abissínio Sorrel", descriptor: "an Abyssinian cat: a slender athletic ticked-coat cat, large alert ears, lithe body" },
+  "gato-abissinio-azul": { name: "Abissínio Azul", descriptor: "an Abyssinian cat: a slender athletic ticked-coat cat, large alert ears, lithe body" },
+  "gato-ragdoll-blue": { name: "Ragdoll Blue Point", descriptor: "a Ragdoll cat: large and heavy, a plush semi-long silky coat, pointed coloration with a lighter body, big oval blue eyes, a relaxed floppy posture" },
+  "gato-bengala-snow": { name: "Bengala Snow (Lynx Point)", descriptor: "a Bengal cat: muscular athletic wild-looking body, short dense coat with bold leopard-like spots and rosettes" },
 };
+
+/**
+ * Fundadores de gato que são VARIEDADE DE COR (ADR-0036), não raça nova: id → id da raça a que pertencem, ou `null` para variedade de cor do
+ * gato doméstico sem raça (laranja, tartaruga, calico — como tabby/preto/branco). Alimenta `founderBreed` (campo `specimens.breed`, ADR-0033
+ * adendo 2): um Persa Branco × Persa Laranja nasce "Persian". `gato-tabby`, `gato-preto` e `gato-branco` (anteriores) não constam aqui:
+ * seguem contando como "raças" em `catBreedIds()` como sempre contaram.
+ */
+export const CAT_FOUNDER_COLOUR_VARIANTS: Readonly<Record<string, string | null>> = {
+  "gato-laranja": null, "gato-tartaruga": null, "gato-calico": null,
+  "gato-persa-branco": "gato-persa", "gato-persa-colorpoint": "gato-persa", "gato-persa-chocolate": "gato-persa",
+  "gato-persa-laranja": "gato-persa", "gato-persa-tartaruga": "gato-persa",
+  "gato-maine-coon-preto": "gato-maine-coon", "gato-maine-coon-branco": "gato-maine-coon",
+  "gato-maine-coon-laranja": "gato-maine-coon", "gato-maine-coon-tartaruga": "gato-maine-coon",
+  "gato-abissinio-sorrel": "gato-abissinio", "gato-abissinio-azul": "gato-abissinio",
+  "gato-ragdoll-blue": "gato-ragdoll", "gato-bengala-snow": "gato-bengala",
+};
+
+/** Ids de `BREEDS` que são fundadores "de raça" (12 — sem as variedades de cor de `CAT_FOUNDER_COLOUR_VARIANTS`). */
+export function catBreedIds(): string[] {
+  return Object.keys(BREEDS).filter((id) => !(id in CAT_FOUNDER_COLOUR_VARIANTS));
+}
 
 export function breedInfo(id: string): BreedInfo | undefined { return BREEDS[id]; }
 

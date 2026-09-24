@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { expressPhenotype, FELINE_PACK, computeCacheKey } from "@genbreedai/engine";
+import { baseFounderId, CAT_FOUNDER_COLOUR_VARIANTS } from "@genbreedai/shared";
 import { founderSeeds, type StoredSpecimen } from "../src/specimens/in-memory.repository";
 import { buildPrompt, traitVector, felinePointColour } from "../src/images/prompt";
 
@@ -131,7 +132,8 @@ function legacyCoatFeline(loci: Record<string, string>): string {
 }
 
 describe("fundadores felinos atuais — nada mudou", () => {
-  const felines = founderSeeds().filter((f) => f.pack === "feline");
+  // SÓ os 27 fundadores felinos ORIGINAIS (e seus gêmeos): os 16 fundadores de cor (ADR-0036) têm b^l/d/xLoci de propósito e testes próprios.
+  const felines = founderSeeds().filter((f) => f.pack === "feline" && !(baseFounderId(f.id) in CAT_FOUNDER_COLOUR_VARIANTS));
 
   it("são os 27 fundadores-base (12 gatos + 15 selvagens) + 27 gêmeos de sempre, todos com B B/B e D D/D (nenhum genótipo alterado)", () => {
     expect(felines.length).toBe(54);

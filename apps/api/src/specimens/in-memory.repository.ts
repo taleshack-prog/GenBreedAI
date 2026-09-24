@@ -114,6 +114,12 @@ const BASE_FOUNDER_SEX: Record<string, "M" | "F"> = {
   "gato-tabby": "M", "gato-siames": "F", "gato-preto": "M", "gato-branco": "F",
   "gato-maine-coon": "M", "gato-persa": "F", "gato-bengala": "M", "gato-birmania": "F",
   "gato-sphynx": "M", "gato-mau-egipcio": "F", "gato-abissinio": "M", "gato-ragdoll": "F",
+  // Felis catus — 16 fundadores de COR (ADR-0036). Sexo do BASE escolhido para o casal clássico: tartaruga/calico SEMPRE fêmea (só fêmea é
+  // mosaico), laranja macho — tartaruga F × laranja M direto entre os dois bases; o gêmeo trata o X (`twinGenotype`).
+  "gato-laranja": "M", "gato-tartaruga": "F", "gato-calico": "F",
+  "gato-persa-branco": "M", "gato-persa-colorpoint": "M", "gato-persa-chocolate": "F", "gato-persa-laranja": "M", "gato-persa-tartaruga": "F",
+  "gato-maine-coon-preto": "F", "gato-maine-coon-branco": "M", "gato-maine-coon-laranja": "M", "gato-maine-coon-tartaruga": "F",
+  "gato-abissinio-sorrel": "F", "gato-abissinio-azul": "M", "gato-ragdoll-blue": "M", "gato-bengala-snow": "F",
   boerboel: "M", "braco-alemao": "F", dobermann: "M",
   // Dogue Alemão — 6 cores, mesma espécie (campo `species`), alterna M/F.
   "dogue-dourado": "M", "dogue-tigrado": "F", "dogue-preto": "M",
@@ -260,6 +266,30 @@ export function founderSeeds(): StoredSpecimen[] {
     S("gato-mau-egipcio", "felis-catus", "feline", fel(["a","a"], R(["P^s","P^t"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.55, rosetas: 0.6 }, ["ma","ma"], ["Bd^g","Bd^g"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 4),
     S("gato-abissinio", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.6 }, ["ma","ma"], ["Bd^a","Bd^d"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"]), 3),
     S("gato-ragdoll", "felis-catus", "feline", fel(["a","a"], R(["P^t","P^t"]), ["c^s","c^s"], ["w","w"], { porte: 0.4, vigor: 0.45, beleza: 0.7 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^b","He^b"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"], ["Hr","Hr"], ["S","s"]), 4),
+    // ── FUNDADORES DE COR (ADR-0036) — 16 novos; só a COR muda em relação ao fundador da raça (morfologia, QTL e portadores de forma iguais). ──
+    // fel(A,P,C,W,q,Ma,Bd,He,Ec,Fl,Hr,S, B,D, xLoci). Portadores B/b, D/d entram do lado recessivo (invisíveis) — ADR-0010. Tartaruga/calico: fêmea `O/o`;
+    // laranja: macho `[O]`. O gêmeo trata o X (`twinGenotype`, ADR-0035): tartaruga F → macho `[o]` (preto), laranja M → fêmea `[O,O]`.
+    // Gato doméstico (variedades de cor, sem raça — `breed` nulo). QTL e forma do gato-tabby.
+    S("gato-laranja", "felis-catus", "feline", fel(["a","a"], ["P^m","P^m"], ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.42 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O"] }), 2),
+    S("gato-tartaruga", "felis-catus", "feline", fel(["A","a"], ["P^m","P^t"], ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.42 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O","o"] }), 3),
+    S("gato-calico", "felis-catus", "feline", fel(["A","a"], ["P^m","P^t"], ["C","C"], ["w","w"], { porte: 0.24, vigor: 0.42 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["S","s"], ["B","B"], ["D","d"], { O: ["O","o"] }), 3),
+    // Persa (base: a/a, P^t/P^t, Bd s/s, He r/r, Fl l/s; QTL 0,3/0,3/0,75). O Persa Preto NÃO existe: o gêmeo macho da Persa Tartaruga (`[o]`, A/a) já é o persa preto.
+    S("gato-persa-branco", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["C","C"], ["W","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"]), 4),
+    S("gato-persa-colorpoint", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["c^s","c^s"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","b"], ["D","d"]), 4),
+    S("gato-persa-chocolate", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["C","C"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["b","b"], ["D","d"]), 4),
+    S("gato-persa-laranja", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["C","C"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O"] }), 4),
+    S("gato-persa-tartaruga", "felis-catus", "feline", fel(["A","a"], ["P^t","P^t"], ["C","C"], ["w","w"], { porte: 0.3, vigor: 0.3, beleza: 0.75 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O","o"] }), 4),
+    // Maine Coon (base: a/a, P^m/P^m, Bd d/d, He b/b, Ec t/n, Fl l/s; QTL 0,5/0,6/0,65).
+    S("gato-maine-coon-preto", "felis-catus", "feline", fel(["A","a"], ["P^m","P^m"], ["C","C"], ["w","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"]), 4),
+    S("gato-maine-coon-branco", "felis-catus", "feline", fel(["a","a"], ["P^m","P^m"], ["C","C"], ["W","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"]), 4),
+    S("gato-maine-coon-laranja", "felis-catus", "feline", fel(["a","a"], ["P^m","P^m"], ["C","C"], ["w","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O"] }), 4),
+    S("gato-maine-coon-tartaruga", "felis-catus", "feline", fel(["A","a"], ["P^m","P^m"], ["C","C"], ["w","w"], { porte: 0.5, vigor: 0.6, beleza: 0.65 }, ["ma","ma"], ["Bd^d","Bd^d"], ["He^b","He^b"], ["Ec^t","Ec^n"], ["Fl^l","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","B"], ["D","d"], { O: ["O","o"] }), 4),
+    // Abissínio (base: a/a, P^t/P^t, Bd a/d, He a/a, Fl s/s; QTL 0,28/0,6). Portadores CRUZADOS: a sorrel leva `d`, a azul leva `b^l` → sorrel × azul dá 4 fenótipos (sorrel, fawn, azul, denso).
+    S("gato-abissinio-sorrel", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.6 }, ["ma","ma"], ["Bd^a","Bd^d"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["s","s"], ["b^l","b^l"], ["D","d"]), 3),
+    S("gato-abissinio-azul", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["C","C"], ["w","w"], { porte: 0.28, vigor: 0.6 }, ["ma","ma"], ["Bd^a","Bd^d"], ["He^a","He^a"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["s","s"], ["B","b^l"], ["d","d"]), 3),
+    // Ragdoll (base: a/a, P^t/P^t, c^s/c^s, S S/s, Bd s/s, He b/b, Fl l/l; QTL 0,4/0,45/0,7) e Bengala (base: a/a, P^s/P^t, Bd d/d, He r/r, Fl s/s; QTL 0,32/0,65, rosetas 0,7).
+    S("gato-ragdoll-blue", "felis-catus", "feline", fel(["a","a"], ["P^t","P^t"], ["c^s","c^s"], ["w","w"], { porte: 0.4, vigor: 0.45, beleza: 0.7 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^b","He^b"], ["Ec^n","Ec^n"], ["Fl^l","Fl^l"], ["Hr","Hr"], ["S","s"], ["B","b"], ["d","d"]), 4),
+    S("gato-bengala-snow", "felis-catus", "feline", fel(["a","a"], ["P^s","P^t"], ["c^s","c^s"], ["w","w"], { porte: 0.32, vigor: 0.65, rosetas: 0.7 }, ["ma","ma"], ["Bd^s","Bd^s"], ["He^r","He^r"], ["Ec^n","Ec^n"], ["Fl^s","Fl^s"], ["Hr","Hr"], ["s","s"]), 3),
     // ── CANINOS (Senior) — Onda 1: 12 raças icônicas ──
     // dog({B,K,A,E,S,R,M,H, Cph,Ec,Cl,Ct,Tl, porte,vigor})
     // Portadores ocultos (docs/gene-bank/caninos-genetica.md §"Portadores
