@@ -13,6 +13,7 @@
   "dependencies": {
     "@genbreedai/engine": "workspace:*",
     "@genbreedai/shared": "workspace:*",
+    "@vercel/analytics": "^2.0.1",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
