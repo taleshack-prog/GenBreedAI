@@ -4,7 +4,7 @@ export const metadata = { title: "GenBreedAI · Reembolso" };
 
 export default function ReembolsoPage() {
   return (
-    <LegalPage title="Política de Reembolso" updated="14 de setembro de 2026">
+    <LegalPage title="Política de Reembolso" updated="26 de novembro de 2026">
       <LegalSection title="1. Direito de arrependimento (art. 49 do CDC)">
         <p>
           Nos termos do art. 49 da Lei nº 8.078/1990 (Código de Defesa do Consumidor), você pode desistir de uma assinatura ou de uma compra
@@ -30,7 +30,7 @@ export default function ReembolsoPage() {
 
       <LegalSection title="4. Como solicitar">
         <p>
-          Envie o pedido de reembolso ou cancelamento para <b>[E-MAIL DE CONTATO]</b>, informando o e-mail da sua conta e a data da cobrança.
+          Envie o pedido de reembolso ou cancelamento para <a href="mailto:hacktechfarm@proton.me" className="text-cyan hover:underline">hacktechfarm@proton.me</a>, informando o e-mail da sua conta e a data da cobrança.
           Respondemos e processamos o pedido em até <b>[PRAZO DE RESPOSTA]</b>.
         </p>
       </LegalSection>
