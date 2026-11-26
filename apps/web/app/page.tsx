@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Eyebrow } from "../components/Eyebrow";
 import { PlanPicker } from "../components/PlanPicker";
 import { InstallApp } from "../components/InstallApp";
+import { EcosystemFooter } from "../components/EcosystemFooter";
 
 const IMG_BASE = "https://img.genbreed.com.br/generated";
 
@@ -135,6 +136,7 @@ export default function LandingPage() {
             <Link href="/privacidade" className="hover:text-cyan">Privacidade</Link>
             <Link href="/reembolso" className="hover:text-cyan">Reembolso</Link>
           </nav>
+          <EcosystemFooter />
           <p className="font-mono text-[0.62rem] text-ink-muted">© {new Date().getFullYear()} GenBreedAI. Todos os direitos reservados.</p>
         </div>
       </footer>
