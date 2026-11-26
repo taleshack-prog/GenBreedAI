@@ -233,7 +233,7 @@ describe("página, metadata e rota pública", () => {
   });
 
   it("a landing aponta para a página em 3 lugares: link no topo do hero, fim da seção 'O que é' e rodapé", () => {
-    const landing = readFileSync(web("app/page.tsx"), "utf8");
+    const landing = readFileSync(web("components/LandingPage.tsx"), "utf8");
     expect(landing.match(/href="\/o-que-e"/g)!.length).toBe(3);
     expect(landing).toContain("Ver a explicação completa");
     expect(landing).toMatch(/absolute right-5 top-5[^>]*>\s*O que é\s*</);

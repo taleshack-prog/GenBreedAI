@@ -210,15 +210,20 @@ export interface JsonLdGraph { "@context": "https://schema.org"; "@graph": Recor
  * FAQPage + SoftwareApplication num só `@graph`. Tudo o que é declarado aqui está no texto visível: nome, descrição (= lead),
  * `featureList` (= títulos da seção "O que calcula de verdade"), `offers` (= linhas de preço) e as perguntas/respostas do FAQ.
  */
-export function buildAboutJsonLd(): JsonLdGraph {
-  const features = sectionById("calcula").items!.map((i) => i.title!);
-  const offers = PLANS.flatMap((p) => {
+/** Ofertas (Free + mensal/anual de cada plano pago), direto de `plans.ts`. Usadas pelo JSON-LD de `/o-que-e` e da landing. */
+function planOffers(): Record<string, unknown>[] {
+  return PLANS.flatMap((p) => {
     if (p.month === 0) return [{ "@type": "Offer", name: `${p.label} (gratuito)`, price: "0", priceCurrency: "BRL" }];
     return [
       { "@type": "Offer", name: `${p.label} (mensal)`, price: p.month.toFixed(2), priceCurrency: "BRL" },
       { "@type": "Offer", name: `${p.label} (anual)`, price: (p.year ?? p.month * 11).toFixed(2), priceCurrency: "BRL" },
     ];
   });
+}
+
+export function buildAboutJsonLd(): JsonLdGraph {
+  const features = sectionById("calcula").items!.map((i) => i.title!);
+  const offers = planOffers();
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -245,6 +250,49 @@ export function buildAboutJsonLd(): JsonLdGraph {
           name: f.question,
           acceptedAnswer: { "@type": "Answer", text: f.answer },
         })),
+      },
+    ],
+  };
+}
+
+// ── landing (`/`) ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const HOME_URL = `${ABOUT_ORIGIN}/`;
+/** Title da landing: a busca que ela responde vem antes da marca (até ~60 caracteres, o que o buscador exibe). */
+export const HOME_TITLE = "Simulador de genética animal online | GenBreedAI";
+/** Meta description da landing (até ~155 caracteres). Cada fato tem fonte: lead acima, espécies do catálogo, plano Free de `plans.ts`. */
+export const HOME_DESCRIPTION =
+  "Simulador de genética animal no navegador, com herança mendeliana real. Cruze gatos, felinos selvagens e cães. Tem plano grátis.";
+
+/**
+ * JSON-LD da landing: WebSite + o MESMO SoftwareApplication de `/o-que-e` (mesmo `@id`, para os buscadores juntarem as duas
+ * páginas numa entidade só). Sem `featureList` e sem FAQ — esses só existem no texto de `/o-que-e`. As ofertas são as do
+ * seletor de planos da landing (mesmo `plans.ts`).
+ */
+export function buildHomeJsonLd(): JsonLdGraph {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${HOME_URL}#website`,
+        url: HOME_URL,
+        name: "GenBreedAI",
+        inLanguage: "pt-BR",
+        publisher: { "@type": "Organization", name: ABOUT_PUBLISHER.name, url: ABOUT_PUBLISHER.url },
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${ABOUT_URL}#app`,
+        name: "GenBreedAI",
+        url: ABOUT_ORIGIN,
+        description: ABOUT_LEAD,
+        applicationCategory: "GameApplication",
+        operatingSystem: "Web",
+        inLanguage: "pt-BR",
+        image: ABOUT_OG_IMAGE,
+        publisher: { "@type": "Organization", name: ABOUT_PUBLISHER.name, url: ABOUT_PUBLISHER.url },
+        offers: planOffers(),
       },
     ],
   };
