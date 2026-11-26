@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RefCapture } from "../components/RefCapture";
 import { ServiceWorkerRegister } from "../components/ServiceWorkerRegister";
+import { VercelAnalytics } from "../components/VercelAnalytics";
 
 export const metadata: Metadata = {
   title: "GenBreedAI",
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <RefCapture />
         <ServiceWorkerRegister />
         {children}
+        <VercelAnalytics />
       </body>
     </html>
   );
