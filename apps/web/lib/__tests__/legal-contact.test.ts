@@ -18,6 +18,11 @@ describe("contato das páginas legais", () => {
     expect(web(f)).toContain(`href="mailto:${EMAIL}"`);
   });
 
+  it("a política de privacidade não tem nenhum campo provisório entre colchetes (controlador, CNPJ, endereço)", () => {
+    expect(web("app/privacidade/page.tsx")).not.toMatch(/\[[A-ZÀ-Ú][A-ZÀ-Ú -]{2,}\]/);
+    expect(web("app/privacidade/page.tsx")).toContain("Hack Tech Farm");
+  });
+
   it("é o mesmo e-mail do rodapé", () => {
     const [user, domain] = EMAIL.split("@");
     expect(web("components/EcosystemFooter.tsx")).toContain(`["${user}", "${domain}"]`);
