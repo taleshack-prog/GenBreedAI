@@ -31,7 +31,7 @@ export default function ReembolsoPage() {
       <LegalSection title="4. Como solicitar">
         <p>
           Envie o pedido de reembolso ou cancelamento para <a href="mailto:hacktechfarm@proton.me" className="text-cyan hover:underline">hacktechfarm@proton.me</a>, informando o e-mail da sua conta e a data da cobrança.
-          Respondemos e processamos o pedido em até <b>[PRAZO DE RESPOSTA]</b>.
+          Respondemos e processamos o pedido em até <b>7 dias corridos</b>. Depois de processado, o estorno aparece na fatura no prazo do emissor do cartão.
         </p>
       </LegalSection>
     </LegalPage>

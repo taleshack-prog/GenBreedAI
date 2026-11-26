@@ -18,8 +18,15 @@ describe("contato das páginas legais", () => {
     expect(web(f)).toContain(`href="mailto:${EMAIL}"`);
   });
 
-  it("a política de privacidade não tem nenhum campo provisório entre colchetes (controlador, CNPJ, endereço)", () => {
-    expect(web("app/privacidade/page.tsx")).not.toMatch(/\[[A-ZÀ-Ú][A-ZÀ-Ú -]{2,}\]/);
+  it.each(["app/privacidade/page.tsx", "app/reembolso/page.tsx", "app/termos/page.tsx"])("%s não tem nenhum campo provisório entre colchetes", (f) => {
+    expect(web(f)).not.toMatch(/\[[A-ZÀ-Ú][A-ZÀ-Ú -]{2,}\]/);
+  });
+
+  it("o reembolso promete resposta em até 7 dias corridos", () => {
+    expect(web("app/reembolso/page.tsx")).toContain("em até <b>7 dias corridos</b>");
+  });
+
+  it("a política de privacidade identifica o controlador", () => {
     expect(web("app/privacidade/page.tsx")).toContain("Hack Tech Farm");
   });
 
