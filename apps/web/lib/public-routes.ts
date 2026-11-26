@@ -26,7 +26,7 @@ export const ROUTE_LASTMOD: Record<PublicRoute, string> = {
 
 /** Arquivos (relativos a `apps/web/`) cujo conteúdo aparece em cada rota — o que o teste confere no git. */
 export const ROUTE_SOURCES: Record<PublicRoute, readonly string[]> = {
-  "/": ["app/page.tsx", "lib/plans.ts", "components/PlanPicker.tsx"],
+  "/": ["app/page.tsx", "components/LandingPage.tsx", "lib/about.ts", "lib/plans.ts", "components/PlanPicker.tsx"],
   "/o-que-e": ["app/o-que-e/page.tsx", "lib/about.ts", "lib/plans.ts", "lib/gestation.ts", "../../packages/shared/src/breeds.ts", "../../packages/shared/src/species.ts"],
   "/termos": ["app/termos/page.tsx"],
   "/privacidade": ["app/privacidade/page.tsx"],
