@@ -7,8 +7,9 @@ export default function PrivacidadePage() {
     <LegalPage title="Política de Privacidade" updated="26 de novembro de 2026">
       <LegalSection title="1. Controlador">
         <p>
-          O controlador dos dados pessoais tratados por este serviço é <b>[RAZÃO SOCIAL]</b>, inscrita no CNPJ sob o nº <b>[CNPJ]</b>,
-          com endereço em <b>[ENDEREÇO]</b> ("GenBreedAI", "nós").
+          O controlador dos dados pessoais tratados por este serviço é a <b>Hack Tech Farm</b> (empresa em constituição), sob
+          responsabilidade de <b>Tales Hack</b>, pessoa física, em Porto Alegre, RS ("GenBreedAI", "nós"). Contato:{" "}
+          <a href="mailto:hacktechfarm@proton.me" className="text-cyan hover:underline">hacktechfarm@proton.me</a>.
         </p>
       </LegalSection>
 
