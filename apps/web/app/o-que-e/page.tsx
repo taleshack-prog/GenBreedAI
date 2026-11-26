@@ -11,6 +11,7 @@
  */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { EcosystemFooter } from "../../components/EcosystemFooter";
 import {
   ABOUT_BLOG_LABEL, ABOUT_BLOG_LINKS, ABOUT_DESCRIPTION, ABOUT_OG_IMAGE, ABOUT_PUBLISHER, ABOUT_TITLE, ABOUT_URL, aboutFaq, aboutSections, buildAboutJsonLd, serializeJsonLd,
 } from "../../lib/about";
@@ -123,6 +124,7 @@ export default function AboutPage() {
           <Link href="/privacidade" className="hover:text-cyan">Privacidade</Link>
           <Link href="/reembolso" className="hover:text-cyan">Reembolso</Link>
         </nav>
+        <div className="mt-4"><EcosystemFooter /></div>
       </footer>
     </main>
   );
