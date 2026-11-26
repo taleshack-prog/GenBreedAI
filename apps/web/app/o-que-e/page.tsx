@@ -120,6 +120,7 @@ export default function AboutPage() {
         </p>
         <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 font-mono text-[0.7rem] uppercase tracking-wide text-ink-muted">
           <Link href="/" className="hover:text-cyan">Início</Link>
+          <Link href="/professores" className="hover:text-cyan">Para professores</Link>
           <Link href="/termos" className="hover:text-cyan">Termos de uso</Link>
           <Link href="/privacidade" className="hover:text-cyan">Privacidade</Link>
           <Link href="/reembolso" className="hover:text-cyan">Reembolso</Link>

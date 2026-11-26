@@ -136,6 +136,7 @@ export function LandingPage() {
           <div className="font-display text-sm font-bold uppercase tracking-wide text-ink">GenBreed<span className="text-cyan">AI</span></div>
           <nav className="flex flex-wrap justify-center gap-x-5 gap-y-1 font-mono text-[0.7rem] uppercase tracking-wide text-ink-muted">
             <Link href="/o-que-e" className="hover:text-cyan">O que é o GenBreedAI</Link>
+            <Link href="/professores" className="hover:text-cyan">Para professores</Link>
             <Link href="/termos" className="hover:text-cyan">Termos de uso</Link>
             <Link href="/privacidade" className="hover:text-cyan">Privacidade</Link>
             <Link href="/reembolso" className="hover:text-cyan">Reembolso</Link>
