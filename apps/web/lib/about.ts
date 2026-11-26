@@ -115,6 +115,8 @@ export function aboutSections(): AboutSection[] {
         { title: "Curioso", text: "Quer ver na prática como a herança funciona, com retratos dos animais, sem precisar ler um livro de genética." },
         { title: "Criador", text: "Gosta de montar linhagens, escolher o que nasce e acompanhar a genealogia de cada animal." },
         { title: "Quem quer ver a herança mendeliana funcionando", text: "Analisa tabelas de dominância, coeficientes de endogamia e traços quantitativos em cada cruzamento." },
+        // Roteiros com fonte e números conferidos no motor: lib/teachers.ts (ADR-0040).
+        { title: "Professor", text: "Usa os roteiros de aula da página para professores: quatro aulas de genética no plano gratuito, com a turma prevendo no papel e conferindo no jogo." },
       ],
     },
     {

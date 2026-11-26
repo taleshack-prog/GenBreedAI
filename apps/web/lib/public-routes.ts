@@ -8,7 +8,7 @@
  */
 import { PUBLIC_SHARE_ORIGIN } from "./share";
 
-export const PUBLIC_ROUTES = ["/", "/o-que-e", "/termos", "/privacidade", "/reembolso"] as const;
+export const PUBLIC_ROUTES = ["/", "/o-que-e", "/professores", "/termos", "/privacidade", "/reembolso"] as const;
 export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
 
 /**
@@ -19,6 +19,7 @@ export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
 export const ROUTE_LASTMOD: Record<PublicRoute, string> = {
   "/": "2026-11-26",
   "/o-que-e": "2026-11-26",
+  "/professores": "2026-11-26",
   "/termos": "2026-09-14",
   "/privacidade": "2026-09-18",
   "/reembolso": "2026-09-18",
@@ -28,6 +29,7 @@ export const ROUTE_LASTMOD: Record<PublicRoute, string> = {
 export const ROUTE_SOURCES: Record<PublicRoute, readonly string[]> = {
   "/": ["app/page.tsx", "components/LandingPage.tsx", "lib/about.ts", "lib/plans.ts", "components/PlanPicker.tsx"],
   "/o-que-e": ["app/o-que-e/page.tsx", "lib/about.ts", "lib/plans.ts", "lib/gestation.ts", "../../packages/shared/src/breeds.ts", "../../packages/shared/src/species.ts"],
+  "/professores": ["app/professores/page.tsx", "lib/teachers.ts", "lib/gestation.ts"],
   "/termos": ["app/termos/page.tsx"],
   "/privacidade": ["app/privacidade/page.tsx"],
   "/reembolso": ["app/reembolso/page.tsx"],

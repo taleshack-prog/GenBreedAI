@@ -7,6 +7,7 @@ import {
   ABOUT_BLOG_LINKS, ABOUT_DESCRIPTION, ABOUT_ORIGIN, ABOUT_PUBLISHER, ABOUT_URL, aboutSections, type AboutItem,
 } from "./about";
 import { publicUrl } from "./public-routes";
+import { LESSONS, TEACHERS_TITLE, TEACHERS_URL } from "./teachers";
 
 const item = (i: AboutItem): string => `- ${i.title ? `${i.title}: ` : ""}${i.text}`;
 
@@ -30,6 +31,7 @@ export function llmsText(): string {
     "",
     `- [O que é o GenBreedAI](${ABOUT_URL}): explicação completa, perguntas frequentes e preços`,
     `- [Início](${publicUrl("/")}): apresentação e planos`,
+    `- [${TEACHERS_TITLE}](${TEACHERS_URL}): ${LESSONS.length} roteiros de aula no plano gratuito (${LESSONS.map((l) => l.title).join("; ")})`,
     `- [Termos de uso](${publicUrl("/termos")})`,
     `- [Política de privacidade](${publicUrl("/privacidade")})`,
     `- [Política de reembolso](${publicUrl("/reembolso")})`,
