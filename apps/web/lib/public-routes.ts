@@ -21,8 +21,8 @@ export const ROUTE_LASTMOD: Record<PublicRoute, string> = {
   "/o-que-e": "2026-11-26",
   "/professores": "2026-11-26",
   "/termos": "2026-09-14",
-  "/privacidade": "2026-09-18",
-  "/reembolso": "2026-09-18",
+  "/privacidade": "2026-11-26",
+  "/reembolso": "2026-11-26",
 };
 
 /** Arquivos (relativos a `apps/web/`) cujo conteúdo aparece em cada rota — o que o teste confere no git. */

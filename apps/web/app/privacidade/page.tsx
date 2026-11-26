@@ -4,7 +4,7 @@ export const metadata = { title: "GenBreedAI · Privacidade" };
 
 export default function PrivacidadePage() {
   return (
-    <LegalPage title="Política de Privacidade" updated="14 de setembro de 2026">
+    <LegalPage title="Política de Privacidade" updated="26 de novembro de 2026">
       <LegalSection title="1. Controlador">
         <p>
           O controlador dos dados pessoais tratados por este serviço é <b>[RAZÃO SOCIAL]</b>, inscrita no CNPJ sob o nº <b>[CNPJ]</b>,
@@ -49,13 +49,13 @@ export default function PrivacidadePage() {
       <LegalSection title="6. Seus direitos como titular">
         <p>
           Nos termos da LGPD, você pode solicitar a qualquer momento: acesso aos seus dados, correção de dados incompletos ou desatualizados,
-          exclusão dos seus dados, e portabilidade para outro fornecedor. Para exercer qualquer um desses direitos, escreva para <b>[E-MAIL DE CONTATO]</b>.
+          exclusão dos seus dados, e portabilidade para outro fornecedor. Para exercer qualquer um desses direitos, escreva para <a href="mailto:hacktechfarm@proton.me" className="text-cyan hover:underline">hacktechfarm@proton.me</a>.
         </p>
       </LegalSection>
 
       <LegalSection title="7. Retenção e exclusão de conta">
         <p>
-          Mantemos seus dados enquanto sua conta estiver ativa. Ao solicitar a exclusão da conta em <b>[E-MAIL DE CONTATO]</b>, apagamos os
+          Mantemos seus dados enquanto sua conta estiver ativa. Ao solicitar a exclusão da conta em <a href="mailto:hacktechfarm@proton.me" className="text-cyan hover:underline">hacktechfarm@proton.me</a>, apagamos os
           dados pessoais associados a ela, ressalvado o que a lei exigir manter por período determinado (por exemplo, registros fiscais de pagamento).
         </p>
       </LegalSection>
